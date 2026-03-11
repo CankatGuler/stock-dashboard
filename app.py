@@ -1309,15 +1309,29 @@ with tab_radar:
                 use_container_width=True,
             )
 
-            # CSV indir
-            csv_radar = df_radar.to_csv(index=False).encode("utf-8")
-            st.download_button(
-                "⬇️ Radar Sonuçlarını İndir (CSV)",
-                data=csv_radar,
-                file_name=f"radar_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-                mime="text/csv",
-                key="dl_radar",
-            )
+            # CSV indir + Telegram gönder
+            col_dl, col_tg = st.columns([2, 1])
+            with col_dl:
+                csv_radar = df_radar.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    "⬇️ Radar Sonuçlarını İndir (CSV)",
+                    data=csv_radar,
+                    file_name=f"radar_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                    mime="text/csv",
+                    key="dl_radar",
+                )
+            with col_tg:
+                if st.button("📱 Telegram'a Gönder", use_container_width=True, key="tg_radar"):
+                    try:
+                        from telegram_notifier import send_message, format_radar_summary
+                        msg = format_radar_summary(radar_results, title="🔭 Manuel Radar Özeti")
+                        ok  = send_message(msg)
+                        if ok:
+                            st.success("✅ Telegram'a gönderildi!")
+                        else:
+                            st.error("❌ Gönderilemedi. TELEGRAM_BOT_TOKEN ve TELEGRAM_CHAT_ID secret'larını kontrol et.")
+                    except Exception as e:
+                        st.error(f"Hata: {e}")
 
     else:
         st.markdown(
