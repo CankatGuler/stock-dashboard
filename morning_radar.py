@@ -23,34 +23,41 @@ def is_dst_active() -> bool:
     return dst_start <= now < dst_end
 
 
-def should_run_now() -> tuple[bool, str]:
-    """
-    Yaz/kış saatine göre yanlış cron tetiklemesini filtrele.
-    Yaz (EDT, UTC-4): açılış=12 UTC, kapanış=19 UTC
-    Kış (EST, UTC-5): açılış=13 UTC, kapanış=20 UTC
-    """
+def get_session_label() -> str:
+    """Manuel çalıştırmada saat kontrolü yok, otomatik etiket döndür."""
     now_utc_hour = datetime.now(timezone.utc).hour
     dst = is_dst_active()
 
-    if dst and now_utc_hour == 12:
-        return True, "🌞 Yaz — Açılış öncesi (ABD 08:00 EDT / TR 15:00)"
-    if dst and now_utc_hour == 19:
-        return True, "🌞 Yaz — Kapanış öncesi (ABD 15:00 EDT / TR 22:00)"
-    if not dst and now_utc_hour == 13:
-        return True, "❄️ Kış — Açılış öncesi (ABD 08:00 EST / TR 16:00)"
-    if not dst and now_utc_hour == 20:
-        return True, "❄️ Kış — Kapanış öncesi (ABD 15:00 EST / TR 23:00)"
+    if dst:
+        if now_utc_hour == 12:
+            return "🌞 Yaz — Açılış öncesi (ABD 08:00 EDT / TR 15:00)"
+        if now_utc_hour == 19:
+            return "🌞 Yaz — Kapanış öncesi (ABD 15:00 EDT / TR 22:00)"
+    else:
+        if now_utc_hour == 13:
+            return "❄️ Kış — Açılış öncesi (ABD 08:00 EST / TR 16:00)"
+        if now_utc_hour == 20:
+            return "❄️ Kış — Kapanış öncesi (ABD 15:00 EST / TR 23:00)"
 
-    logger.info("Bu saat (%d UTC) mevcut mevsim için geçerli değil, atlanıyor.", now_utc_hour)
-    return False, ""
+    # Manuel çalıştırma veya zamanlanmış dışı — etiket oluştur
+    tr_hour = (datetime.now(timezone.utc) + timedelta(hours=3)).strftime("%H:%M")
+    return f"🔭 Manuel Radar Taraması (TR {tr_hour})"
 
 
 def main():
-    # Yaz/kış filtresi
-    run, session_label = should_run_now()
-    if not run:
-        sys.exit(0)
+    # Manuel mi yoksa zamanlanmış mı?
+    is_manual = os.getenv("GITHUB_EVENT_NAME", "") == "workflow_dispatch"
 
+    # Zamanlanmış çalıştırmada saat filtresi uygula
+    if not is_manual:
+        now_utc_hour = datetime.now(timezone.utc).hour
+        dst = is_dst_active()
+        valid_hours = {12, 19} if dst else {13, 20}
+        if now_utc_hour not in valid_hours:
+            logger.info("Bu saat (%d UTC) geçerli değil, atlanıyor.", now_utc_hour)
+            sys.exit(0)
+
+    session_label = get_session_label()
     logger.info("Radar başlatılıyor: %s", session_label)
 
     # API key kontrol
@@ -65,7 +72,7 @@ def main():
 
     # Radar çalıştır
     results = run_radar(
-        max_age_hours=8,       # Son 8 saatin haberleri
+        max_age_hours=8,
         min_radar_score=60,
         max_tickers=20,
     )
@@ -73,8 +80,7 @@ def main():
     logger.info("%d fırsat bulundu", len(results))
 
     # Telegram'a gönder
-    title   = f"🔭 {session_label}"
-    message = format_radar_summary(results, title=title)
+    message = format_radar_summary(results, title=f"🔭 {session_label}")
     ok      = send_message(message)
 
     if ok:
