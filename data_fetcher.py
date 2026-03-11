@@ -113,12 +113,29 @@ def get_key_metrics(ticker: str, period: str = "annual", limit: int = 1) -> dict
 
 def get_quote(ticker: str) -> dict | None:
     """
-    Fetch real-time quote with multiple fallback endpoints.
-    Priority: FMP stable → FMP profile → FMP v3 quote-short → Yahoo Finance (yfinance)
+    Fetch real-time quote.
+    Priority: Yahoo Finance (yfinance) → FMP stable → FMP profile
+    yfinance is free, fast, and covers all tickers including ETFs.
     """
-    api_key = os.getenv("FMP_API_KEY", "")
+    # ── Endpoint 1: Yahoo Finance — ücretsiz, hızlı, geniş kapsam ────────
+    try:
+        import yfinance as yf
+        tk    = yf.Ticker(ticker)
+        info  = tk.fast_info
+        price = getattr(info, "last_price", None) or getattr(info, "regularMarketPrice", None)
+        if price and float(price) > 0:
+            prev = getattr(info, "previous_close", price) or price
+            chg  = ((float(price) - float(prev)) / float(prev) * 100) if prev else 0
+            return {
+                "price":             float(price),
+                "changesPercentage": round(chg, 2),
+                "symbol":            ticker,
+                "source":            "yfinance",
+            }
+    except Exception as exc:
+        logger.warning("yfinance failed for %s: %s", ticker, exc)
 
-    # ── Endpoint 1: /stable/quote ─────────────────────────────────────────
+    # ── Endpoint 2: FMP /stable/quote ─────────────────────────────────────
     data = _fmp_get("quote", {"symbol": ticker})
     if isinstance(data, list) and data:
         q = data[0]
@@ -127,7 +144,7 @@ def get_quote(ticker: str) -> dict | None:
     if isinstance(data, dict) and data.get("price") and float(data.get("price", 0)) > 0:
         return data
 
-    # ── Endpoint 2: /stable/profile ───────────────────────────────────────
+    # ── Endpoint 3: FMP /stable/profile ───────────────────────────────────
     profile = get_profile(ticker)
     if profile and float(profile.get("price", 0)) > 0:
         return {
@@ -135,38 +152,6 @@ def get_quote(ticker: str) -> dict | None:
             "changesPercentage": profile.get("changes", 0),
             "symbol":            ticker,
         }
-
-    # ── Endpoint 3: v3/quote-short ────────────────────────────────────────
-    try:
-        url  = f"{FMP_BASE_V3}/quote-short/{ticker}"
-        resp = _SESSION.get(url, params={"apikey": api_key}, timeout=10)
-        resp.raise_for_status()
-        data3 = resp.json()
-        if isinstance(data3, list) and data3:
-            q = data3[0]
-            if float(q.get("price", 0)) > 0:
-                return {"price": q["price"], "changesPercentage": 0, "symbol": ticker}
-    except Exception:
-        pass
-
-    # ── Endpoint 4: Yahoo Finance via yfinance (free fallback) ────────────
-    try:
-        import yfinance as yf
-        tk   = yf.Ticker(ticker)
-        info = tk.fast_info
-        price = getattr(info, "last_price", None) or getattr(info, "regularMarketPrice", None)
-        if price and float(price) > 0:
-            prev  = getattr(info, "previous_close", price) or price
-            chg   = ((float(price) - float(prev)) / float(prev) * 100) if prev else 0
-            logger.info("yfinance fallback used for %s: $%.2f", ticker, price)
-            return {
-                "price":             float(price),
-                "changesPercentage": round(chg, 2),
-                "symbol":            ticker,
-                "source":            "yfinance",
-            }
-    except Exception as exc:
-        logger.warning("yfinance fallback failed for %s: %s", ticker, exc)
 
     logger.warning("Could not fetch price for %s from any endpoint.", ticker)
     return None
