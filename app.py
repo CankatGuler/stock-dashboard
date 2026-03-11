@@ -21,6 +21,7 @@ from utils import (
 from data_fetcher import batch_enrich, get_quote
 from news_fetcher import fetch_news_batch, format_news_for_prompt
 from claude_analyzer import analyse_batch
+from radar_engine import run_radar
 from portfolio_manager import (
     load_portfolio, add_position, remove_position, update_position,
     sell_position, enrich_portfolio_with_prices, portfolio_summary,
@@ -346,7 +347,7 @@ if missing_keys:
 # ─────────────────────────────────────────────────────────────────────────────
 # TABS
 # ─────────────────────────────────────────────────────────────────────────────
-tab_screener, tab_portfolio = st.tabs(["📡  Sektör Tarayıcı", "💼  Portföyüm"])
+tab_screener, tab_portfolio, tab_radar = st.tabs(["📡  Sektör Tarayıcı", "💼  Portföyüm", "🔭  Fırsat Radarı"])
 
 # ─────────────────────────────────────────────────────────────────────────────
 # STATE INIT
@@ -1107,3 +1108,224 @@ with tab_portfolio:
                 mime="text/csv",
                 key="dl_portfolio",
             )
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TAB 3 — FIRSAT RADARI
+# ─────────────────────────────────────────────────────────────────────────────
+
+with tab_radar:
+    st.markdown(
+        '<div style="font-size:0.7rem;color:#5a6a7a;text-transform:uppercase;'
+        'letter-spacing:0.1em;margin-bottom:1rem;">'
+        '► FIRSAT RADARI — Proaktif Hisse Tespiti</div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── Ayarlar ──────────────────────────────────────────────────────────────
+    with st.expander("⚙️ Radar Ayarları", expanded=True):
+        r1, r2, r3 = st.columns(3)
+        with r1:
+            radar_hours = st.slider("🕐 Haber Penceresi (Saat)", 6, 48, 24)
+        with r2:
+            radar_min_score = st.slider("🎯 Min Radar Puanı", 40, 90, 60)
+        with r3:
+            radar_max_tickers = st.slider("🔢 Maks Ticker", 5, 30, 15)
+
+        radar_btn = st.button("🔭  RADARI ÇALIŞTIR", use_container_width=True, type="primary")
+
+    # ── Bilgi Kutusu ─────────────────────────────────────────────────────────
+    st.markdown(
+        '<div style="background:#0d1f2d;border:1px solid #1e3a4a;border-radius:8px;'
+        'padding:1rem;margin-bottom:1rem;font-size:0.78rem;color:#7a9ab5;">'
+        '<b style="color:#4fc3f7;">📊 3 Katmanlı Puanlama Sistemi</b><br><br>'
+        '• <b>Temel Skor × Çarpan (×0.30)</b> — Şirketin fundamentals kalitesi. '
+        'Güçlü temel → haber daha değerli.<br>'
+        '• <b>Haber Etkisi (×0.40)</b> — Bu haberin o hisse için önemi.<br>'
+        '• <b>Sürpriz Faktörü (×0.30)</b> — Piyasa bunu biliyor mu? Sürpriz → daha yüksek puan.'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── Radar Çalıştır ───────────────────────────────────────────────────────
+    if radar_btn:
+        radar_results = []
+        radar_progress = st.progress(0)
+        radar_status   = st.empty()
+
+        def radar_progress_cb(ticker, idx, total):
+            radar_progress.progress(idx / total)
+            radar_status.markdown(
+                f'<div style="font-size:0.75rem;color:#5a6a7a;">🔍 Analiz ediliyor: '
+                f'<b style="color:#4fc3f7;">{ticker}</b> ({idx}/{total})</div>',
+                unsafe_allow_html=True,
+            )
+
+        with st.spinner("📡 Haberler taranıyor ve fırsatlar tespit ediliyor..."):
+            radar_results = run_radar(
+                max_age_hours=radar_hours,
+                min_radar_score=radar_min_score,
+                max_tickers=radar_max_tickers,
+                progress_callback=radar_progress_cb,
+            )
+
+        radar_progress.empty()
+        radar_status.empty()
+
+        if not radar_results:
+            st.info("📭 Belirlenen kriterlere uyan fırsat bulunamadı. Eşiği düşürmeyi veya haber penceresini genişletmeyi deneyin.")
+        else:
+            st.success(f"✅ {len(radar_results)} fırsat tespit edildi!")
+            st.markdown("---")
+
+            # ── Sonuç Kartları ───────────────────────────────────────────────
+            for res in radar_results:
+                ticker        = res["ticker"]
+                radar_score   = res["radar_score"]
+                fund_score    = res["fundamental_score"]
+                haber_etkisi  = res["haber_etkisi"]
+                surpriz       = res["surpriz_faktoru"]
+                neden         = res["neden"]
+                tavsiye       = res["tavsiye"]
+                price         = res["price"]
+                haber_sayisi  = res["haber_sayisi"]
+                articles      = res["articles"]
+
+                # Renk
+                if radar_score >= 80:
+                    border_color = "#00e676"
+                    badge_color  = "#00e676"
+                elif radar_score >= 65:
+                    border_color = "#ffb300"
+                    badge_color  = "#ffb300"
+                else:
+                    border_color = "#4fc3f7"
+                    badge_color  = "#4fc3f7"
+
+                # Tavsiye rengi
+                if tavsiye == "İncele":
+                    tavsiye_color = "#00e676"
+                elif tavsiye == "Takibe Al":
+                    tavsiye_color = "#ffb300"
+                else:
+                    tavsiye_color = "#5a6a7a"
+
+                with st.expander(
+                    f"🎯 {ticker}  —  Radar: {radar_score}  |  "
+                    f"{tavsiye}  |  {haber_sayisi} haber  |  "
+                    f"{'${:,.2f}'.format(price) if price else 'N/A'}",
+                    expanded=(radar_score >= 75),
+                ):
+                    c1, c2, c3, c4 = st.columns(4)
+                    with c1:
+                        st.markdown(
+                            f'<div style="background:#0a1929;border:1px solid {border_color};'
+                            f'border-radius:8px;padding:0.8rem;text-align:center;">'
+                            f'<div style="font-size:0.6rem;color:#5a6a7a;">RADAR PUANI</div>'
+                            f'<div style="font-size:1.8rem;font-weight:800;color:{badge_color};">'
+                            f'{radar_score}</div></div>',
+                            unsafe_allow_html=True,
+                        )
+                    with c2:
+                        st.markdown(
+                            f'<div style="background:#0a1929;border:1px solid #1e3a4a;'
+                            f'border-radius:8px;padding:0.8rem;text-align:center;">'
+                            f'<div style="font-size:0.6rem;color:#5a6a7a;">TEMEL SKOR</div>'
+                            f'<div style="font-size:1.8rem;font-weight:800;color:#4fc3f7;">'
+                            f'{fund_score}</div></div>',
+                            unsafe_allow_html=True,
+                        )
+                    with c3:
+                        st.markdown(
+                            f'<div style="background:#0a1929;border:1px solid #1e3a4a;'
+                            f'border-radius:8px;padding:0.8rem;text-align:center;">'
+                            f'<div style="font-size:0.6rem;color:#5a6a7a;">HABER ETKİSİ</div>'
+                            f'<div style="font-size:1.8rem;font-weight:800;color:#ff6b35;">'
+                            f'{haber_etkisi}</div></div>',
+                            unsafe_allow_html=True,
+                        )
+                    with c4:
+                        st.markdown(
+                            f'<div style="background:#0a1929;border:1px solid #1e3a4a;'
+                            f'border-radius:8px;padding:0.8rem;text-align:center;">'
+                            f'<div style="font-size:0.6rem;color:#5a6a7a;">SÜRPRİZ</div>'
+                            f'<div style="font-size:1.8rem;font-weight:800;color:#ce93d8;">'
+                            f'{surpriz}</div></div>',
+                            unsafe_allow_html=True,
+                        )
+
+                    # Neden ve tavsiye
+                    st.markdown(
+                        f'<div style="margin-top:0.8rem;padding:0.8rem;background:#0d1f2d;'
+                        f'border-radius:6px;border-left:3px solid {tavsiye_color};">'
+                        f'<span style="color:#7a9ab5;font-size:0.75rem;">📌 </span>'
+                        f'<span style="color:#c8d8e8;font-size:0.82rem;">{neden}</span>'
+                        f'<span style="margin-left:1rem;background:{tavsiye_color}22;'
+                        f'color:{tavsiye_color};border-radius:4px;padding:2px 8px;'
+                        f'font-size:0.7rem;font-weight:700;">{tavsiye}</span>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                    # Haberler
+                    if articles:
+                        st.markdown(
+                            '<div style="font-size:0.65rem;color:#5a6a7a;'
+                            'margin-top:0.5rem;margin-bottom:0.3rem;">KAYNAK HABERLER:</div>',
+                            unsafe_allow_html=True,
+                        )
+                        for art in articles:
+                            st.markdown(
+                                f'<div style="font-size:0.75rem;color:#7a9ab5;margin-bottom:0.2rem;">'
+                                f'• <a href="{art.get("url","#")}" target="_blank" '
+                                f'style="color:#4fc3f7;text-decoration:none;">'
+                                f'{art.get("title","")[:120]}</a> '
+                                f'<span style="color:#3a4a5a;">[{art.get("source","")}]</span>'
+                                f'</div>',
+                                unsafe_allow_html=True,
+                            )
+
+            # ── Özet Tablo ───────────────────────────────────────────────────
+            st.markdown("---")
+            st.markdown(
+                '<div style="font-size:0.7rem;color:#5a6a7a;text-transform:uppercase;'
+                'margin-bottom:0.5rem;">📊 ÖZET TABLO</div>',
+                unsafe_allow_html=True,
+            )
+            import pandas as pd
+            df_radar = pd.DataFrame([{
+                "Ticker":         r["ticker"],
+                "Radar":          r["radar_score"],
+                "Temel":          r["fundamental_score"],
+                "Haber":          r["haber_etkisi"],
+                "Sürpriz":        r["surpriz_faktoru"],
+                "Tavsiye":        r["tavsiye"],
+                "Fiyat ($)":      f"${r['price']:,.2f}" if r["price"] else "N/A",
+                "Haber Sayısı":   r["haber_sayisi"],
+            } for r in radar_results])
+
+            st.dataframe(
+                df_radar,
+                hide_index=True,
+                use_container_width=True,
+            )
+
+            # CSV indir
+            csv_radar = df_radar.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "⬇️ Radar Sonuçlarını İndir (CSV)",
+                data=csv_radar,
+                file_name=f"radar_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                mime="text/csv",
+                key="dl_radar",
+            )
+
+    else:
+        st.markdown(
+            '<div style="text-align:center;padding:3rem;color:#3a4a5a;">'
+            '<div style="font-size:3rem;">🔭</div>'
+            '<div style="font-size:0.9rem;margin-top:0.5rem;">Radari çalıştırmak için yukarıdaki butona tıkla.</div>'
+            '<div style="font-size:0.75rem;margin-top:0.3rem;color:#2a3a4a;">'
+            'Haberler taranacak, tüm sektörler dışındaki fırsatlar da tespit edilecek.</div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
