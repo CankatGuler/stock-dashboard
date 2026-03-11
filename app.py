@@ -36,7 +36,7 @@ st.set_page_config(
     page_title="Quant Dashboard | AI Stock Analysis",
     page_icon="📡",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -311,62 +311,12 @@ def _score_css_class(score: int) -> str:
 # SIDEBAR
 # ─────────────────────────────────────────────────────────────────────────────
 
-with st.sidebar:
-    st.markdown(
-        '<div style="font-family:Syne,sans-serif;font-weight:800;font-size:1.1rem;'
-        'letter-spacing:-0.02em;margin-bottom:0.2rem;">📡 QUANT DASHBOARD</div>'
-        '<div style="font-size:0.58rem;color:#5a6a7a;text-transform:uppercase;'
-        'letter-spacing:0.12em;border-bottom:1px solid #1e2833;padding-bottom:0.8rem;'
-        'margin-bottom:1rem;">AI-Powered Stock Screener v2.0</div>',
-        unsafe_allow_html=True,
-    )
-
-    selected_sectors = st.multiselect(
-        "🏭 SEKTÖR FİLTRESİ",
-        options=list(SECTOR_TICKERS.keys()),
-        default=["Savunma Sanayii"],
-        help="Analiz edilecek sektörleri seçin (birden fazla seçilebilir).",
-    )
-
-    st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
-
-    strategy = st.radio(
-        "🎯 STRATEJİ ODAĞI",
-        options=["A Tipi (Kalkan)", "B Tipi (Roket)", "İkisi de"],
-        index=2,
-        help="A Tipi: Büyük cap, pozitif FCF. B Tipi: Yüksek Ar-Ge, volatile büyüme.",
-    )
-
-    st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
-
-    max_tickers = st.slider(
-        "🔢 MAKSİMUM HİSSE SAYISI",
-        min_value=3,
-        max_value=20,
-        value=8,
-        help="FMP ve Claude API çağrı sayısını sınırlandırır.",
-    )
-
-    news_days = st.slider(
-        "📰 HABER PENCERESI (GÜN)",
-        min_value=3,
-        max_value=14,
-        value=7,
-    )
-
-    st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
-
-    run_button = st.button("⚡  ANALİZİ BAŞLAT", use_container_width=True)
-
-    st.markdown(
-        '<div style="font-size:0.55rem;color:#3a4a5a;margin-top:1.5rem;line-height:1.8;">'
-        'UYARI: Bu araç yatırım tavsiyesi değildir.<br>'
-        'Tüm kararlar kullanıcının sorumluluğundadır.<br><br>'
-        '© 2025 Quant Dashboard · Powered by<br>'
-        'FMP · NewsAPI · Anthropic Claude'
-        '</div>',
-        unsafe_allow_html=True,
-    )
+# Sidebar hidden — filters moved inline
+selected_sectors = ["Savunma Sanayii"]
+strategy         = "İkisi de"
+max_tickers      = 8
+news_days        = 7
+run_button       = False
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -414,7 +364,42 @@ if "news_map"          not in st.session_state:
 # ─────────────────────────────────────────────────────────────────────────────
 with tab_screener:
 
- # ── RUN ANALYSIS PIPELINE ──────────────────────────────────────────────────
+    # ── INLINE FILTER PANEL ────────────────────────────────────────────────────
+    with st.expander("⚙️  Filtreler ve Ayarlar", expanded=True):
+        fc1, fc2 = st.columns([2, 1])
+        with fc1:
+            selected_sectors = st.multiselect(
+                "🏭 SEKTÖR FİLTRESİ",
+                options=list(SECTOR_TICKERS.keys()),
+                default=["Savunma Sanayii"],
+                help="Analiz edilecek sektörleri seçin.",
+            )
+        with fc2:
+            strategy = st.radio(
+                "🎯 STRATEJİ",
+                options=["A Tipi (Kalkan)", "B Tipi (Roket)", "İkisi de"],
+                index=2,
+                horizontal=True,
+            )
+
+        sc1, sc2, sc3 = st.columns([1, 1, 1])
+        with sc1:
+            max_tickers = st.slider("🔢 Maks. Hisse Sayısı", 3, 20, 8)
+        with sc2:
+            news_days = st.slider("📰 Haber Penceresi (Gün)", 3, 14, 7)
+        with sc3:
+            st.markdown('<div style="margin-top:1.6rem;"></div>', unsafe_allow_html=True)
+            run_button = st.button("⚡  ANALİZİ BAŞLAT", use_container_width=True)
+
+    st.markdown(
+        '<div style="font-size:0.55rem;color:#3a4a5a;text-align:right;margin-top:-0.5rem;">'
+        'UYARI: Bu araç yatırım tavsiyesi değildir. © 2025 Quant Dashboard'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
+
+    # ── RUN ANALYSIS PIPELINE ──────────────────────────────────────────────────
 
     if run_button:
         if not selected_sectors:
