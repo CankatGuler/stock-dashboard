@@ -474,6 +474,12 @@ with tab_screener:
                 progress_callback=on_progress,
             )
 
+            # Claude'un kategori değerini bizim hesapladığımızla override et
+            for res in results:
+                meta = res.get("_stock_meta", {})
+                if meta:
+                    res["kategori"] = determine_category(meta)
+
             progress_bar.progress(1.0)
             progress_text.empty()
 
@@ -1057,6 +1063,10 @@ with tab_portfolio:
                     )
 
                 port_results = analyse_batch(port_enriched, port_news, progress_callback=port_progress)
+                for res in port_results:
+                    meta = res.get("_stock_meta", {})
+                    if meta:
+                        res["kategori"] = determine_category(meta)
                 p_bar.progress(1.0)
                 p_text.empty()
 
