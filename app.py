@@ -25,15 +25,37 @@ from radar_engine import run_radar
 
 
 def determine_category(stock: dict) -> str:
-    """FCF önce stock_data'dan, yoksa yfinance'den al ve kategori belirle."""
+    """
+    Kategori belirleme — birden fazla kaynaktan FCF dene.
+    A Tipi: mktCap >= 10B VE pozitif FCF
+    """
     mkt_cap = stock.get("mktCap", 0) or 0
-    fcf     = stock.get("freeCashFlow", 0) or 0
 
+    # Kaynak 1: FMP cash flow (_financials)
+    fcf = stock.get("_financials", {}).get("freeCashFlow", 0) or 0
+
+    # Kaynak 2: Düz alan
+    if fcf == 0:
+        fcf = stock.get("freeCashFlow", 0) or 0
+
+    # Kaynak 3: operatingCashFlow - capex yaklaşımı
+    if fcf == 0:
+        ocf   = stock.get("_financials", {}).get("operatingCashFlow", 0) or 0
+        capex = stock.get("_financials", {}).get("capitalExpenditure", 0) or 0
+        if ocf != 0:
+            fcf = ocf - abs(capex)
+
+    # Kaynak 4: yfinance (son çare, timeout korumalı)
     if fcf == 0:
         try:
             import yfinance as yf
-            _info = yf.Ticker(stock.get("ticker", "")).info
-            fcf   = _info.get("freeCashflow", 0) or 0
+            ticker_sym = stock.get("ticker", "")
+            tk   = yf.Ticker(ticker_sym)
+            info = tk.info
+            fcf  = info.get("freeCashflow", 0) or 0
+            # mktCap de yfinance'den al (FMP bazen boş döner)
+            if mkt_cap == 0:
+                mkt_cap = info.get("marketCap", 0) or 0
         except Exception:
             pass
 
@@ -1439,19 +1461,8 @@ with tab_lookup:
                 stock_data = enrich_ticker(lookup_ticker)
 
                 # 2. Kategori belirle
+                stock_data["kategori"] = determine_category(stock_data)
                 mkt_cap = stock_data.get("mktCap", 0) or 0
-                fcf     = stock_data.get("freeCashFlow", 0) or 0
-
-                # FCF boş gelirse yfinance'den dene
-                if fcf == 0:
-                    try:
-                        import yfinance as yf
-                        _info = yf.Ticker(lookup_ticker).info
-                        fcf   = _info.get("freeCashflow", 0) or 0
-                    except Exception:
-                        pass
-
-                stock_data["kategori"] = "A Tipi" if (mkt_cap >= 10_000_000_000 and fcf > 0) else "B Tipi"
 
                 # 3. Haberleri çek
                 lk_status.markdown(f'<div style="font-size:0.75rem;color:#5a6a7a;">📰 Haberler çekiliyor...</div>', unsafe_allow_html=True)
