@@ -1426,9 +1426,12 @@ with tab_lookup:
                 stock_data = enrich_ticker(lookup_ticker)
 
                 # 2. Kategori belirle
+                from utils import categorise_stock
+                stock_data["kategori"] = categorise_stock(
+                    stock_data.get("_profile", {}),
+                    stock_data.get("_financials", {}),
+                )
                 mkt_cap = stock_data.get("mktCap", 0) or 0
-                fcf     = stock_data.get("freeCashFlow", 0) or 0
-                stock_data["kategori"] = "A Tipi" if (mkt_cap > 10e9 and fcf > 0) else "B Tipi"
 
                 # 3. Haberleri çek
                 lk_status.markdown(f'<div style="font-size:0.75rem;color:#5a6a7a;">📰 Haberler çekiliyor...</div>', unsafe_allow_html=True)
