@@ -37,7 +37,7 @@ def main():
     # Radar çalıştır
     results = run_radar(
         max_age_hours=8,
-        min_radar_score=60,
+        min_radar_score=50,
         max_tickers=20,
     )
 
