@@ -90,7 +90,7 @@ def fetch_radar_news(max_age_hours: int = 24) -> list[dict]:
 
                 articles.append({
                     "title":     title,
-                    "summary":   summary[:300],
+                    "summary":   summary[:500],
                     "url":       url,
                     "published": published.isoformat() if published else "",
                     "source":    feed.feed.get("title", feed_url),
@@ -447,7 +447,7 @@ def run_radar(
             "surpriz_faktoru":    surpriz_faktoru,
             "neden":              neden,
             "tavsiye":            tavsiye,
-            "articles":           articles[:3],
+            "articles":           articles[:5],
             "price":              meta.get("price", 0),
             "market_cap":         meta.get("market_cap", 0),
             "haber_sayisi":       len(articles),

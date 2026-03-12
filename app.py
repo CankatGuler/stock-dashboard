@@ -1269,17 +1269,48 @@ with tab_radar:
                     # Haberler
                     if articles:
                         st.markdown(
-                            '<div style="font-size:0.65rem;color:#5a6a7a;'
-                            'margin-top:0.5rem;margin-bottom:0.3rem;">KAYNAK HABERLER:</div>',
+                            '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+                            'margin-top:0.8rem;margin-bottom:0.5rem;">📰 Kaynak Haberler</div>',
                             unsafe_allow_html=True,
                         )
                         for art in articles:
+                            art_title    = art.get("title", "")
+                            art_summary  = art.get("summary", "")
+                            art_url      = art.get("url", "#")
+                            art_source   = art.get("source", "")
+                            art_pub      = art.get("published", "")
+
+                            # Yayın tarihini kısalt
+                            if art_pub and "T" in art_pub:
+                                art_pub = art_pub.split("T")[0]
+
+                            # Özet varsa göster
+                            summary_html = ""
+                            if art_summary and len(art_summary) > 20:
+                                summary_html = (
+                                    f'<div style="font-size:0.73rem;color:#8a9ab0;'
+                                    f'margin:0.3rem 0 0.3rem 1rem;line-height:1.5;'
+                                    f'border-left:2px solid #1e3a4a;padding-left:0.6rem;">'
+                                    f'{art_summary[:300]}'
+                                    f'{"..." if len(art_summary) > 300 else ""}'
+                                    f'</div>'
+                                )
+
                             st.markdown(
-                                f'<div style="font-size:0.75rem;color:#7a9ab5;margin-bottom:0.2rem;">'
-                                f'• <a href="{art.get("url","#")}" target="_blank" '
-                                f'style="color:#4fc3f7;text-decoration:none;">'
-                                f'{art.get("title","")[:120]}</a> '
-                                f'<span style="color:#3a4a5a;">[{art.get("source","")}]</span>'
+                                f'<div style="background:#0a1929;border:1px solid #1a2f42;'
+                                f'border-radius:6px;padding:0.6rem 0.8rem;margin-bottom:0.5rem;">'
+                                f'<div style="display:flex;justify-content:space-between;'
+                                f'align-items:flex-start;">'
+                                f'<a href="{art_url}" target="_blank" '
+                                f'style="color:#4fc3f7;text-decoration:none;font-size:0.8rem;'
+                                f'font-weight:600;line-height:1.4;flex:1;">'
+                                f'{art_title}</a>'
+                                f'</div>'
+                                f'{summary_html}'
+                                f'<div style="margin-top:0.3rem;font-size:0.65rem;color:#3a5a6a;">'
+                                f'📡 {art_source}'
+                                f'{" · " + art_pub if art_pub else ""}'
+                                f'</div>'
                                 f'</div>',
                                 unsafe_allow_html=True,
                             )
