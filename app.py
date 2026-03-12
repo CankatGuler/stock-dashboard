@@ -347,7 +347,7 @@ if missing_keys:
 # ─────────────────────────────────────────────────────────────────────────────
 # TABS
 # ─────────────────────────────────────────────────────────────────────────────
-tab_screener, tab_portfolio, tab_radar = st.tabs(["📡  Sektör Tarayıcı", "💼  Portföyüm", "🔭  Fırsat Radarı"])
+tab_screener, tab_portfolio, tab_radar, tab_lookup = st.tabs(["📡  Sektör Tarayıcı", "💼  Portföyüm", "🔭  Fırsat Radarı", "🔍  Hisse Sorgula"])
 
 # ─────────────────────────────────────────────────────────────────────────────
 # STATE INIT
@@ -1371,6 +1371,217 @@ with tab_radar:
             '<div style="font-size:0.9rem;margin-top:0.5rem;">Radari çalıştırmak için yukarıdaki butona tıkla.</div>'
             '<div style="font-size:0.75rem;margin-top:0.3rem;color:#2a3a4a;">'
             'Haberler taranacak, tüm sektörler dışındaki fırsatlar da tespit edilecek.</div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TAB 4 — HİSSE SORGULA
+# ─────────────────────────────────────────────────────────────────────────────
+
+with tab_lookup:
+    st.markdown(
+        '<div style="font-size:0.7rem;color:#5a6a7a;text-transform:uppercase;'
+        'letter-spacing:0.1em;margin-bottom:1rem;">'
+        '► HİSSE SORGULA — Tekil Hisse Değerlendirme</div>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        '<div style="background:#0d1f2d;border:1px solid #1e3a4a;border-radius:8px;'
+        'padding:1rem;margin-bottom:1.2rem;font-size:0.78rem;color:#7a9ab5;">'
+        'Sektör tarayıcısında olmayan veya anlık değerlendirmek istediğin herhangi bir '
+        'hisseyi buraya yaz. Claude veri çekip puanlayacak.'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── Arama Formu ───────────────────────────────────────────────────────
+    lk_col1, lk_col2, lk_col3 = st.columns([2, 1, 1])
+    with lk_col1:
+        lookup_ticker = st.text_input(
+            "Hisse Sembolü",
+            placeholder="örn: AAPL, NVDA, TSLA",
+            key="lookup_ticker_input",
+        ).upper().strip()
+    with lk_col2:
+        lookup_days = st.slider("Haber Günü", 1, 14, 7, key="lookup_days")
+    with lk_col3:
+        st.markdown("<br>", unsafe_allow_html=True)
+        lookup_btn = st.button("🔍  ANALİZ ET", use_container_width=True, type="primary", key="lookup_btn")
+
+    # ── Analiz ───────────────────────────────────────────────────────────
+    if lookup_btn:
+        if not lookup_ticker:
+            st.warning("Lütfen bir hisse sembolü girin.")
+        else:
+            with st.spinner(f"📊 {lookup_ticker} analiz ediliyor..."):
+                from data_fetcher    import enrich_ticker
+                from news_fetcher    import fetch_news_for_ticker, format_news_for_prompt
+                from claude_analyzer import analyse_stock
+
+                # 1. Veri çek
+                lk_status = st.empty()
+                lk_status.markdown(f'<div style="font-size:0.75rem;color:#5a6a7a;">📡 {lookup_ticker} verisi çekiliyor...</div>', unsafe_allow_html=True)
+                stock_data = enrich_ticker(lookup_ticker)
+
+                # 2. Kategori belirle
+                mkt_cap = stock_data.get("mktCap", 0) or 0
+                fcf     = stock_data.get("freeCashFlow", 0) or 0
+                stock_data["kategori"] = "A Tipi" if (mkt_cap > 10e9 and fcf > 0) else "B Tipi"
+
+                # 3. Haberleri çek
+                lk_status.markdown(f'<div style="font-size:0.75rem;color:#5a6a7a;">📰 Haberler çekiliyor...</div>', unsafe_allow_html=True)
+                articles  = fetch_news_for_ticker(lookup_ticker, days_back=lookup_days)
+                news_text = format_news_for_prompt(articles)
+
+                # 4. Claude analizi
+                lk_status.markdown(f'<div style="font-size:0.75rem;color:#5a6a7a;">🤖 Claude analiz yapıyor...</div>', unsafe_allow_html=True)
+                result = analyse_stock(stock_data, news_text)
+                lk_status.empty()
+
+            if not result:
+                st.error(f"❌ {lookup_ticker} analiz edilemedi. Sembolü kontrol edin.")
+            else:
+                score    = result.get("nihai_guven_skoru", 0)
+                kategori = result.get("kategori", "")
+                ozet     = result.get("analiz_ozeti", "")
+                tavsiye  = result.get("tavsiye", "Tut")
+                riskler  = result.get("kritik_riskler", {})
+                price    = stock_data.get("price", 0)
+                name     = stock_data.get("companyName", lookup_ticker)
+                sector   = stock_data.get("sector", "N/A")
+                mkt_b    = mkt_cap / 1e9
+
+                # Renk
+                if score >= 75:
+                    score_color  = "#00e676"
+                    border_color = "#00e676"
+                elif score >= 55:
+                    score_color  = "#ffb300"
+                    border_color = "#ffb300"
+                else:
+                    score_color  = "#ef5350"
+                    border_color = "#ef5350"
+
+                tavsiye_color = {"Ağırlık Artır": "#00e676", "Tut": "#ffb300", "Azalt": "#ef5350"}.get(tavsiye, "#7a9ab5")
+
+                # ── Başlık Kartı ─────────────────────────────────────────
+                st.markdown(
+                    f'<div style="background:#0a1929;border:2px solid {border_color};'
+                    f'border-radius:10px;padding:1.2rem;margin-bottom:1rem;">'
+                    f'<div style="display:flex;justify-content:space-between;align-items:center;">'
+                    f'<div>'
+                    f'<div style="font-size:1.6rem;font-weight:800;color:#e8f0f8;">{lookup_ticker}</div>'
+                    f'<div style="font-size:0.8rem;color:#7a9ab5;">{name}</div>'
+                    f'<div style="font-size:0.72rem;color:#4a6a7a;margin-top:0.2rem;">{sector}</div>'
+                    f'</div>'
+                    f'<div style="text-align:right;">'
+                    f'<div style="font-size:2.5rem;font-weight:900;color:{score_color};">{score}</div>'
+                    f'<div style="font-size:0.65rem;color:#5a6a7a;">PUAN</div>'
+                    f'<div style="background:{tavsiye_color}22;color:{tavsiye_color};'
+                    f'border-radius:4px;padding:2px 10px;font-size:0.75rem;font-weight:700;'
+                    f'margin-top:0.3rem;">{tavsiye}</div>'
+                    f'</div>'
+                    f'</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+
+                # ── Metrik Kartları ──────────────────────────────────────
+                m1, m2, m3, m4 = st.columns(4)
+                metrics = [
+                    (m1, "FİYAT",        f"${price:,.2f}" if price else "N/A",  "#4fc3f7"),
+                    (m2, "PİYASA DEĞERİ",f"${mkt_b:.1f}B" if mkt_b else "N/A", "#4fc3f7"),
+                    (m3, "KATEGORİ",     kategori,                               "#ce93d8"),
+                    (m4, "HABER SAYISI", str(len(articles)),                     "#ffb300"),
+                ]
+                for col, label, val, color in metrics:
+                    with col:
+                        st.markdown(
+                            f'<div style="background:#0a1929;border:1px solid #1e3a4a;'
+                            f'border-radius:8px;padding:0.8rem;text-align:center;">'
+                            f'<div style="font-size:0.6rem;color:#5a6a7a;">{label}</div>'
+                            f'<div style="font-size:1.2rem;font-weight:700;color:{color};">{val}</div>'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
+
+                # ── Analiz Özeti ─────────────────────────────────────────
+                st.markdown(
+                    f'<div style="background:#0d1f2d;border-left:3px solid {score_color};'
+                    f'border-radius:6px;padding:0.9rem;margin:0.8rem 0;">'
+                    f'<div style="font-size:0.65rem;color:#5a6a7a;margin-bottom:0.3rem;">ANALİZ ÖZETİ</div>'
+                    f'<div style="font-size:0.85rem;color:#c8d8e8;">{ozet}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+
+                # ── Riskler ──────────────────────────────────────────────
+                r1, r2 = st.columns(2)
+                with r1:
+                    st.markdown(
+                        f'<div style="background:#0a1929;border:1px solid #2a1a1a;'
+                        f'border-radius:8px;padding:0.8rem;">'
+                        f'<div style="font-size:0.65rem;color:#ef5350;margin-bottom:0.3rem;">🌍 GLOBAL MAKRO RİSK</div>'
+                        f'<div style="font-size:0.78rem;color:#c8d8e8;">{riskler.get("global_makro","N/A")}</div>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+                with r2:
+                    st.markdown(
+                        f'<div style="background:#0a1929;border:1px solid #2a1a1a;'
+                        f'border-radius:8px;padding:0.8rem;">'
+                        f'<div style="font-size:0.65rem;color:#ffb300;margin-bottom:0.3rem;">🏢 ŞİRKETE ÖZEL RİSK</div>'
+                        f'<div style="font-size:0.78rem;color:#c8d8e8;">{riskler.get("finansal_sirket_ozel","N/A")}</div>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                # ── Haberler ─────────────────────────────────────────────
+                if articles:
+                    st.markdown(
+                        '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+                        'margin:0.8rem 0 0.4rem 0;">📰 Kullanılan Haberler</div>',
+                        unsafe_allow_html=True,
+                    )
+                    for art in articles[:5]:
+                        art_title   = art.get("title", "")
+                        art_url     = art.get("url", "#")
+                        art_source  = art.get("source", {})
+                        if isinstance(art_source, dict):
+                            art_source = art_source.get("name", "")
+                        art_desc    = art.get("description", "") or art.get("summary", "")
+
+                        summary_html = ""
+                        if art_desc and len(art_desc) > 20:
+                            summary_html = (
+                                f'<div style="font-size:0.73rem;color:#8a9ab0;'
+                                f'margin:0.3rem 0 0 1rem;line-height:1.5;'
+                                f'border-left:2px solid #1e3a4a;padding-left:0.6rem;">'
+                                f'{art_desc[:300]}{"..." if len(art_desc)>300 else ""}'
+                                f'</div>'
+                            )
+
+                        st.markdown(
+                            f'<div style="background:#0a1929;border:1px solid #1a2f42;'
+                            f'border-radius:6px;padding:0.6rem 0.8rem;margin-bottom:0.4rem;">'
+                            f'<a href="{art_url}" target="_blank" '
+                            f'style="color:#4fc3f7;text-decoration:none;font-size:0.8rem;font-weight:600;">'
+                            f'{art_title}</a>'
+                            f'{summary_html}'
+                            f'<div style="margin-top:0.3rem;font-size:0.65rem;color:#3a5a6a;">'
+                            f'📡 {art_source}</div>'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
+    else:
+        st.markdown(
+            '<div style="text-align:center;padding:3rem;color:#3a4a5a;">'
+            '<div style="font-size:3rem;">🔍</div>'
+            '<div style="font-size:0.9rem;margin-top:0.5rem;">Analiz etmek istediğin hisse sembolünü gir.</div>'
+            '<div style="font-size:0.75rem;margin-top:0.3rem;color:#2a3a4a;">'
+            'NYSE ve NASDAQ\'taki tüm hisseler desteklenir.</div>'
             '</div>',
             unsafe_allow_html=True,
         )
