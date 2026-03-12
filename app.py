@@ -325,7 +325,7 @@ def _score_css_class(score: int) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Sidebar hidden — filters moved inline
-selected_sectors = ["Savunma Sanayii"]
+selected_sectors = ["Sanayi"]
 strategy         = "İkisi de"
 max_tickers      = 8
 news_days        = 7
@@ -384,7 +384,7 @@ with tab_screener:
             selected_sectors = st.multiselect(
                 "🏭 SEKTÖR FİLTRESİ",
                 options=list(SECTOR_TICKERS.keys()),
-                default=["Savunma Sanayii"],
+                default=["Sanayi"],
                 help="Analiz edilecek sektörleri seçin.",
             )
         with fc2:
