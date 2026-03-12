@@ -22,6 +22,22 @@ from data_fetcher import batch_enrich, get_quote
 from news_fetcher import fetch_news_batch, format_news_for_prompt
 from claude_analyzer import analyse_batch
 from radar_engine import run_radar
+
+
+def determine_category(stock: dict) -> str:
+    """FCF önce stock_data'dan, yoksa yfinance'den al ve kategori belirle."""
+    mkt_cap = stock.get("mktCap", 0) or 0
+    fcf     = stock.get("freeCashFlow", 0) or 0
+
+    if fcf == 0:
+        try:
+            import yfinance as yf
+            _info = yf.Ticker(stock.get("ticker", "")).info
+            fcf   = _info.get("freeCashflow", 0) or 0
+        except Exception:
+            pass
+
+    return "A Tipi" if (mkt_cap >= 10_000_000_000 and fcf > 0) else "B Tipi"
 from portfolio_manager import (
     load_portfolio, add_position, remove_position, update_position,
     sell_position, enrich_portfolio_with_prices, portfolio_summary,
@@ -421,10 +437,7 @@ with tab_screener:
 
             # Attach kategori
             for stock in enriched:
-                stock["kategori"] = categorise_stock(
-                    stock.get("_profile", {}),
-                    stock.get("_financials", {}),
-                )
+                stock["kategori"] = determine_category(stock)
 
             # Strategy filter
             if strategy == "A Tipi (Kalkan)":
@@ -1426,12 +1439,19 @@ with tab_lookup:
                 stock_data = enrich_ticker(lookup_ticker)
 
                 # 2. Kategori belirle
-                from utils import categorise_stock
-                stock_data["kategori"] = categorise_stock(
-                    stock_data.get("_profile", {}),
-                    stock_data.get("_financials", {}),
-                )
                 mkt_cap = stock_data.get("mktCap", 0) or 0
+                fcf     = stock_data.get("freeCashFlow", 0) or 0
+
+                # FCF boş gelirse yfinance'den dene
+                if fcf == 0:
+                    try:
+                        import yfinance as yf
+                        _info = yf.Ticker(lookup_ticker).info
+                        fcf   = _info.get("freeCashflow", 0) or 0
+                    except Exception:
+                        pass
+
+                stock_data["kategori"] = "A Tipi" if (mkt_cap >= 10_000_000_000 and fcf > 0) else "B Tipi"
 
                 # 3. Haberleri çek
                 lk_status.markdown(f'<div style="font-size:0.75rem;color:#5a6a7a;">📰 Haberler çekiliyor...</div>', unsafe_allow_html=True)
