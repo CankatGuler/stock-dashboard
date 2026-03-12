@@ -8,101 +8,199 @@ from datetime import datetime, timedelta
 # These are starting candidates; FMP profile data will be used to
 # enrich and confirm categorisation at runtime.
 # ---------------------------------------------------------------------------
-# S&P 500 Resmi 11 Sektörü (GICS — Global Industry Classification Standard)
+# S&P 500 + Nasdaq Önemli Hisseler — 11 GICS Sektörü
 SECTOR_TICKERS: dict[str, list[str]] = {
 
     # 1. Bilgi Teknolojisi
     "Bilgi Teknolojisi": [
+        # Donanım & Semiconductor
         "AAPL", "MSFT", "NVDA", "AVGO", "AMD", "QCOM", "TXN", "INTC",
         "AMAT", "LRCX", "KLAC", "MU", "ADI", "MCHP", "MPWR", "ON",
+        "MRVL", "WOLF", "SWKS", "QRVO", "MTSI", "ONTO", "ENTG", "FORM",
+        # Yazılım & Cloud
         "CRM", "ACN", "IBM", "ORCL", "NOW", "ADBE", "INTU", "SNPS",
-        "CDNS", "ANSS", "FTNT", "PANW", "CRWD", "PLTR", "ANET", "DELL",
-        "HPE", "STX", "WDC", "NTAP", "PSTG", "SMCI", "GLW", "KEYS",
+        "CDNS", "ANSS", "HUBS", "WDAY", "DDOG", "MDB", "SNOW", "ZS",
+        "OKTA", "TEAM", "ESTC", "GTLB", "PATH", "AI", "BBAI", "SOUN",
+        # Siber Güvenlik
+        "FTNT", "PANW", "CRWD", "CYBR", "S", "TENB", "QLYS", "VRNT",
+        # Network & Donanım
+        "ANET", "JNPR", "CSCO", "DELL", "HPE", "STX", "WDC", "NTAP",
+        "PSTG", "SMCI", "GLW", "KEYS", "VNET", "ARM", "PLTR", "IONQ", "QUBT", "RGTI", "ARQQ", "PAYO", "AMBA", "IDCC", "CEVA", "SLAB",
+        # AI Altyapısı
+        "VRT", "TSM", "ASML", "ACLS", "MKSI",
+        # Kripto & Blockchain
+        "MARA", "RIOT", "MSTR", "CLSK", "HUT", "BTDR", "IREN", "CIFR", "BITF",
     ],
 
     # 2. Sağlık Hizmetleri
     "Sağlık Hizmetleri": [
-        "LLY", "UNH", "JNJ", "ABBV", "MRK", "TMO", "ABT", "DHR",
-        "AMGN", "ISRG", "REGN", "VRTX", "GILD", "BIIB", "MRNA", "BNTX",
-        "BSX", "MDT", "SYK", "ZTS", "ELV", "CI", "HUM", "CVS",
-        "MCK", "CAH", "ABC", "IDXX", "IQV", "CRL", "PKI", "HOLX",
-        "BAX", "BDX", "EW", "ALGN", "RMD", "DXCM", "PODD", "INCY",
+        # Büyük İlaç
+        "LLY", "JNJ", "ABBV", "MRK", "PFE", "BMY", "AMGN", "GILD",
+        # Biyoteknoloji
+        "REGN", "VRTX", "BIIB", "MRNA", "BNTX", "INCY", "ALNY",
+        "SRPT", "RARE", "EXEL", "GMAB", "NBIX", "UTHR", "ACAD",
+        "CRSP", "BEAM", "EDIT", "NTLA", "VERV", "ARCT", "RXRX",
+        # Medikal Cihaz
+        "TMO", "ABT", "DHR", "ISRG", "BSX", "MDT", "SYK", "ZTS",
+        "EW", "ALGN", "RMD", "DXCM", "PODD", "IDXX", "IQV", "HOLX",
+        # Sağlık Sigortası & Hizmetleri
+        "UNH", "ELV", "CI", "HUM", "CVS", "MCK", "CAH", "ABC",
+        # NYSE American Sağlık Mid-Cap
+        "ACST", "ADMA", "AGIO", "AKRO", "ARDX", "ARQT", "ASRT", "ATRC",
+        "AVNS", "AXNX", "BCYC", "BLFS", "BNGO", "BPMC", "CABA", "CDMO",
+        "CLDX", "CMRX", "CNMD", "COHU", "CRNX", "CTLT", "DBTX", "DCPH",
     ],
 
     # 3. Finans
     "Finans": [
-        "BRK-B", "JPM", "V", "MA", "BAC", "WFC", "GS", "MS",
-        "BLK", "SPGI", "C", "AXP", "USB", "TFC", "PNC", "COF",
-        "MCO", "ICE", "CME", "CBOE", "SCHW", "BK", "STT", "NTRS",
+        # Büyük Bankalar
+        "BRK-B", "JPM", "BAC", "WFC", "GS", "MS", "C", "USB",
+        "TFC", "PNC", "COF", "FITB", "RF", "HBAN", "KEY", "CFG",
+        # Ödeme & Fintech
+        "V", "MA", "AXP", "PYPL", "SQ", "AFRM", "SOFI", "UPST",
+        "COIN", "HOOD", "MKTX", "LPLA", "RJF", "SF", "BILL", "FLYW", "NVEI",
+        # Varlık Yönetimi & Borsa
+        "BLK", "SPGI", "MCO", "ICE", "CME", "CBOE", "SCHW", "BK",
+        "STT", "NTRS", "IVZ", "BEN", "AMG", "VCTR",
+        # Sigorta
         "PRU", "MET", "AFL", "ALL", "TRV", "CB", "MMC", "AON",
-        "AJG", "WTW", "RE", "RNR", "HIG", "L", "GL", "FNF",
+        # NYSE American Finans Mid-Cap
+        "CURO", "ECPG", "ENVA", "FCFS", "GHL", "GPMT", "HFRO", "HLI",
+        "IIPR", "LADR", "MAIN", "NMFC", "PFLT", "PSEC", "SLRC", "TPVG",
     ],
 
     # 4. Tüketici Takdiri (Consumer Discretionary)
     "Tüketici Takdiri": [
-        "AMZN", "TSLA", "HD", "MCD", "NKE", "SBUX", "LOW", "TJX",
-        "BKNG", "MAR", "HLT", "MGM", "WYNN", "LVS", "CZR", "DKNG",
-        "ABNB", "UBER", "LYFT", "F", "GM", "RIVN", "LCID", "CVNA",
-        "ROST", "ORLY", "AZO", "BBY", "KMX", "AN", "GPC", "APTV",
-        "DHI", "LEN", "PHM", "TOL", "NVR", "MTH", "KBH", "MHO",
+        # E-ticaret & Teknoloji
+        "AMZN", "TSLA", "BKNG", "ABNB", "UBER", "LYFT", "DASH", "CART",
+        "CHWY", "ETSY", "W", "OSTK", "PRTS",
+        # Perakende
+        "HD", "LOW", "TJX", "ROST", "ORLY", "AZO", "BBY", "KMX",
+        # Yeme-İçme & Eğlence
+        "MCD", "SBUX", "CMG", "YUM", "QSR", "WING", "TXRH", "DINE",
+        "MAR", "HLT", "MGM", "WYNN", "LVS", "CZR", "DKNG", "PENN",
+        # Otomobil
+        "F", "GM", "RIVN", "LCID", "CVNA", "AN", "GPC", "APTV",
+        # Konut
+        "DHI", "LEN", "PHM", "TOL", "NVR", "MTH",
+        # Moda & Diğer
+        "NKE", "LULU", "PVH", "RL", "TPR", "CPRI", "SKX",
     ],
 
     # 5. İletişim Hizmetleri
     "İletişim Hizmetleri": [
-        "GOOGL", "GOOG", "META", "NFLX", "DIS", "CMCSA", "T", "VZ",
-        "TMUS", "CHTR", "WBD", "FOX", "FOXA", "PARA", "NWSA", "NWS",
-        "TTWO", "EA", "ATVI", "RBLX", "U", "SNAP", "PINS", "MTCH",
-        "IAC", "ZG", "TRIP", "YELP", "LUMN", "FYBR", "LBRDA",
+        # Sosyal Medya & İnternet
+        "GOOGL", "GOOG", "META", "SNAP", "PINS", "RDDT", "MTCH",
+        "IAC", "ZG", "TRIP", "YELP", "ANGI",
+        # Streaming & Medya
+        "NFLX", "DIS", "CMCSA", "WBD", "PARA", "FOXA", "FOX",
+        "NWSA", "NWS", "SIRI", "IACI", "LYV",
+        # Oyun
+        "TTWO", "EA", "RBLX", "U", "ZNGA", "DVAS", "PLTK",
+        # Telekom
+        "T", "VZ", "TMUS", "CHTR", "LUMN", "FYBR",
     ],
 
     # 6. Sanayi (Industrials)
     "Sanayi": [
-        "GE", "CAT", "HON", "UPS", "RTX", "LMT", "NOC", "GD",
-        "BA", "HII", "TDG", "LDOS", "SAIC", "CACI", "L3H", "AXON",
-        "AVAV", "KTOS", "DE", "EMR", "ETN", "ROK", "IR", "PH",
-        "DOV", "AME", "XYL", "VRSK", "HUBB", "FTV", "GNRC", "ALLE",
-        "OTIS", "CARR", "TT", "JCI", "FLR", "PWR", "MTZ", "PRIM",
+        # Savunma
+        "LMT", "RTX", "NOC", "GD", "BA", "HII", "TDG", "LDOS",
+        "SAIC", "CACI", "AXON", "AVAV", "KTOS", "DRS", "ACHR",
+        # Makine & Ekipman
+        "CAT", "DE", "EMR", "ETN", "ROK", "IR", "PH", "DOV",
+        "AME", "HUBB", "FTV", "GNRC", "ALLE", "OTIS", "CARR",
+        # Havacılık & Uzay
+        "GE", "HON", "TT", "JCI", "RKLB", "ASTS", "LUNR", "JOBY", "ACHR", "RDW", "SPCE", "ASTR", "PL", "BKSY",
+        # Ulaşım & Lojistik
+        "UPS", "FDX", "JBHT", "CHRW", "XPO", "SAIA", "ODFL",
+        # İnşaat & Mühendislik
+        "FLR", "PWR", "MTZ", "PRIM", "ACM", "J", "KBR",
+        # NYSE American Sanayi Mid-Cap
+        "AMRC", "ARIS", "AZEK", "BWMN", "CENX", "CLB", "CTOS", "DLX",
+        "DNOW", "DY", "ECVT", "ESAB", "FWRD", "GBX", "GTES", "HXL",
+        "ITRI", "KFRC", "MYRG", "NX", "OSIS", "PRLB", "RXO", "SHYF",
     ],
 
     # 7. Temel Tüketim (Consumer Staples)
     "Temel Tüketim": [
-        "WMT", "PG", "KO", "PEP", "COST", "PM", "MO", "MDLZ",
-        "CL", "KMB", "GIS", "K", "CPB", "CAG", "SJM", "HRL",
-        "TSN", "MKC", "CHD", "CLX", "EL", "COTY", "REV", "SFM",
-        "KR", "SYY", "PFGC", "USFD", "BJ", "GO", "CASY", "WINN",
+        # Perakende
+        "WMT", "COST", "KR", "BJ", "GO", "SFM", "WINN", "CASY",
+        # İçecek
+        "KO", "PEP", "MNST", "CELH", "FIZZ", "COKE",
+        # Gıda
+        "PG", "MDLZ", "GIS", "K", "CPB", "CAG", "SJM", "HRL",
+        "TSN", "MKC", "CHD", "CLX", "SYY", "PFGC", "USFD",
+        # Tütün & Kişisel Bakım
+        "PM", "MO", "BTI", "EL", "COTY", "CL", "KMB",
     ],
 
     # 8. Enerji
     "Enerji": [
-        "XOM", "CVX", "COP", "EOG", "SLB", "HAL", "BKR", "NOV",
-        "PSX", "VLO", "MPC", "OXY", "DVN", "FANG", "PXD", "APA",
-        "MRO", "HES", "OVV", "SM", "MGY", "CIVI", "CPE", "PDCE",
+        # Büyük Petrol
+        "XOM", "CVX", "COP", "OXY", "HES", "MRO", "APA", "OVV",
+        # E&P
+        "EOG", "FANG", "DVN", "SM", "MGY", "CIVI", "CPE", "PDCE",
+        # Servis
+        "SLB", "HAL", "BKR", "NOV", "WHD", "NR", "NINE",
+        # Rafineri
+        "PSX", "VLO", "MPC", "DK", "PBF",
+        # Boru Hattı & Midstream
         "KMI", "WMB", "OKE", "ET", "EPD", "MPLX", "PAA", "TRGP",
+        # Yenilenebilir
+        "ENPH", "SEDG", "FSLR", "RUN", "ARRY", "NOVA", "SHLS",
+        # NYSE American Enerji Mid-Cap
+        "AMPY", "ARCH", "BATL", "CDEV", "ESTE", "FTCO", "GPOR", "HNRG",
+        "KALU", "MNRL", "MTDR", "NOG", "PANL", "PARR", "PTEN", "REX",
+        "RING", "ROCC", "SBR", "SBOW", "SFL", "SNMP", "SWN", "TALO",
     ],
 
     # 9. Kamu Hizmetleri (Utilities)
     "Kamu Hizmetleri": [
+        # Elektrik
         "NEE", "SO", "DUK", "AEP", "SRE", "D", "EXC", "XEL",
         "ED", "ETR", "FE", "EIX", "PCG", "PEG", "AES", "NI",
         "CMS", "WEC", "DTE", "LNT", "EVRG", "OGE", "NWE", "AVA",
+        # Nükleer & Temiz Enerji
         "VST", "CEG", "NRG", "CWEN", "AY", "BEP", "NOVA",
+        "SMR", "OKLO", "NNE", "BWXT", "CCJ",
     ],
 
     # 10. Gayrimenkul (Real Estate)
     "Gayrimenkul": [
-        "AMT", "PLD", "CCI", "EQIX", "PSA", "O", "WELL", "DLR",
-        "SPG", "VTR", "AVB", "EQR", "ESS", "UDR", "MAA", "CPT",
-        "NNN", "WPC", "STAG", "COLD", "EXR", "CUBE", "LSI", "NSA",
-        "ARE", "BXP", "SLG", "KIM", "REG", "FRT", "BRX", "RPAI",
+        # Veri Merkezi & Tower REIT
+        "AMT", "CCI", "EQIX", "DLR", "IRM", "SBAC",
+        # Sanayi & Lojistik REIT
+        "PLD", "STAG", "COLD", "EGP", "FR",
+        # Konut REIT
+        "AVB", "EQR", "ESS", "UDR", "MAA", "CPT", "NMD",
+        # Ofis REIT
+        "BXP", "SLG", "ARE", "HIW", "CUZ",
+        # Perakende REIT
+        "SPG", "O", "NNN", "WPC", "KIM", "REG", "FRT", "BRX",
+        # Self-Storage & Diğer
+        "PSA", "EXR", "CUBE", "LSI", "NSA", "WELL", "VTR",
+        # Mortgage REIT
+        "AGNC", "NLY", "MFA", "RITM", "TWO",
     ],
 
     # 11. Malzeme (Materials)
     "Malzeme": [
-        "LIN", "APD", "ECL", "SHW", "FCX", "NEM", "NUE", "STLD",
-        "RS", "CMC", "WOR", "ATI", "X", "CLF", "AA", "CENX",
-        "ALB", "SQM", "LAC", "LTHM", "MP", "CINT", "IFF", "PPG",
-        "RPM", "HUN", "CC", "OLN", "EMN", "CE", "WLK", "LYB",
+        # Kimya
+        "LIN", "APD", "ECL", "SHW", "IFF", "PPG", "RPM",
+        "HUN", "CC", "OLN", "EMN", "CE", "WLK", "LYB", "OLIN",
+        # Metal & Madencilik
+        "FCX", "NEM", "NUE", "STLD", "RS", "CMC", "ATI",
+        "X", "CLF", "AA", "CENX", "MP", "CINT",
+        # Lityum & Pil Malzemeleri
+        "ALB", "SQM", "LAC", "LTHM", "PLL", "LITP",
+        # Ambalaj
         "PKG", "IP", "WRK", "SEE", "BMS", "SLGN", "BERY",
+        # Orman & Kağıt
+        "WY", "PCH", "RYN", "CTT",
+        # NYSE American Malzeme Mid-Cap
+        "AMR", "ARNC", "ATZAF", "CSTM", "FTAI", "GEF", "HWKN", "IPEX",
+        "KRO", "MERC", "METC", "MTRN", "NGVT", "NTIC", "OMN", "PCRX",
+        "PRM", "RYAM", "SLCA", "SXT", "TROX", "VNTR", "WLKP", "ZEUS",
     ],
 }
 
