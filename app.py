@@ -25,41 +25,9 @@ from radar_engine import run_radar
 
 
 def determine_category(stock: dict) -> str:
-    """
-    Kategori belirleme — birden fazla kaynaktan FCF dene.
-    A Tipi: mktCap >= 10B VE pozitif FCF
-    """
-    mkt_cap = stock.get("mktCap", 0) or 0
-
-    # Kaynak 1: FMP cash flow (_financials)
-    fcf = stock.get("_financials", {}).get("freeCashFlow", 0) or 0
-
-    # Kaynak 2: Düz alan
-    if fcf == 0:
-        fcf = stock.get("freeCashFlow", 0) or 0
-
-    # Kaynak 3: operatingCashFlow - capex yaklaşımı
-    if fcf == 0:
-        ocf   = stock.get("_financials", {}).get("operatingCashFlow", 0) or 0
-        capex = stock.get("_financials", {}).get("capitalExpenditure", 0) or 0
-        if ocf != 0:
-            fcf = ocf - abs(capex)
-
-    # Kaynak 4: yfinance (son çare, timeout korumalı)
-    if fcf == 0:
-        try:
-            import yfinance as yf
-            ticker_sym = stock.get("ticker", "")
-            tk   = yf.Ticker(ticker_sym)
-            info = tk.info
-            fcf  = info.get("freeCashflow", 0) or 0
-            # mktCap de yfinance'den al (FMP bazen boş döner)
-            if mkt_cap == 0:
-                mkt_cap = info.get("marketCap", 0) or 0
-        except Exception:
-            pass
-
-    return "A Tipi" if (mkt_cap >= 10_000_000_000 and fcf > 0) else "B Tipi"
+    """Yeni kategori sistemi: Rocket / Balanced / Shield — mktCap + Beta bazlı."""
+    from utils import categorise_stock as _cat
+    return _cat(stock)
 from portfolio_manager import (
     load_portfolio, add_position, remove_position, update_position,
     sell_position, enrich_portfolio_with_prices, portfolio_summary,
@@ -335,6 +303,12 @@ def recommendation_badge(tavsiye: str) -> str:
 
 
 def category_chip(kategori: str) -> str:
+    if kategori == "Rocket 🚀":
+        return '<span style="background:#1a3a1a;color:#00e676;border:1px solid #00e676;border-radius:4px;padding:1px 8px;font-size:0.65rem;font-weight:700;">Rocket 🚀</span>'
+    if kategori == "Balanced ⚖️":
+        return '<span style="background:#1a2a3a;color:#4fc3f7;border:1px solid #4fc3f7;border-radius:4px;padding:1px 8px;font-size:0.65rem;font-weight:700;">Balanced ⚖️</span>'
+    if kategori == "Shield 🛡️":
+        return '<span style="background:#2a2a1a;color:#ffb300;border:1px solid #ffb300;border-radius:4px;padding:1px 8px;font-size:0.65rem;font-weight:700;">Shield 🛡️</span>'
     if kategori == "A Tipi":
         return '<span style="font-size:0.6rem;background:#0a2040;color:#5599ff;border:1px solid #1a3060;padding:2px 7px;border-radius:3px;font-weight:700;">A TİPİ · KALKAN</span>'
     return '<span style="font-size:0.6rem;background:#2a0a20;color:#ff55aa;border:1px solid #601a40;padding:2px 7px;border-radius:3px;font-weight:700;">B TİPİ · ROKET</span>'
@@ -416,7 +390,7 @@ with tab_screener:
         with fc2:
             strategy = st.radio(
                 "🎯 STRATEJİ",
-                options=["A Tipi (Kalkan)", "B Tipi (Roket)", "İkisi de"],
+                options=["Rocket 🚀", "Balanced ⚖️", "Shield 🛡️", "Hepsi"],
                 index=2,
                 horizontal=True,
             )
@@ -462,10 +436,8 @@ with tab_screener:
                 stock["kategori"] = determine_category(stock)
 
             # Strategy filter
-            if strategy == "A Tipi (Kalkan)":
-                enriched = [s for s in enriched if s["kategori"] == "A Tipi"]
-            elif strategy == "B Tipi (Roket)":
-                enriched = [s for s in enriched if s["kategori"] == "B Tipi"]
+            if strategy != "Hepsi":
+                enriched = [s for s in enriched if s["kategori"] == strategy]
 
             if not enriched:
                 st.warning("Seçilen kriterlere uyan hisse bulunamadı.")

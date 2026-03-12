@@ -86,10 +86,11 @@ BLOCKED_DOMAINS: set[str] = {
 }
 
 # ---------------------------------------------------------------------------
-# CATEGORY thresholds
+# CATEGORY thresholds — Rocket / Balanced / Shield
 # ---------------------------------------------------------------------------
-TYPE_A_MARKET_CAP_THRESHOLD = 10_000_000_000   # > 10 B USD
-TYPE_B_RD_RATIO_THRESHOLD   = 0.10              # R&D / Revenue > 10 %
+ROCKET_MAX_MARKET_CAP   = 10_000_000_000    # < 10B  → Rocket
+BALANCED_MAX_MARKET_CAP = 50_000_000_000    # 10-50B → Balanced
+ROCKET_MIN_BETA         = 1.2               # Beta > 1.2 güçlendirir
 
 
 # ---------------------------------------------------------------------------
@@ -107,28 +108,35 @@ def is_blocked_domain(url: str) -> bool:
     return any(domain in url.lower() for domain in BLOCKED_DOMAINS)
 
 
-def categorise_stock(profile: dict, financials: dict) -> str:
+def categorise_stock(stock: dict, *args) -> str:
     """
-    Determine whether a stock is Type A (Shield) or Type B (Rocket).
+    Katalizör Potansiyeli Kategorisi — mktCap + Beta bazlı.
 
-    Parameters
-    ----------
-    profile    : FMP /stable/profile response dict
-    financials : FMP income-statement / cash-flow dict (latest annual)
+    Rocket   : mktCap < 10B  (büyük sıçrama potansiyeli)
+    Balanced : mktCap 10-50B (orta risk/getiri)
+    Shield   : mktCap > 50B  (stabil, korumalı)
 
-    Returns
-    -------
-    "A Tipi" | "B Tipi"
+    Beta > 1.2 ise Balanced → Rocket'a yükseltilir.
     """
-    market_cap  = profile.get("mktCap", 0) or 0
-    fcf         = financials.get("freeCashFlow", 0) or 0
-    revenue     = financials.get("revenue", 1) or 1         # avoid div/0
-    rd_expense  = financials.get("researchAndDevelopmentExpenses", 0) or 0
-    rd_ratio    = rd_expense / revenue if revenue else 0
+    # stock dict'i veya eski imzayla (profile, financials) çağrılabilir
+    if isinstance(stock, dict) and "mktCap" in stock:
+        market_cap = stock.get("mktCap", 0) or 0
+        beta       = stock.get("beta", 0) or 0
+    elif isinstance(stock, dict):
+        market_cap = stock.get("mktCap", 0) or 0
+        beta       = stock.get("beta", 0) or 0
+    else:
+        market_cap = 0
+        beta       = 0
 
-    if market_cap >= TYPE_A_MARKET_CAP_THRESHOLD and fcf > 0:
-        return "A Tipi"
-    return "B Tipi"
+    if market_cap == 0 or market_cap < ROCKET_MAX_MARKET_CAP:
+        return "Rocket 🚀"
+    if market_cap <= BALANCED_MAX_MARKET_CAP:
+        # Beta yüksekse Rocket'a yükselt
+        if beta >= ROCKET_MIN_BETA:
+            return "Rocket 🚀"
+        return "Balanced ⚖️"
+    return "Shield 🛡️"
 
 
 def score_color(score: int) -> str:
