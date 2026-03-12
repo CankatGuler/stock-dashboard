@@ -8,58 +8,101 @@ from datetime import datetime, timedelta
 # These are starting candidates; FMP profile data will be used to
 # enrich and confirm categorisation at runtime.
 # ---------------------------------------------------------------------------
+# S&P 500 Resmi 11 Sektörü (GICS — Global Industry Classification Standard)
 SECTOR_TICKERS: dict[str, list[str]] = {
-    "Yapay Zeka": [
-        "NVDA", "AMD", "PLTR", "AI", "SOUN", "BBAI", "CRNC",
-        "AAON", "MSFT", "GOOGL", "META", "SMCI", "ANET", "ARM",
-        "IONQ", "QUBT", "RGTI", "ARQQ",
+
+    # 1. Bilgi Teknolojisi
+    "Bilgi Teknolojisi": [
+        "AAPL", "MSFT", "NVDA", "AVGO", "AMD", "QCOM", "TXN", "INTC",
+        "AMAT", "LRCX", "KLAC", "MU", "ADI", "MCHP", "MPWR", "ON",
+        "CRM", "ACN", "IBM", "ORCL", "NOW", "ADBE", "INTU", "SNPS",
+        "CDNS", "ANSS", "FTNT", "PANW", "CRWD", "PLTR", "ANET", "DELL",
+        "HPE", "STX", "WDC", "NTAP", "PSTG", "SMCI", "GLW", "KEYS",
     ],
-    "Nükleer Enerji": [
-        "CCJ", "UEC", "DNN", "NXE", "UUUU", "LEU", "SMR",
-        "OKLO", "NNE", "BW", "BWXT", "VST", "CEG", "ETR",
+
+    # 2. Sağlık Hizmetleri
+    "Sağlık Hizmetleri": [
+        "LLY", "UNH", "JNJ", "ABBV", "MRK", "TMO", "ABT", "DHR",
+        "AMGN", "ISRG", "REGN", "VRTX", "GILD", "BIIB", "MRNA", "BNTX",
+        "BSX", "MDT", "SYK", "ZTS", "ELV", "CI", "HUM", "CVS",
+        "MCK", "CAH", "ABC", "IDXX", "IQV", "CRL", "PKI", "HOLX",
+        "BAX", "BDX", "EW", "ALGN", "RMD", "DXCM", "PODD", "INCY",
     ],
-    "Su Teknolojileri": [
-        "WTRG", "AWK", "XYL", "MSEX", "YORW", "CWCO", "PRMW",
-        "FWRD", "PNR", "DHR", "A", "VEOEY",
+
+    # 3. Finans
+    "Finans": [
+        "BRK-B", "JPM", "V", "MA", "BAC", "WFC", "GS", "MS",
+        "BLK", "SPGI", "C", "AXP", "USB", "TFC", "PNC", "COF",
+        "MCO", "ICE", "CME", "CBOE", "SCHW", "BK", "STT", "NTRS",
+        "PRU", "MET", "AFL", "ALL", "TRV", "CB", "MMC", "AON",
+        "AJG", "WTW", "RE", "RNR", "HIG", "L", "GL", "FNF",
     ],
-    "İnsansı Robotlar": [
-        "TSLA", "ABB", "ROK", "IRBT", "FANUY", "KION",
-        "NVDA", "MVIS", "IROQ", "BDTX", "NNDM", "RBOT",
+
+    # 4. Tüketici Takdiri (Consumer Discretionary)
+    "Tüketici Takdiri": [
+        "AMZN", "TSLA", "HD", "MCD", "NKE", "SBUX", "LOW", "TJX",
+        "BKNG", "MAR", "HLT", "MGM", "WYNN", "LVS", "CZR", "DKNG",
+        "ABNB", "UBER", "LYFT", "F", "GM", "RIVN", "LCID", "CVNA",
+        "ROST", "ORLY", "AZO", "BBY", "KMX", "AN", "GPC", "APTV",
+        "DHI", "LEN", "PHM", "TOL", "NVR", "MTH", "KBH", "MHO",
     ],
-    "Batarya Sektörü": [
-        "TSLA", "LTHM", "ALB", "SQM", "LAC", "ALTM",
-        "FREYR", "NKLA", "QS", "MVST", "BLNK", "CHPT",
-        "ENS", "FLUX",
+
+    # 5. İletişim Hizmetleri
+    "İletişim Hizmetleri": [
+        "GOOGL", "GOOG", "META", "NFLX", "DIS", "CMCSA", "T", "VZ",
+        "TMUS", "CHTR", "WBD", "FOX", "FOXA", "PARA", "NWSA", "NWS",
+        "TTWO", "EA", "ATVI", "RBLX", "U", "SNAP", "PINS", "MTCH",
+        "IAC", "ZG", "TRIP", "YELP", "LUMN", "FYBR", "LBRDA",
     ],
-    "Savunma Sanayii": [
-        "LMT", "RTX", "NOC", "GD", "BA", "HII", "LDOS",
-        "AVAV", "KTOS", "PLTR", "CACI", "SAIC", "DRS",
-        "TDG", "HXL", "AXON",
+
+    # 6. Sanayi (Industrials)
+    "Sanayi": [
+        "GE", "CAT", "HON", "UPS", "RTX", "LMT", "NOC", "GD",
+        "BA", "HII", "TDG", "LDOS", "SAIC", "CACI", "L3H", "AXON",
+        "AVAV", "KTOS", "DE", "EMR", "ETN", "ROK", "IR", "PH",
+        "DOV", "AME", "XYL", "VRSK", "HUBB", "FTV", "GNRC", "ALLE",
+        "OTIS", "CARR", "TT", "JCI", "FLR", "PWR", "MTZ", "PRIM",
     ],
-    "Biyoteknoloji": [
-        "MRNA", "BNTX", "REGN", "CRSP", "EDIT", "NTLA",
-        "BEAM", "PACB", "RXRX", "TWST", "FATE", "BLUE",
-        "AGEN", "SANA", "VERV", "ARCT",
+
+    # 7. Temel Tüketim (Consumer Staples)
+    "Temel Tüketim": [
+        "WMT", "PG", "KO", "PEP", "COST", "PM", "MO", "MDLZ",
+        "CL", "KMB", "GIS", "K", "CPB", "CAG", "SJM", "HRL",
+        "TSN", "MKC", "CHD", "CLX", "EL", "COTY", "REV", "SFM",
+        "KR", "SYY", "PFGC", "USFD", "BJ", "GO", "CASY", "WINN",
     ],
-    "Uzay Teknolojileri": [
-        "RKLB", "ASTS", "SPCE", "BA", "LMT", "NOC",
-        "MAXR", "BKSY", "SATL", "MNTS", "ASTR", "RDW",
-        "IRDM", "VSAT", "GSAT", "PL",
+
+    # 8. Enerji
+    "Enerji": [
+        "XOM", "CVX", "COP", "EOG", "SLB", "HAL", "BKR", "NOV",
+        "PSX", "VLO", "MPC", "OXY", "DVN", "FANG", "PXD", "APA",
+        "MRO", "HES", "OVV", "SM", "MGY", "CIVI", "CPE", "PDCE",
+        "KMI", "WMB", "OKE", "ET", "EPD", "MPLX", "PAA", "TRGP",
     ],
-    "İlaç Sektörü": [
-        "JNJ", "PFE", "MRK", "ABBV", "LLY", "BMY",
-        "GILD", "AMGN", "BIIB", "VRTX", "ALNY", "INCY",
-        "EXEL", "HALO", "PRGO", "JAZZ",
+
+    # 9. Kamu Hizmetleri (Utilities)
+    "Kamu Hizmetleri": [
+        "NEE", "SO", "DUK", "AEP", "SRE", "D", "EXC", "XEL",
+        "ED", "ETR", "FE", "EIX", "PCG", "PEG", "AES", "NI",
+        "CMS", "WEC", "DTE", "LNT", "EVRG", "OGE", "NWE", "AVA",
+        "VST", "CEG", "NRG", "CWEN", "AY", "BEP", "NOVA",
     ],
-    "Semiconductor": [
-        "NVDA", "AMD", "INTC", "QCOM", "AVGO", "TXN",
-        "MCHP", "MPWR", "ON", "SWKS", "QRVO", "WOLF",
-        "AMAT", "LRCX", "KLAC", "ASML",
+
+    # 10. Gayrimenkul (Real Estate)
+    "Gayrimenkul": [
+        "AMT", "PLD", "CCI", "EQIX", "PSA", "O", "WELL", "DLR",
+        "SPG", "VTR", "AVB", "EQR", "ESS", "UDR", "MAA", "CPT",
+        "NNN", "WPC", "STAG", "COLD", "EXR", "CUBE", "LSI", "NSA",
+        "ARE", "BXP", "SLG", "KIM", "REG", "FRT", "BRX", "RPAI",
     ],
-    "Memory": [
-        "MU", "WDC", "STX", "KIOXF", "SSNLF",
-        "AMAT", "LRCX", "ENTG", "ONTO", "FORM", "PLAB",
-        "CRUS", "RMBS", "MRAM", "NVDA",
+
+    # 11. Malzeme (Materials)
+    "Malzeme": [
+        "LIN", "APD", "ECL", "SHW", "FCX", "NEM", "NUE", "STLD",
+        "RS", "CMC", "WOR", "ATI", "X", "CLF", "AA", "CENX",
+        "ALB", "SQM", "LAC", "LTHM", "MP", "CINT", "IFF", "PPG",
+        "RPM", "HUN", "CC", "OLN", "EMN", "CE", "WLK", "LYB",
+        "PKG", "IP", "WRK", "SEE", "BMS", "SLGN", "BERY",
     ],
 }
 
