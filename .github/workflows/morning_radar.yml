@@ -2,23 +2,29 @@ name: Radar Bildirimleri (NYSE Saatine Göre)
 
 on:
   schedule:
-    # ── Açılış öncesi ──────────────────────────────────────────────────────
-    # Yaz (Mar–Nov): EDT = UTC-4  → ABD 08:00 = UTC 12:00 = TR 15:00
-    # Kış (Nov–Mar): EST = UTC-5  → ABD 08:00 = UTC 13:00 = TR 16:00
-    - cron: "0 12 * * 1-5"   # Yaz: ABD 08:00 / TR 15:00
-    - cron: "0 13 * * 1-5"   # Kış: ABD 08:00 / TR 16:00
+    # ── Günlük radar — açılış öncesi ───────────────────────────────────────
+    # Yaz (EDT, UTC-4): ABD 08:00 = UTC 12:00 = TR 15:00
+    # Kış (EST, UTC-5): ABD 08:00 = UTC 13:00 = TR 16:00
+    - cron: "0 12 * * 1-5"
+    - cron: "0 13 * * 1-5"
 
-    # ── Kapanış öncesi ─────────────────────────────────────────────────────
-    # Yaz (Mar–Nov): EDT = UTC-4  → ABD 15:00 = UTC 19:00 = TR 22:00
-    # Kış (Nov–Mar): EST = UTC-5  → ABD 15:00 = UTC 20:00 = TR 23:00
-    - cron: "0 19 * * 1-5"   # Yaz: ABD 15:00 / TR 22:00
-    - cron: "0 20 * * 1-5"   # Kış: ABD 15:00 / TR 23:00
+    # ── Günlük radar — kapanış öncesi ──────────────────────────────────────
+    # Yaz: ABD 15:00 = UTC 19:00 = TR 22:00
+    # Kış: ABD 15:00 = UTC 20:00 = TR 23:00
+    - cron: "0 19 * * 1-5"
+    - cron: "0 20 * * 1-5"
 
-  workflow_dispatch:           # Manuel tetikleme (test için)
+    # ── Haftalık S&P 500 raporu — Pazar ────────────────────────────────────
+    # UTC 17:00 = TR 20:00
+    - cron: "0 17 * * 0"
+
+  workflow_dispatch:
 
 jobs:
+  # ── Günlük Radar ─────────────────────────────────────────────────────────
   radar:
     runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || (github.event.schedule != '0 17 * * 0')
 
     steps:
       - name: Kodu çek
@@ -41,4 +47,33 @@ jobs:
           TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
           GITHUB_TOKEN:       ${{ secrets.GH_TOKEN }}
           GITHUB_REPO:        ${{ secrets.GITHUB_REPO }}
+          GITHUB_EVENT_NAME:  ${{ github.event_name }}
         run: python morning_radar.py
+
+  # ── Haftalık S&P 500 Raporu ───────────────────────────────────────────────
+  weekly-report:
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '0 17 * * 0' || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Kodu çek
+        uses: actions/checkout@v4
+
+      - name: Python kur
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Bağımlılıkları yükle
+        run: pip install -r requirements.txt
+
+      - name: Haftalık raporu çalıştır
+        env:
+          ANTHROPIC_API_KEY:  ${{ secrets.ANTHROPIC_API_KEY }}
+          NEWS_API_KEY:       ${{ secrets.NEWS_API_KEY }}
+          FMP_API_KEY:        ${{ secrets.FMP_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          GITHUB_TOKEN:       ${{ secrets.GH_TOKEN }}
+          GITHUB_REPO:        ${{ secrets.GITHUB_REPO }}
+        run: python weekly_report.py
