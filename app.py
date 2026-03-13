@@ -633,26 +633,41 @@ with tab_screener:
                     unsafe_allow_html=True,
                 )
 
-                # ── Metrikler ─────────────────────────────────────────────
+                # ── Metrikler (yfinance) ───────────────────────────────────
                 _price  = meta.get("price") or 0
                 _chg    = meta.get("change_pct") or 0
                 _mc     = meta.get("mktCap") or 0
                 _beta   = meta.get("beta") or 0
                 _pe     = meta.get("peRatio") or 0
+                _fpe    = meta.get("forwardPE") or 0
                 _eps    = meta.get("eps") or 0
                 _de     = meta.get("debtToEquity") or 0
+                _roe    = meta.get("roic") or 0
                 _gm     = meta.get("grossMargin") or 0
                 _revgr  = meta.get("revenueGrowth") or 0
                 _fcf    = meta.get("freeCashFlow") or 0
                 _div    = meta.get("dividendYield") or 0
                 _52h    = meta.get("52wHigh") or 0
                 _52l    = meta.get("52wLow") or 0
+                _tgt    = meta.get("analystTarget") or 0
+                _tgt_h  = meta.get("analystHigh") or 0
+                _tgt_l  = meta.get("analystLow") or 0
+                _rec    = meta.get("recommendation") or ""
+                _acnt   = meta.get("analystCount") or 0
                 _sector = meta.get("sector", "N/A")
+
+                def _fmt(val, fmt, fallback="—"):
+                    try:
+                        return fmt.format(val) if val else fallback
+                    except Exception:
+                        return fallback
 
                 _mc_str  = f"${_mc/1e9:.1f}B" if _mc > 0 else "—"
                 _pe_str  = f"{_pe:.1f}x" if _pe > 0 else "—"
+                _fpe_str = f"{_fpe:.1f}x" if _fpe > 0 else "—"
                 _eps_str = f"${_eps:.2f}" if _eps != 0 else "—"
                 _de_str  = f"{_de:.2f}" if _de > 0 else "—"
+                _roe_str = f"{_roe:.1%}" if _roe != 0 else "—"
                 _gm_str  = f"{_gm:.1%}" if _gm > 0 else "—"
                 _rg_str  = f"{_revgr:+.1%}" if _revgr != 0 else "—"
                 _div_str = f"{_div:.1%}" if _div > 0 else "—"
@@ -662,7 +677,18 @@ with tab_screener:
                 _range_str = "—"
                 if _52h > 0 and _52l > 0 and _price > 0 and (_52h - _52l) > 0:
                     _pct = (_price - _52l) / (_52h - _52l) * 100
-                    _range_str = f"{_pct:.0f}%  (↓{_52l:.0f} / ↑{_52h:.0f})"
+                    _range_str = f"{_pct:.0f}%  ({_52l:.0f} / {_52h:.0f})"
+
+                _tgt_str = "—"
+                if _tgt > 0 and _price > 0:
+                    _up = (_tgt - _price) / _price * 100
+                    _tgt_str = f"${_tgt:.0f} ({_up:+.1f}%)"
+                    if _tgt_h > 0 and _tgt_l > 0:
+                        _tgt_str += f" · {_tgt_l:.0f}–{_tgt_h:.0f}"
+
+                _rec_str = _rec.replace("-", " ").title() if _rec else "—"
+                if _acnt > 0:
+                    _rec_str += f" · {_acnt} uzman"
 
                 st.markdown(
                     f'<div class="kpi-meta" style="margin-top:0.6rem;line-height:1.95;">'
@@ -670,13 +696,17 @@ with tab_screener:
                     f'  Fiyat      : ${_price:.2f} ({_chg:+.1f}%)<br>'
                     f'  Mkt Cap    : {_mc_str}<br>'
                     f'  Beta       : {_beta:.2f}<br>'
-                    f'  P/E        : {_pe_str}<br>'
+                    f'  P/E (TTM)  : {_pe_str}<br>'
+                    f'  P/E (Fwd)  : {_fpe_str}<br>'
                     f'  EPS        : {_eps_str}<br>'
                     f'  D/E        : {_de_str}<br>'
+                    f'  ROE        : {_roe_str}<br>'
                     f'  Brüt Marj  : {_gm_str}<br>'
                     f'  Gelir Büy. : {_rg_str}<br>'
                     f'  FCF        : {_fcf_str}<br>'
                     f'  52H Pos.   : {_range_str}<br>'
+                    f'  Analist    : {_tgt_str}<br>'
+                    f'  Tavsiye    : {_rec_str}<br>'
                     f'  Temettü    : {_div_str}'
                     f'</div>',
                     unsafe_allow_html=True,
