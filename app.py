@@ -6,6 +6,7 @@ import time
 import logging
 
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import plotly.graph_objects as go
 from dotenv import load_dotenv
@@ -247,6 +248,41 @@ st.markdown(
 # ─────────────────────────────────────────────────────────────────────────────
 # HELPER COMPONENTS
 # ─────────────────────────────────────────────────────────────────────────────
+
+
+def tradingview_chart(ticker: str, height: int = 420) -> None:
+    """TradingView Advanced Chart widget'ını Streamlit'e göm."""
+    # Exchange prefix otomatik tespit için NASDAQ/NYSE yazmadan sadece sembol kullan
+    # TradingView kendi kendine tanır
+    html = f"""
+    <div class="tradingview-widget-container" style="border-radius:8px;overflow:hidden;">
+      <div id="tv_chart_{ticker}"></div>
+      <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+      <script type="text/javascript">
+      new TradingView.widget({{
+        "width": "100%",
+        "height": {height},
+        "symbol": "{ticker}",
+        "interval": "D",
+        "timezone": "Europe/Istanbul",
+        "theme": "dark",
+        "style": "1",
+        "locale": "tr",
+        "toolbar_bg": "#0a1929",
+        "enable_publishing": false,
+        "hide_side_toolbar": false,
+        "allow_symbol_change": false,
+        "save_image": false,
+        "container_id": "tv_chart_{ticker}",
+        "studies": ["RSI@tv-basicstudies", "MACD@tv-basicstudies"],
+        "show_popup_button": true,
+        "popup_width": "1000",
+        "popup_height": "650"
+      }});
+      </script>
+    </div>
+    """
+    components.html(html, height=height + 20, scrolling=False)
 
 def gauge_chart(score: int, size: int = 200) -> go.Figure:
     """Render a donut-style gauge for the confidence score."""
@@ -1113,6 +1149,13 @@ with tab_portfolio:
                             f'</div>',
                             unsafe_allow_html=True,
                         )
+                    # ── TradingView Grafik ───────────────────────────────
+                    st.markdown(
+                        '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+                        'letter-spacing:0.1em;margin:1rem 0 0.3rem;">📈 FİYAT GRAFİĞİ</div>',
+                        unsafe_allow_html=True,
+                    )
+                    tradingview_chart(ticker, height=380)
 
         # CSV Export
         if enriched_pos:
@@ -1503,6 +1546,14 @@ with tab_lookup:
                     f'</div>',
                     unsafe_allow_html=True,
                 )
+
+                # ── TradingView Grafik ───────────────────────────────────
+                st.markdown(
+                    '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+                    'letter-spacing:0.1em;margin:0.8rem 0 0.3rem;">📈 FİYAT GRAFİĞİ</div>',
+                    unsafe_allow_html=True,
+                )
+                tradingview_chart(lookup_ticker, height=440)
 
                 # ── Metrik Kartları ──────────────────────────────────────
                 m1, m2, m3, m4 = st.columns(4)
