@@ -10,6 +10,7 @@ import re
 from typing import Any
 
 import anthropic
+from analysis_memory import get_ticker_context_for_claude, save_analysis_batch
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +48,7 @@ JSON dışında hiçbir şey yazma; açıklama, markdown veya ```json fence kull
 }"""
 
 
-def _build_user_message(stock: dict, news_text: str) -> str:
+def _build_user_message(stock: dict, news_text: str, history_context: str = "") -> str:
     """Construct the user-turn message with all relevant stock context."""
 
     mkt_cap_b = (stock.get("mktCap", 0) or 0) / 1e9
@@ -76,6 +77,7 @@ ROIC         : {stock.get("roic", 0):.2%}
 FILTRELENMIŞ SON HABERLER (son 7 gün):
 {news_text}
 ---
+{history_context}
 Yukarıdaki verilere ve haberlere dayanarak JSON formatında analiz yap.
 """.strip()
 
@@ -97,7 +99,9 @@ def analyse_stock(stock: dict, news_text: str, model: str = "claude-opus-4-5") -
 
     client = anthropic.Anthropic(api_key=api_key)
 
-    user_message = _build_user_message(stock, news_text)
+    # Geçmiş analiz context'ini getir
+    history_context = get_ticker_context_for_claude(stock.get("ticker", ""))
+    user_message = _build_user_message(stock, news_text, history_context)
 
     try:
         message = client.messages.create(
@@ -215,4 +219,12 @@ def analyse_batch(
             results.append(result)
 
     results.sort(key=lambda r: r.get("nihai_guven_skoru", 0), reverse=True)
+
+    # Analiz geçmişine kaydet (async gibi — hata olsa da devam et)
+    if results:
+        try:
+            save_analysis_batch(results)
+        except Exception as exc:
+            logger.warning("Analiz geçmişi kaydedilemedi: %s", exc)
+
     return results

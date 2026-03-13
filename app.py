@@ -22,6 +22,7 @@ from utils import (
 from data_fetcher import batch_enrich, get_quote
 from news_fetcher import fetch_news_batch, format_news_for_prompt
 from claude_analyzer import analyse_batch
+from analysis_memory import get_ticker_history, get_all_history, get_history_summary
 from radar_engine import run_radar
 
 
@@ -406,6 +407,12 @@ if "enriched_stocks"   not in st.session_state:
     st.session_state["enriched_stocks"]   = []
 if "news_map"          not in st.session_state:
     st.session_state["news_map"]          = {}
+if "correlation_analysis" not in st.session_state:
+    st.session_state["correlation_analysis"] = ""
+if "scenario_analysis" not in st.session_state:
+    st.session_state["scenario_analysis"] = ""
+if "scenario_title" not in st.session_state:
+    st.session_state["scenario_title"] = ""
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1248,6 +1255,252 @@ with tab_portfolio:
                 mime="text/csv",
                 key="dl_portfolio",
             )
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PORTFÖY — KORELASYON & SENARYO & HAFIZA
+# ─────────────────────────────────────────────────────────────────────────────
+
+with tab_portfolio:
+    # ── Portföy Korelasyon + Senaryo Analizi ─────────────────────────────────
+    st.markdown('<hr style="border-color:#1e2833;margin:1.5rem 0;">', unsafe_allow_html=True)
+
+    adv_col1, adv_col2 = st.columns(2)
+
+    # ── Korelasyon Analizi ──────────────────────────────────────────────────
+    with adv_col1:
+        st.markdown(
+            '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+            'letter-spacing:0.1em;margin-bottom:0.5rem;">🔗 PORTFÖY KORİLASYON & SİSTEMATİK RİSK</div>',
+            unsafe_allow_html=True,
+        )
+        st.caption("Tüm portföyünü bir bütün olarak değerlendir — sektörel yoğunlaşma, sistematik riskler")
+
+        if st.button("🧠 Portföy Riski Analiz Et", key="btn_correlation", use_container_width=True):
+            positions = load_portfolio()
+            if not positions:
+                st.warning("Portföyünüzde hisse yok.")
+            else:
+                with st.spinner("Claude tüm portföyü analiz ediyor..."):
+                    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+                    if not api_key:
+                        st.error("ANTHROPIC_API_KEY eksik.")
+                    else:
+                        import anthropic as _anthropic
+                        _client = _anthropic.Anthropic(api_key=api_key)
+
+                        # Portföy özeti hazırla
+                        portfolio_lines = []
+                        sector_counts = {}
+                        for p in positions:
+                            sec = p.get("sector", "Bilinmiyor")
+                            sector_counts[sec] = sector_counts.get(sec, 0) + 1
+                            portfolio_lines.append(
+                                f"  {p['ticker']:6s} | {p.get('shares',0):.0f} adet | "
+                                f"Ort. Maliyet: ${p.get('avg_cost',0):.2f} | Sektör: {sec}"
+                            )
+
+                        sector_summary = " | ".join(f"{s}: {c} hisse" for s, c in
+                                                    sorted(sector_counts.items(), key=lambda x: -x[1]))
+                        portfolio_text = "\n".join(portfolio_lines)
+
+                        prompt = f"""Aşağıdaki yatırım portföyünü bütünsel olarak analiz et:
+
+PORTFÖY ({len(positions)} pozisyon):
+{portfolio_text}
+
+SEKTÖR DAĞILIMI: {sector_summary}
+
+Lütfen şunları değerlendir:
+1. **En Büyük Sistematik Risk**: Tüm portföyü aynı anda etkileyebilecek makro faktörler neler?
+2. **Sektörel Yoğunlaşma Riski**: Hangi sektörde aşırı yoğunlaşma var, bu nasıl bir risk yaratıyor?
+3. **Korelasyon Riski**: Hangi hisseler birlikte hareket eder (düşüşte birlikte düşer)?
+4. **Çeşitlendirme Önerisi**: Dengeyi iyileştirmek için ne eklenmeli/çıkarılmalı?
+5. **Genel Değerlendirme**: Bu portföyün güçlü ve zayıf yanları kısaca.
+
+Türkçe, net ve pratik bir dille yaz. Her bölüm için somut örnekler ver."""
+
+                        try:
+                            resp = _client.messages.create(
+                                model="claude-opus-4-5",
+                                max_tokens=1500,
+                                messages=[{"role": "user", "content": prompt}]
+                            )
+                            analysis_text = resp.content[0].text if resp.content else ""
+                            st.session_state["correlation_analysis"] = analysis_text
+                        except Exception as exc:
+                            st.error(f"Claude bağlantı hatası: {exc}")
+
+        if st.session_state.get("correlation_analysis"):
+            with st.container():
+                st.markdown(
+                    '<div style="background:#0d1117;border:1px solid #1e2833;border-radius:8px;padding:1rem;margin-top:0.5rem;">',
+                    unsafe_allow_html=True,
+                )
+                st.markdown(st.session_state["correlation_analysis"])
+                st.markdown('</div>', unsafe_allow_html=True)
+
+    # ── Senaryo Analizi ────────────────────────────────────────────────────
+    with adv_col2:
+        st.markdown(
+            '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+            'letter-spacing:0.1em;margin-bottom:0.5rem;">🎯 MAKRO SENARYO ANALİZİ</div>',
+            unsafe_allow_html=True,
+        )
+        st.caption("Bir makro senaryo gir — Claude her hissenin nasıl etkileneceğini söylesin")
+
+        scenario_examples = [
+            "Faiz oranları %1 artar",
+            "ABD-Çin ticaret savaşı tırmanır",
+            "Resesyon başlar, büyüme -%2",
+            "Petrol fiyatı $120'ye çıkar",
+            "Fed faiz indirir, para politikası gevşer",
+            "Savunma bütçesi %15 kısılır",
+        ]
+        scenario_input = st.text_input(
+            "Senaryo gir:",
+            placeholder="örn: Faiz oranları %1 artar",
+            key="scenario_input",
+        )
+        st.caption("Hızlı seçim: " + "  |  ".join(f"`{s}`" for s in scenario_examples[:3]))
+
+        if st.button("⚡ Senaryo Analizi Başlat", key="btn_scenario", use_container_width=True):
+            positions = load_portfolio()
+            if not scenario_input.strip():
+                st.warning("Lütfen bir senaryo girin.")
+            elif not positions:
+                st.warning("Portföyünüzde hisse yok.")
+            else:
+                with st.spinner(f"Claude senaryoyu analiz ediyor: {scenario_input}"):
+                    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+                    if not api_key:
+                        st.error("ANTHROPIC_API_KEY eksik.")
+                    else:
+                        import anthropic as _anthropic
+                        _client = _anthropic.Anthropic(api_key=api_key)
+
+                        tickers_list = ", ".join(p["ticker"] for p in positions)
+                        sectors_list = ", ".join(
+                            f"{p['ticker']} ({p.get('sector','?')})" for p in positions
+                        )
+
+                        prompt = f"""MAKRO SENARYO: "{scenario_input}"
+
+Bu senaryo gerçekleşirse aşağıdaki portföy hisseleri nasıl etkilenir?
+
+POZİSYONLAR: {sectors_list}
+
+Her hisse için şunu ver:
+- **Etki**: Çok Olumsuz / Olumsuz / Nötr / Olumlu / Çok Olumlu
+- **Neden**: 1-2 cümle açıklama (spesifik, o hisseye özgü)
+
+Format:
+**[TICKER]** — [Etki Seviyesi]
+[Açıklama]
+
+Sonunda portföyün genel etkisini özetle: hangi hisseler korunma sağlar, hangileri en çok zarar görür?
+Türkçe yaz, kısa ve net ol."""
+
+                        try:
+                            resp = _client.messages.create(
+                                model="claude-opus-4-5",
+                                max_tokens=1500,
+                                messages=[{"role": "user", "content": prompt}]
+                            )
+                            scenario_text = resp.content[0].text if resp.content else ""
+                            st.session_state["scenario_analysis"] = scenario_text
+                            st.session_state["scenario_title"] = scenario_input
+                        except Exception as exc:
+                            st.error(f"Claude bağlantı hatası: {exc}")
+
+        if st.session_state.get("scenario_analysis"):
+            st.markdown(
+                f'<div style="font-size:0.65rem;color:#ffb300;margin:0.5rem 0 0.3rem;">'
+                f'📌 Senaryo: {st.session_state.get("scenario_title","")}</div>',
+                unsafe_allow_html=True,
+            )
+            with st.container():
+                st.markdown(
+                    '<div style="background:#0d1117;border:1px solid #1e2833;border-radius:8px;padding:1rem;">',
+                    unsafe_allow_html=True,
+                )
+                st.markdown(st.session_state["scenario_analysis"])
+                st.markdown('</div>', unsafe_allow_html=True)
+
+    # ── Analiz Hafızası ────────────────────────────────────────────────────
+    st.markdown('<hr style="border-color:#1e2833;margin:1.5rem 0;">', unsafe_allow_html=True)
+    st.markdown(
+        '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+        'letter-spacing:0.1em;margin-bottom:0.8rem;">🧠 ANALİZ HAFIZASI — GEÇMİŞ KAYITLAR</div>',
+        unsafe_allow_html=True,
+    )
+
+    summary = get_history_summary()
+    hm1, hm2, hm3 = st.columns(3)
+    hm1.metric("Toplam Analiz", summary["total"])
+    hm2.metric("Benzersiz Hisse", summary["unique_tickers"])
+    hm3.metric("Son Analiz", summary["last_date"])
+
+    # Belirli hisse geçmişi
+    lookup_col, _ = st.columns([1, 2])
+    with lookup_col:
+        hist_ticker = st.text_input("Hisse geçmişi ara:", placeholder="örn: NVDA", key="hist_ticker_input").upper().strip()
+
+    if hist_ticker:
+        history = get_ticker_history(hist_ticker, limit=10)
+        if not history:
+            st.info(f"{hist_ticker} için geçmiş analiz bulunamadı.")
+        else:
+            st.markdown(
+                f'<div style="font-size:0.65rem;color:#5a6a7a;margin-bottom:0.5rem;">'
+                f'{hist_ticker} — {len(history)} geçmiş analiz bulundu</div>',
+                unsafe_allow_html=True,
+            )
+            import plotly.graph_objects as _go
+            dates  = [h["date"] for h in reversed(history)]
+            scores = [h["score"] for h in reversed(history)]
+            fig_hist = _go.Figure()
+            fig_hist.add_trace(_go.Scatter(
+                x=dates, y=scores, mode="lines+markers+text",
+                text=scores, textposition="top center",
+                line=dict(color="#00e676", width=2),
+                marker=dict(size=8, color="#00e676"),
+            ))
+            fig_hist.update_layout(
+                height=220, paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                xaxis=dict(showgrid=False, color="#5a6a7a"),
+                yaxis=dict(showgrid=True, gridcolor="#1e2833", range=[0,100], color="#5a6a7a"),
+                margin=dict(l=10, r=10, t=10, b=10),
+                showlegend=False,
+            )
+            st.plotly_chart(fig_hist, use_container_width=True, key="history_chart")
+
+            # Tablo
+            import pandas as _pd
+            df_hist = _pd.DataFrame([{
+                "Tarih":   h["date"],
+                "Skor":    h["score"],
+                "Tavsiye": h["tavsiye"],
+                "Fiyat":   f"${h['price']:.2f}" if h.get("price") else "—",
+                "Özet":    (h.get("ozet","") or "")[:80] + "...",
+            } for h in history])
+            st.dataframe(df_hist, use_container_width=True, hide_index=True)
+
+    elif summary["total"] > 0:
+        # Son 20 analizi göster
+        recent = get_all_history(limit=20)
+        if recent:
+            import pandas as _pd
+            df_recent = _pd.DataFrame([{
+                "Tarih":   r["date"],
+                "Hisse":   r["ticker"],
+                "Skor":    r["score"],
+                "Tavsiye": r["tavsiye"],
+                "Kategori": r.get("kategori",""),
+                "Fiyat":   f"${r['price']:.2f}" if r.get("price") else "—",
+            } for r in recent])
+            st.dataframe(df_recent, use_container_width=True, hide_index=True)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 3 — FIRSAT RADARI
