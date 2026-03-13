@@ -201,3 +201,46 @@ def get_history_summary() -> dict:
         "unique_tickers": len(tickers),
         "last_date":      last_date,
     }
+
+
+def get_top_tickers(limit: int = 10) -> list[dict]:
+    """
+    En çok analiz edilen hisseleri döndür.
+    Her hisse için: ticker, count, latest_score, trend, latest_tavsiye
+    """
+    records, _ = _github_read_history()
+    if not records:
+        return []
+
+    from collections import defaultdict
+    ticker_data = defaultdict(list)
+    for r in records:
+        tk = r.get("ticker", "")
+        if tk:
+            ticker_data[tk].append(r)
+
+    result = []
+    for tk, recs in ticker_data.items():
+        recs_sorted = sorted(recs, key=lambda x: x.get("timestamp", x.get("date", "")))
+        latest = recs_sorted[-1]
+        latest_score = latest.get("score", 0)
+
+        # Trend: son skor - ilk skor (en az 2 analiz varsa)
+        if len(recs_sorted) >= 2:
+            first_score = recs_sorted[0].get("score", 0)
+            trend = latest_score - first_score
+        else:
+            trend = 0
+
+        result.append({
+            "ticker":          tk,
+            "count":           len(recs_sorted),
+            "latest_score":    latest_score,
+            "latest_tavsiye":  latest.get("tavsiye", "—"),
+            "latest_date":     latest.get("date", ""),
+            "trend":           trend,
+        })
+
+    # Önce en çok analiz edilenler, eşitlik durumunda en yüksek skor
+    result.sort(key=lambda x: (-x["count"], -x["latest_score"]))
+    return result[:limit]

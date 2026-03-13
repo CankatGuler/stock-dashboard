@@ -22,7 +22,7 @@ from utils import (
 from data_fetcher import batch_enrich, get_quote
 from news_fetcher import fetch_news_batch, format_news_for_prompt
 from claude_analyzer import analyse_batch
-from analysis_memory import get_ticker_history, get_all_history, get_history_summary
+from analysis_memory import get_ticker_history, get_all_history, get_history_summary, get_top_tickers
 from radar_engine import run_radar
 
 
@@ -924,24 +924,24 @@ with tab_portfolio:
 
     # ── Add Single Position Form ────────────────────────────────────────────
     with st.expander("➕  Tek Pozisyon Ekle / Yeni Alış", expanded=False):
-        col_f1, col_f2, col_f3, col_f4, col_f5 = st.columns([1.2, 1, 1, 1.5, 1])
+        col_f1, col_f2, col_f3, col_f4 = st.columns([1.2, 1, 1.2, 1.5])
         with col_f1:
-            p_ticker   = st.text_input("Ticker", placeholder="AAPL", key="p_ticker").upper().strip()
+            p_ticker = st.text_input("Ticker", placeholder="AAPL", key="p_ticker").upper().strip()
         with col_f2:
-            p_shares   = st.number_input("Hisse Adedi", min_value=0.0, step=1.0, key="p_shares")
+            p_shares = st.number_input("Hisse Adedi", min_value=0.0, step=1.0, key="p_shares")
         with col_f3:
-            p_cost     = st.number_input("Ortalama Maliyet ($)", min_value=0.0, step=0.01, key="p_cost")
+            p_cost   = st.number_input("Ortalama Maliyet ($)", min_value=0.0, step=0.01, key="p_cost")
         with col_f4:
-            p_sector   = st.selectbox("Sektör", options=["Diğer"] + list(SECTOR_TICKERS.keys()), key="p_sector")
-        with col_f5:
-            p_notes    = st.text_input("Not", placeholder="İsteğe bağlı", key="p_notes")
+            p_notes  = st.text_input("Not", placeholder="İsteğe bağlı", key="p_notes")
+
+        st.caption("💡 Sektör bilgisi otomatik olarak piyasadan çekilir.")
 
         col_btn1, col_btn2 = st.columns([1, 3])
         with col_btn1:
             if st.button("💾  Kaydet", key="btn_add_pos"):
                 if p_ticker and p_shares > 0 and p_cost > 0:
-                    add_position(p_ticker, p_shares, p_cost, p_sector, p_notes)
-                    st.success(f"✅ {p_ticker} portföye eklendi!")
+                    add_position(p_ticker, p_shares, p_cost, "Diğer", p_notes)
+                    st.success(f"✅ {p_ticker} portföye eklendi! Sektör otomatik yüklenecek.")
                     st.rerun()
                 else:
                     st.error("Ticker, hisse adedi ve maliyet zorunludur.")
@@ -1467,12 +1467,27 @@ Genel laflar etme — "azaltabilirsin" değil "X'i sat, yerine Y al" de."""
             "Fed faiz indirir, para politikası gevşer",
             "Savunma bütçesi %15 kısılır",
         ]
+
+        # Hızlı seçim butonları — tıklayınca input'a yazar
+        if "scenario_preset" not in st.session_state:
+            st.session_state["scenario_preset"] = ""
+
+        st.markdown('<div style="font-size:0.65rem;color:#5a6a7a;margin-bottom:0.3rem;">Hızlı seçim:</div>', unsafe_allow_html=True)
+        preset_cols = st.columns(3)
+        for i, ex in enumerate(scenario_examples):
+            col = preset_cols[i % 3]
+            short = ex[:28] + "…" if len(ex) > 28 else ex
+            if col.button(short, key=f"preset_{i}", use_container_width=True):
+                st.session_state["scenario_preset"] = ex
+
+        # Input — preset seçiliyse onu göster
+        default_val = st.session_state.get("scenario_preset", "")
         scenario_input = st.text_input(
-            "Senaryo gir:",
+            "Veya kendin yaz:",
+            value=default_val,
             placeholder="örn: Faiz oranları %1 artar",
             key="scenario_input",
         )
-        st.caption("Hızlı seçim: " + "  |  ".join(f"`{s}`" for s in scenario_examples[:3]))
 
         if st.button("⚡ Senaryo Analizi Başlat", key="btn_scenario", use_container_width=True):
             positions = load_portfolio()
@@ -1545,72 +1560,146 @@ Türkçe yaz, kısa ve net ol."""
         unsafe_allow_html=True,
     )
 
+    import plotly.graph_objects as _go
+    import pandas as _pd
+
     summary = get_history_summary()
+
+    # ── KPI bar ───────────────────────────────────────────────────────────
     hm1, hm2, hm3 = st.columns(3)
     hm1.metric("Toplam Analiz", summary["total"])
     hm2.metric("Benzersiz Hisse", summary["unique_tickers"])
     hm3.metric("Son Analiz", summary["last_date"])
 
-    # Belirli hisse geçmişi
-    lookup_col, _ = st.columns([1, 2])
-    with lookup_col:
-        hist_ticker = st.text_input("Hisse geçmişi ara:", placeholder="örn: NVDA", key="hist_ticker_input").upper().strip()
+    if summary["total"] == 0:
+        st.info("Henüz analiz geçmişi yok. İlk analizden sonra burada görünecek.")
+    else:
+        # ── En çok analiz edilen 10 hisse — mini kart paneli ─────────────
+        st.markdown(
+            '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+            'letter-spacing:0.1em;margin:1rem 0 0.5rem;">En çok takip edilen hisseler</div>',
+            unsafe_allow_html=True,
+        )
+        top_tickers = get_top_tickers(limit=10)
+        if top_tickers:
+            card_cols = st.columns(min(len(top_tickers), 5))
+            for i, t in enumerate(top_tickers[:5]):
+                col = card_cols[i]
+                score     = t["latest_score"]
+                trend     = t["trend"]
+                count     = t["count"]
+                ticker    = t["ticker"]
+                tavsiye   = t["latest_tavsiye"]
 
-    if hist_ticker:
-        history = get_ticker_history(hist_ticker, limit=10)
-        if not history:
-            st.info(f"{hist_ticker} için geçmiş analiz bulunamadı.")
+                if trend > 0:
+                    trend_str  = f"↑ +{trend}"
+                    trend_color = "#00c48c"
+                elif trend < 0:
+                    trend_str  = f"↓ {trend}"
+                    trend_color = "#e74c3c"
+                else:
+                    trend_str  = "→"
+                    trend_color = "#5a6a7a"
+
+                score_color = "#00c48c" if score >= 70 else ("#ffb300" if score >= 50 else "#e74c3c")
+
+                col.markdown(
+                    f'<div style="background:#0d1117;border:1px solid #1e2833;border-radius:8px;'
+                    f'padding:0.7rem;text-align:center;">'
+                    f'<div style="font-size:0.8rem;font-weight:600;color:#e0e6ed;">{ticker}</div>'
+                    f'<div style="font-size:1.3rem;font-weight:700;color:{score_color};margin:2px 0;">{score}</div>'
+                    f'<div style="font-size:0.65rem;color:{trend_color};">{trend_str}</div>'
+                    f'<div style="font-size:0.6rem;color:#5a6a7a;">{count}x analiz</div>'
+                    f'<div style="font-size:0.6rem;color:#5a6a7a;">{tavsiye}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+
+            # İkinci satır (6-10)
+            if len(top_tickers) > 5:
+                card_cols2 = st.columns(min(len(top_tickers) - 5, 5))
+                for i, t in enumerate(top_tickers[5:10]):
+                    col = card_cols2[i]
+                    score  = t["latest_score"]
+                    trend  = t["trend"]
+                    count  = t["count"]
+                    ticker = t["ticker"]
+                    tavsiye = t["latest_tavsiye"]
+                    trend_str   = f"↑ +{trend}" if trend > 0 else (f"↓ {trend}" if trend < 0 else "→")
+                    trend_color = "#00c48c" if trend > 0 else ("#e74c3c" if trend < 0 else "#5a6a7a")
+                    score_color = "#00c48c" if score >= 70 else ("#ffb300" if score >= 50 else "#e74c3c")
+                    col.markdown(
+                        f'<div style="background:#0d1117;border:1px solid #1e2833;border-radius:8px;'
+                        f'padding:0.7rem;text-align:center;">'
+                        f'<div style="font-size:0.8rem;font-weight:600;color:#e0e6ed;">{ticker}</div>'
+                        f'<div style="font-size:1.3rem;font-weight:700;color:{score_color};margin:2px 0;">{score}</div>'
+                        f'<div style="font-size:0.65rem;color:{trend_color};">{trend_str}</div>'
+                        f'<div style="font-size:0.6rem;color:#5a6a7a;">{count}x analiz</div>'
+                        f'<div style="font-size:0.6rem;color:#5a6a7a;">{tavsiye}</div>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+
+        # ── Hisse bazlı geçmiş arama ──────────────────────────────────────
+        st.markdown('<hr style="border-color:#1e2833;margin:1rem 0 0.8rem;">', unsafe_allow_html=True)
+        lookup_col, _ = st.columns([1, 2])
+        with lookup_col:
+            hist_ticker = st.text_input(
+                "Hisse geçmişi ara:", placeholder="örn: NVDA",
+                key="hist_ticker_input"
+            ).upper().strip()
+
+        if hist_ticker:
+            history = get_ticker_history(hist_ticker, limit=10)
+            if not history:
+                st.info(f"{hist_ticker} için geçmiş analiz bulunamadı.")
+            else:
+                st.markdown(
+                    f'<div style="font-size:0.65rem;color:#5a6a7a;margin-bottom:0.5rem;">'
+                    f'{hist_ticker} — {len(history)} analiz kaydı</div>',
+                    unsafe_allow_html=True,
+                )
+                dates  = [h["date"] for h in reversed(history)]
+                scores = [h["score"] for h in reversed(history)]
+                fig_hist = _go.Figure()
+                fig_hist.add_trace(_go.Scatter(
+                    x=dates, y=scores, mode="lines+markers+text",
+                    text=scores, textposition="top center",
+                    line=dict(color="#00e676", width=2),
+                    marker=dict(size=8, color="#00e676"),
+                ))
+                fig_hist.update_layout(
+                    height=220, paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    xaxis=dict(showgrid=False, color="#5a6a7a"),
+                    yaxis=dict(showgrid=True, gridcolor="#1e2833", range=[0,100], color="#5a6a7a"),
+                    margin=dict(l=10, r=10, t=10, b=10),
+                    showlegend=False,
+                )
+                st.plotly_chart(fig_hist, use_container_width=True, key="history_chart")
+
+                df_hist = _pd.DataFrame([{
+                    "Tarih":   h["date"],
+                    "Skor":    h["score"],
+                    "Tavsiye": h["tavsiye"],
+                    "Fiyat":   f"${h['price']:.2f}" if h.get("price") else "—",
+                    "Özet":    (h.get("ozet","") or "")[:80] + "...",
+                } for h in history])
+                st.dataframe(df_hist, use_container_width=True, hide_index=True)
+
         else:
-            st.markdown(
-                f'<div style="font-size:0.65rem;color:#5a6a7a;margin-bottom:0.5rem;">'
-                f'{hist_ticker} — {len(history)} geçmiş analiz bulundu</div>',
-                unsafe_allow_html=True,
-            )
-            import plotly.graph_objects as _go
-            dates  = [h["date"] for h in reversed(history)]
-            scores = [h["score"] for h in reversed(history)]
-            fig_hist = _go.Figure()
-            fig_hist.add_trace(_go.Scatter(
-                x=dates, y=scores, mode="lines+markers+text",
-                text=scores, textposition="top center",
-                line=dict(color="#00e676", width=2),
-                marker=dict(size=8, color="#00e676"),
-            ))
-            fig_hist.update_layout(
-                height=220, paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                xaxis=dict(showgrid=False, color="#5a6a7a"),
-                yaxis=dict(showgrid=True, gridcolor="#1e2833", range=[0,100], color="#5a6a7a"),
-                margin=dict(l=10, r=10, t=10, b=10),
-                showlegend=False,
-            )
-            st.plotly_chart(fig_hist, use_container_width=True, key="history_chart")
-
-            # Tablo
-            import pandas as _pd
-            df_hist = _pd.DataFrame([{
-                "Tarih":   h["date"],
-                "Skor":    h["score"],
-                "Tavsiye": h["tavsiye"],
-                "Fiyat":   f"${h['price']:.2f}" if h.get("price") else "—",
-                "Özet":    (h.get("ozet","") or "")[:80] + "...",
-            } for h in history])
-            st.dataframe(df_hist, use_container_width=True, hide_index=True)
-
-    elif summary["total"] > 0:
-        # Son 20 analizi göster
-        recent = get_all_history(limit=20)
-        if recent:
-            import pandas as _pd
-            df_recent = _pd.DataFrame([{
-                "Tarih":   r["date"],
-                "Hisse":   r["ticker"],
-                "Skor":    r["score"],
-                "Tavsiye": r["tavsiye"],
-                "Kategori": r.get("kategori",""),
-                "Fiyat":   f"${r['price']:.2f}" if r.get("price") else "—",
-            } for r in recent])
-            st.dataframe(df_recent, use_container_width=True, hide_index=True)
+            # Son 20 analiz tablosu
+            recent = get_all_history(limit=20)
+            if recent:
+                df_recent = _pd.DataFrame([{
+                    "Tarih":    r["date"],
+                    "Hisse":    r["ticker"],
+                    "Skor":     r["score"],
+                    "Tavsiye":  r["tavsiye"],
+                    "Kategori": r.get("kategori",""),
+                    "Fiyat":    f"${r['price']:.2f}" if r.get("price") else "—",
+                } for r in recent])
+                st.dataframe(df_recent, use_container_width=True, hide_index=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
