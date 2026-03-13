@@ -396,7 +396,7 @@ if missing_keys:
 # ─────────────────────────────────────────────────────────────────────────────
 # TABS
 # ─────────────────────────────────────────────────────────────────────────────
-tab_screener, tab_portfolio, tab_radar, tab_lookup = st.tabs(["📡  Sektör Tarayıcı", "💼  Portföyüm", "🔭  Fırsat Radarı", "🔍  Hisse Sorgula"])
+tab_screener, tab_portfolio, tab_radar, tab_lookup, tab_memory = st.tabs(["📡  Sektör Tarayıcı", "💼  Portföyüm", "🔭  Fırsat Radarı", "🔍  Hisse Sorgula", "🧠  Hafıza"])
 
 # ─────────────────────────────────────────────────────────────────────────────
 # STATE INIT
@@ -1552,11 +1552,16 @@ Türkçe yaz, kısa ve net ol."""
                 st.markdown(st.session_state["scenario_analysis"])
                 st.markdown('</div>', unsafe_allow_html=True)
 
-    # ── Analiz Hafızası ────────────────────────────────────────────────────
-    st.markdown('<hr style="border-color:#1e2833;margin:1.5rem 0;">', unsafe_allow_html=True)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TAB 5 — HAFIZA
+# ─────────────────────────────────────────────────────────────────────────────
+
+with tab_memory:
     st.markdown(
-        '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
-        'letter-spacing:0.1em;margin-bottom:0.8rem;">🧠 ANALİZ HAFIZASI — GEÇMİŞ KAYITLAR</div>',
+        '<div style="font-size:0.7rem;color:#5a6a7a;text-transform:uppercase;'
+        'letter-spacing:0.1em;margin-bottom:1rem;">'
+        '► ANALİZ HAFIZASI — Geçmiş Kayıtlar & Skor Trendleri</div>',
         unsafe_allow_html=True,
     )
 
@@ -1574,7 +1579,7 @@ Türkçe yaz, kısa ve net ol."""
     if summary["total"] == 0:
         st.info("Henüz analiz geçmişi yok. İlk analizden sonra burada görünecek.")
     else:
-        # ── En çok analiz edilen 10 hisse — mini kart paneli ─────────────
+        # ── En çok analiz edilen 10 hisse ────────────────────────────────
         st.markdown(
             '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
             'letter-spacing:0.1em;margin:1rem 0 0.5rem;">En çok takip edilen hisseler</div>',
@@ -1584,25 +1589,15 @@ Türkçe yaz, kısa ve net ol."""
         if top_tickers:
             card_cols = st.columns(min(len(top_tickers), 5))
             for i, t in enumerate(top_tickers[:5]):
-                col = card_cols[i]
-                score     = t["latest_score"]
-                trend     = t["trend"]
-                count     = t["count"]
-                ticker    = t["ticker"]
-                tavsiye   = t["latest_tavsiye"]
-
-                if trend > 0:
-                    trend_str  = f"↑ +{trend}"
-                    trend_color = "#00c48c"
-                elif trend < 0:
-                    trend_str  = f"↓ {trend}"
-                    trend_color = "#e74c3c"
-                else:
-                    trend_str  = "→"
-                    trend_color = "#5a6a7a"
-
+                col        = card_cols[i]
+                score      = t["latest_score"]
+                trend      = t["trend"]
+                count      = t["count"]
+                ticker     = t["ticker"]
+                tavsiye    = t["latest_tavsiye"]
+                trend_str  = f"↑ +{trend}" if trend > 0 else (f"↓ {trend}" if trend < 0 else "→")
+                trend_color = "#00c48c" if trend > 0 else ("#e74c3c" if trend < 0 else "#5a6a7a")
                 score_color = "#00c48c" if score >= 70 else ("#ffb300" if score >= 50 else "#e74c3c")
-
                 col.markdown(
                     f'<div style="background:#0d1117;border:1px solid #1e2833;border-radius:8px;'
                     f'padding:0.7rem;text-align:center;">'
@@ -1615,17 +1610,16 @@ Türkçe yaz, kısa ve net ol."""
                     unsafe_allow_html=True,
                 )
 
-            # İkinci satır (6-10)
             if len(top_tickers) > 5:
                 card_cols2 = st.columns(min(len(top_tickers) - 5, 5))
                 for i, t in enumerate(top_tickers[5:10]):
-                    col = card_cols2[i]
-                    score  = t["latest_score"]
-                    trend  = t["trend"]
-                    count  = t["count"]
-                    ticker = t["ticker"]
-                    tavsiye = t["latest_tavsiye"]
-                    trend_str   = f"↑ +{trend}" if trend > 0 else (f"↓ {trend}" if trend < 0 else "→")
+                    col        = card_cols2[i]
+                    score      = t["latest_score"]
+                    trend      = t["trend"]
+                    count      = t["count"]
+                    ticker     = t["ticker"]
+                    tavsiye    = t["latest_tavsiye"]
+                    trend_str  = f"↑ +{trend}" if trend > 0 else (f"↓ {trend}" if trend < 0 else "→")
                     trend_color = "#00c48c" if trend > 0 else ("#e74c3c" if trend < 0 else "#5a6a7a")
                     score_color = "#00c48c" if score >= 70 else ("#ffb300" if score >= 50 else "#e74c3c")
                     col.markdown(
@@ -1688,7 +1682,6 @@ Türkçe yaz, kısa ve net ol."""
                 st.dataframe(df_hist, use_container_width=True, hide_index=True)
 
         else:
-            # Son 20 analiz tablosu
             recent = get_all_history(limit=20)
             if recent:
                 df_recent = _pd.DataFrame([{
