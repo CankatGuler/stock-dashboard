@@ -1,9 +1,13 @@
-# data_fetcher.py — Financial Modeling Prep (FMP) API integration
+# data_fetcher.py — Financial Modeling Prep (FMP) + yfinance integration
 #
-# All endpoints use the 2025/2026 "stable" base URL:
-#   https://financialmodelingprep.com/stable/
-#
-# Docs: https://site.financialmodelingprep.com/developer/docs
+# Strateji:
+#   1. FMP /stable/profile       → kimlik, mktCap, beta, fiyat
+#   2. FMP /stable/key-metrics   → P/E, D/E, ROIC (TTM)
+#   3. FMP /stable/ratios        → alternatif metrikler
+#   4. FMP /stable/price-target  → analist hedef fiyat
+#   5. FMP /stable/rating        → analist tavsiyesi / skoru
+#   6. FMP /stable/income-statement → gelir, büyüme hesabı
+#   7. yfinance fast_info        → sadece fiyat ve 52H high/low (backup)
 
 import os
 import time
@@ -13,60 +17,41 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-FMP_BASE   = "https://financialmodelingprep.com/stable"
-FMP_BASE_V3 = "https://financialmodelingprep.com/api/v3"   # fallback for some endpoints
+FMP_BASE    = "https://financialmodelingprep.com/stable"
+FMP_BASE_V3 = "https://financialmodelingprep.com/api/v3"
 
 _SESSION = requests.Session()
 _SESSION.headers.update({"Accept": "application/json", "User-Agent": "StockDashboard/1.0"})
 
 
 def _fmp_get(path: str, params: dict | None = None, base: str = FMP_BASE) -> dict | list | None:
-    """
-    Generic FMP GET helper with basic retry logic.
-
-    Returns parsed JSON or None on failure.
-    """
     api_key = os.getenv("FMP_API_KEY", "")
     if not api_key:
-        logger.error("FMP_API_KEY is not set.")
         return None
-
     url    = f"{base}/{path.lstrip('/')}"
     params = params or {}
     params["apikey"] = api_key
-
     for attempt in range(3):
         try:
-            resp = _SESSION.get(url, params=params, timeout=15)
+            resp = _SESSION.get(url, params=params, timeout=12)
             resp.raise_for_status()
             data = resp.json()
-            # FMP returns {"Error Message": "..."} on bad key / plan limit
             if isinstance(data, dict) and "Error Message" in data:
-                logger.error("FMP error: %s", data["Error Message"])
                 return None
             return data
         except requests.exceptions.HTTPError as exc:
-            logger.warning("FMP HTTP error (attempt %d): %s", attempt + 1, exc)
             if exc.response is not None and exc.response.status_code in (429, 503):
                 time.sleep(2 ** attempt)
             else:
                 break
-        except Exception as exc:
-            logger.warning("FMP request failed (attempt %d): %s", attempt + 1, exc)
+        except Exception:
             time.sleep(1)
     return None
 
 
-# ---------------------------------------------------------------------------
-# Public helpers
-# ---------------------------------------------------------------------------
+# ─── FMP endpoint wrappers ────────────────────────────────────────────────────
 
 def get_profile(ticker: str) -> dict | None:
-    """
-    Fetch company profile from:
-      GET /stable/profile?symbol=TICKER
-    Returns a dict or None.
-    """
     data = _fmp_get("profile", {"symbol": ticker})
     if isinstance(data, list) and data:
         return data[0]
@@ -75,216 +60,260 @@ def get_profile(ticker: str) -> dict | None:
     return None
 
 
-def get_income_statement(ticker: str, period: str = "annual", limit: int = 1) -> dict | None:
-    """
-    Fetch the most-recent income statement.
-      GET /stable/income-statement?symbol=TICKER&period=annual&limit=1
-    """
-    data = _fmp_get("income-statement", {"symbol": ticker, "period": period, "limit": limit})
+def get_key_metrics(ticker: str) -> dict | None:
+    """TTM key metrics: P/E, D/E, ROIC, EV/EBITDA"""
+    # TTM (trailing twelve months) — stable endpoint
+    data = _fmp_get("key-metrics", {"symbol": ticker, "period": "annual", "limit": 1})
     if isinstance(data, list) and data:
         return data[0]
+    # v3 TTM fallback
+    data = _fmp_get("key-metrics-ttm", {"symbol": ticker}, base=FMP_BASE_V3)
+    if isinstance(data, list) and data:
+        return data[0]
+    return None
+
+
+def get_ratios(ticker: str) -> dict | None:
+    """Financial ratios: P/E, D/E, gross margin, etc."""
+    data = _fmp_get("ratios", {"symbol": ticker, "period": "annual", "limit": 1})
+    if isinstance(data, list) and data:
+        return data[0]
+    # TTM fallback
+    data = _fmp_get("ratios-ttm", {"symbol": ticker}, base=FMP_BASE_V3)
+    if isinstance(data, list) and data:
+        return data[0]
+    return None
+
+
+def get_price_target(ticker: str) -> dict | None:
+    """Analist konsensüs hedef fiyat — FMP /stable/price-target"""
+    # Consensus summary
+    data = _fmp_get("price-target-consensus", {"symbol": ticker})
+    if isinstance(data, list) and data:
+        return data[0]
+    if isinstance(data, dict):
+        return data
+    # Summary fallback
+    data = _fmp_get("price-target-summary", {"symbol": ticker})
+    if isinstance(data, list) and data:
+        return data[0]
+    return None
+
+
+def get_rating(ticker: str) -> dict | None:
+    """Analist rating & recommendation"""
+    data = _fmp_get("rating", {"symbol": ticker})
+    if isinstance(data, list) and data:
+        return data[0]
+    if isinstance(data, dict):
+        return data
+    return None
+
+
+def get_income_statement(ticker: str, period: str = "annual", limit: int = 2) -> list | None:
+    """Son 2 yıl gelir tablosu — büyüme hesabı için"""
+    data = _fmp_get("income-statement", {"symbol": ticker, "period": period, "limit": limit})
+    if isinstance(data, list):
+        return data
     return None
 
 
 def get_cash_flow(ticker: str, period: str = "annual", limit: int = 1) -> dict | None:
-    """
-    Fetch the most-recent cash-flow statement.
-      GET /stable/cash-flow-statement?symbol=TICKER
-    """
-    data = _fmp_get(
-        "cash-flow-statement",
-        {"symbol": ticker, "period": period, "limit": limit},
-    )
-    if isinstance(data, list) and data:
-        return data[0]
-    return None
-
-
-def get_key_metrics(ticker: str, period: str = "annual", limit: int = 1) -> dict | None:
-    """
-    Fetch key metrics (P/E, EV/EBITDA, etc.)
-      GET /stable/key-metrics?symbol=TICKER
-    """
-    data = _fmp_get("key-metrics", {"symbol": ticker, "period": period, "limit": limit})
+    data = _fmp_get("cash-flow-statement", {"symbol": ticker, "period": period, "limit": limit})
     if isinstance(data, list) and data:
         return data[0]
     return None
 
 
 def get_quote(ticker: str) -> dict | None:
-    """
-    Fetch real-time quote.
-    Priority: Yahoo Finance (yfinance) → FMP stable → FMP profile
-    yfinance is free, fast, and covers all tickers including ETFs.
-    """
-    # ── Endpoint 1: Yahoo Finance — ücretsiz, hızlı, geniş kapsam ────────
+    """Real-time fiyat: yfinance fast_info → FMP quote"""
+    # 1. yfinance fast_info (ücretsiz, hızlı)
     try:
         import yfinance as yf
-        tk    = yf.Ticker(ticker)
-        info  = tk.fast_info
-        price = getattr(info, "last_price", None) or getattr(info, "regularMarketPrice", None)
+        fi    = yf.Ticker(ticker).fast_info
+        price = getattr(fi, "last_price", None) or getattr(fi, "regular_market_price", None)
         if price and float(price) > 0:
-            prev = getattr(info, "previous_close", price) or price
+            prev = getattr(fi, "previous_close", price) or price
             chg  = ((float(price) - float(prev)) / float(prev) * 100) if prev else 0
             return {
                 "price":             float(price),
                 "changesPercentage": round(chg, 2),
                 "symbol":            ticker,
+                "year_high":         getattr(fi, "year_high", None),
+                "year_low":          getattr(fi, "year_low", None),
+                "market_cap":        getattr(fi, "market_cap", None),
                 "source":            "yfinance",
             }
-    except Exception as exc:
-        logger.warning("yfinance failed for %s: %s", ticker, exc)
-
-    # ── Endpoint 2: FMP /stable/quote ─────────────────────────────────────
-    data = _fmp_get("quote", {"symbol": ticker})
-    if isinstance(data, list) and data:
-        q = data[0]
-        if q.get("price") and float(q.get("price", 0)) > 0:
-            return q
-    if isinstance(data, dict) and data.get("price") and float(data.get("price", 0)) > 0:
-        return data
-
-    # ── Endpoint 3: FMP /stable/profile ───────────────────────────────────
-    profile = get_profile(ticker)
-    if profile and float(profile.get("price", 0)) > 0:
-        return {
-            "price":             profile.get("price", 0),
-            "changesPercentage": profile.get("changes", 0),
-            "symbol":            ticker,
-        }
-
-    logger.warning("Could not fetch price for %s from any endpoint.", ticker)
-    return None
-
-
-def enrich_ticker(ticker: str) -> dict:
-    """
-    Tüm hisse verisini tek bir yfinance çağrısıyla + FMP profile ile topla.
-    yfinance: fiyat, metrikler, finansallar (ücretsiz, güvenilir)
-    FMP profile: şirket adı, açıklama, logo (ek bilgi)
-    """
-    # ── 1. yfinance — önce fast_info (hızlı), sonra info (tam) ─────────
-    yf_info = {}
-    try:
-        import yfinance as yf
-        tk = yf.Ticker(ticker)
-
-        # fast_info: fiyat, mktCap, beta — her zaman hızlı gelir
-        try:
-            fi = tk.fast_info
-            yf_info["currentPrice"]   = getattr(fi, "last_price", None) or getattr(fi, "regularMarketPrice", None)
-            yf_info["previousClose"]  = getattr(fi, "previous_close", None)
-            yf_info["marketCap"]      = getattr(fi, "market_cap", None)
-            yf_info["beta"]           = getattr(fi, "three_month_average_price", None)  # placeholder
-        except Exception:
-            pass
-
-        # info: tüm temel metrikler — biraz daha yavaş ama kapsamlı
-        try:
-            full_info = tk.info or {}
-            yf_info.update(full_info)  # full_info her şeyi ezer, daha doğru
-        except Exception as exc:
-            logger.warning("yfinance full info failed for %s: %s — fast_info ile devam", ticker, exc)
-
-    except Exception as exc:
-        logger.warning("yfinance tamamen başarısız %s: %s", ticker, exc)
-
-    # ── 2. FMP profile — sadece kimlik/açıklama için ─────────────────────
-    profile = {}
-    try:
-        profile = get_profile(ticker) or {}
     except Exception:
         pass
 
-    # ── Yardımcı: yfinance yoksa FMP, o da yoksa default ─────────────────
-    def yf_or_fmp(yf_key, fmp_dict, fmp_key, default=0):
-        yf_val  = yf_info.get(yf_key)
-        fmp_val = fmp_dict.get(fmp_key)
-        if yf_val is not None and yf_val != 0:
-            return yf_val
-        if fmp_val is not None and fmp_val != 0:
-            return fmp_val
-        return default
+    # 2. FMP quote fallback
+    data = _fmp_get("quote", {"symbol": ticker})
+    if isinstance(data, list) and data:
+        return data[0]
+    return None
 
-    # Fiyat
-    price = (yf_info.get("currentPrice")
-             or yf_info.get("regularMarketPrice")
-             or profile.get("price", 0) or 0)
 
-    # Değişim %
-    prev  = yf_info.get("previousClose") or price
-    change_pct = ((price - prev) / prev * 100) if prev and price else 0
+# ─── Ana enrich fonksiyonu ────────────────────────────────────────────────────
 
-    combined_fin = {}  # backward compat
+def enrich_ticker(ticker: str) -> dict:
+    """
+    Tüm hisse verisini topla.
+    FMP profile + key_metrics + ratios + price_target + rating + income öncelikli.
+    yfinance sadece fiyat ve 52H için yedek.
+    """
+    profile  = get_profile(ticker)       or {}
+    metrics  = get_key_metrics(ticker)   or {}
+    ratios   = get_ratios(ticker)        or {}
+    pt       = get_price_target(ticker)  or {}
+    rating   = get_rating(ticker)        or {}
+    incomes  = get_income_statement(ticker) or []
+    cashflow = get_cash_flow(ticker)     or {}
+    quote    = get_quote(ticker)         or {}
+
+    # ── Fiyat ─────────────────────────────────────────────────────────────
+    price    = (quote.get("price") or quote.get("price")
+                or profile.get("price", 0) or 0)
+    chg_pct  = quote.get("changesPercentage", 0) or 0
+
+    # ── 52 Hafta High/Low ─────────────────────────────────────────────────
+    # yfinance quote'dan, yoksa FMP profile'dan
+    w52h = (quote.get("year_high")
+            or profile.get("range", "").split("-")[-1].strip()
+            if profile.get("range") else 0) or 0
+    w52l = (quote.get("year_low")
+            or profile.get("range", "").split("-")[0].strip()
+            if profile.get("range") else 0) or 0
+    try:
+        w52h = float(w52h) if w52h else 0
+        w52l = float(w52l) if w52l else 0
+    except (ValueError, TypeError):
+        w52h, w52l = 0, 0
+
+    # ── Gelir büyümesi (son 2 yıl FMP income-statement) ──────────────────
+    rev_growth = 0.0
+    if len(incomes) >= 2:
+        r_new = incomes[0].get("revenue", 0) or 0
+        r_old = incomes[1].get("revenue", 0) or 0
+        if r_old and r_old != 0:
+            rev_growth = (r_new - r_old) / abs(r_old)
+
+    # ── P/E oranı ─────────────────────────────────────────────────────────
+    # Sıra: key_metrics peRatio → ratios priceEarningsRatio → profile
+    pe = (metrics.get("peRatio")
+          or metrics.get("priceEarningsRatio")
+          or ratios.get("priceEarningsRatio")
+          or ratios.get("peRatioTTM")
+          or 0) or 0
+
+    # ── D/E oranı ─────────────────────────────────────────────────────────
+    de = (metrics.get("debtToEquity")
+          or ratios.get("debtEquityRatio")
+          or 0) or 0
+
+    # ── ROIC ──────────────────────────────────────────────────────────────
+    roic = (metrics.get("roic")
+            or ratios.get("returnOnCapitalEmployed")
+            or 0) or 0
+
+    # ── Gross Margin ──────────────────────────────────────────────────────
+    gross_margin = (ratios.get("grossProfitMargin")
+                    or ratios.get("grossProfitMarginTTM")
+                    or metrics.get("grossProfitMargin")
+                    or 0) or 0
+
+    # ── Analist hedef fiyat ───────────────────────────────────────────────
+    analyst_target = (pt.get("targetConsensus")
+                      or pt.get("priceTarget")
+                      or pt.get("targetMean")
+                      or 0) or 0
+    analyst_high   = (pt.get("targetHigh") or 0) or 0
+    analyst_low    = (pt.get("targetLow")  or 0) or 0
+
+    # ── Analist tavsiye ───────────────────────────────────────────────────
+    rec_score  = (rating.get("ratingScore")  or 0)   # 1-5 arası
+    rec_detail = (rating.get("ratingDetailedRecommendation")
+                  or rating.get("ratingRecommendation")
+                  or "") or ""
+
+    # ── FCF ───────────────────────────────────────────────────────────────
+    fcf = (cashflow.get("freeCashFlow")
+           or cashflow.get("operatingCashFlow", 0)
+           or incomes[0].get("freeCashFlow", 0) if incomes else 0) or 0
+
+    revenue    = (incomes[0].get("revenue", 0)   if incomes else 0) or 0
+    net_income = (incomes[0].get("netIncome", 0) if incomes else 0) or 0
 
     return {
         # Kimlik
-        "ticker":       ticker,
-        "companyName":  (yf_info.get("longName") or profile.get("companyName") or ticker),
-        "sector":       (yf_info.get("sector")   or profile.get("sector", "N/A") or "N/A"),
-        "industry":     (yf_info.get("industry") or profile.get("industry", "N/A") or "N/A"),
-        "description":  (profile.get("description", "") or yf_info.get("longBusinessSummary", "") or "")[:400],
-        "exchange":     (yf_info.get("exchange")  or profile.get("exchangeShortName", "") or ""),
-        "website":      (yf_info.get("website")   or profile.get("website", "") or ""),
-        "image":        profile.get("image", ""),
+        "ticker":        ticker,
+        "companyName":   profile.get("companyName", ticker),
+        "sector":        profile.get("sector", "N/A"),
+        "industry":      profile.get("industry", "N/A"),
+        "description":   (profile.get("description", "") or "")[:400],
+        "exchange":      profile.get("exchangeShortName", ""),
+        "website":       profile.get("website", ""),
+        "image":         profile.get("image", ""),
 
         # Piyasa verisi
-        "price":        price,
-        "change_pct":   round(change_pct, 2),
-        "mktCap":       yf_info.get("marketCap")  or profile.get("mktCap", 0) or 0,
-        "beta":         yf_info.get("beta")        or profile.get("beta", 0) or 0,
-        "volAvg":       yf_info.get("averageVolume") or profile.get("volAvg", 0) or 0,
+        "price":         price,
+        "change_pct":    chg_pct,
+        "mktCap":        quote.get("market_cap") or profile.get("mktCap", 0) or 0,
+        "beta":          profile.get("beta", 0) or 0,
+        "volAvg":        profile.get("volAvg", 0) or 0,
 
-        # Finansallar
-        "revenue":       yf_info.get("totalRevenue", 0) or 0,
-        "netIncome":     yf_info.get("netIncomeToCommon", 0) or 0,
-        "operatingCashFlow": yf_info.get("operatingCashflow", 0) or 0,
-        "freeCashFlow":  yf_info.get("freeCashflow", 0) or 0,
-        "researchAndDevelopmentExpenses": yf_info.get("researchAndDevelopment", 0) or 0,
-        "revenueGrowth": yf_info.get("revenueGrowth", 0) or 0,
-        "earningsGrowth": yf_info.get("earningsGrowth", 0) or 0,
+        # 52 hafta
+        "52wHigh":       w52h,
+        "52wLow":        w52l,
 
         # Temel metrikler
-        "peRatio":      yf_info.get("trailingPE", 0)    or yf_info.get("forwardPE", 0) or 0,
-        "pbRatio":      yf_info.get("priceToBook", 0)   or 0,
-        "debtToEquity": yf_info.get("debtToEquity", 0)  or 0,
-        "roic":         yf_info.get("returnOnEquity", 0) or 0,  # ROE proxy
+        "peRatio":       pe,
+        "debtToEquity":  de,
+        "roic":          roic,
+        "grossMargin":   gross_margin,
+
+        # Finansallar
+        "revenue":       revenue,
+        "netIncome":     net_income,
+        "freeCashFlow":  fcf,
+        "revenueGrowth": rev_growth,
 
         # Analist
-        "analystTarget":    yf_info.get("targetMeanPrice", 0) or 0,
-        "recommendation":   yf_info.get("recommendationKey", "") or "",
-        "analystCount":     yf_info.get("numberOfAnalystOpinions", 0) or 0,
+        "analystTarget": analyst_target,
+        "analystHigh":   analyst_high,
+        "analystLow":    analyst_low,
+        "recommendation": rec_detail,
+        "ratingScore":   rec_score,
 
-        # Güvenilir gösterge alanları
-        "dividendYield":    yf_info.get("dividendYield", 0) or 0,
-        "52wHigh":          yf_info.get("fiftyTwoWeekHigh", 0) or 0,
-        "52wLow":           yf_info.get("fiftyTwoWeekLow", 0) or 0,
-        "forwardPE":        yf_info.get("forwardPE", 0) or 0,
-        "priceToSales":     yf_info.get("priceToSalesTrailing12Months", 0) or 0,
-        "shortPercent":     yf_info.get("shortPercentOfFloat", 0) or 0,
+        # Backward compat
+        "pbRatio":       metrics.get("pbRatio") or ratios.get("priceToBookRatio") or 0,
+        "operatingCashFlow": cashflow.get("operatingCashFlow", 0) or 0,
+        "researchAndDevelopmentExpenses": (incomes[0].get("researchAndDevelopmentExpenses", 0) if incomes else 0) or 0,
+        "earningsGrowth": 0,
+        "revenueGrowth":  rev_growth,
+        "dividendYield":  ratios.get("dividendYield") or ratios.get("dividendYieldTTM") or 0,
+        "forwardPE":      0,
+        "priceToSales":   ratios.get("priceToSalesRatio") or 0,
+        "analystCount":   0,
 
-        # Raw — backward compat
+        # Raw
         "_profile":    profile,
-        "_financials": combined_fin,
-        "_yf_info":    yf_info,
+        "_metrics":    metrics,
+        "_ratios":     ratios,
+        "_pt":         pt,
+        "_rating":     rating,
+        "_financials": cashflow,
     }
 
 
 def batch_enrich(tickers: list[str], delay: float = 0.25) -> list[dict]:
-    """
-    Enrich a list of tickers, rate-limiting to avoid FMP 429s.
-    Returns list of enriched dicts (skips any that return empty profile).
-    """
     results = []
     for ticker in tickers:
         try:
             data = enrich_ticker(ticker)
-            if data.get("companyName") != ticker:   # profile was found
+            if data.get("companyName") or data.get("price"):
                 results.append(data)
-            else:
-                # Still add with whatever we got
-                results.append(data)
-            time.sleep(delay)
         except Exception as exc:
-            logger.warning("Failed to enrich %s: %s", ticker, exc)
+            logger.warning("batch_enrich failed for %s: %s", ticker, exc)
+        time.sleep(delay)
     return results
