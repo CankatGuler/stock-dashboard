@@ -691,6 +691,7 @@ with tab_screener:
                     for art in articles[:6]:
                         title   = art.get("title", "")[:90]
                         source  = art.get("source", "")
+                        if isinstance(source, dict): source = source.get("name", "")
                         pub     = art.get("published", "")[:10]
                         url     = art.get("url", "#")
                         st.markdown(
@@ -709,6 +710,15 @@ with tab_screener:
                         '</div>',
                         unsafe_allow_html=True,
                     )
+
+
+            # ── TradingView Grafik (tam genişlik) ───────────────────────────────
+            st.markdown(
+                '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+                'letter-spacing:0.1em;margin:1rem 0 0.3rem;">📈 FİYAT GRAFİĞİ</div>',
+                unsafe_allow_html=True,
+            )
+            tradingview_chart(ticker, height=400)
 
 
     # ─── SUMMARY TABLE ───────────────────────────────────────────────────────────
@@ -1338,6 +1348,7 @@ with tab_radar:
                             art_summary  = art.get("summary", "")
                             art_url      = art.get("url", "#")
                             art_source   = art.get("source", "")
+                            if isinstance(art_source, dict): art_source = art_source.get("name", "")
                             art_pub      = art.get("published", "")
 
                             # Yayın tarihini kısalt
