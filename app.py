@@ -362,7 +362,7 @@ def _score_css_class(score: int) -> str:
 
 # Sidebar hidden — filters moved inline
 selected_sectors = ["Sanayi"]
-strategy         = "İkisi de"
+strategy         = "Hepsi"
 max_tickers      = 8
 news_days        = 7
 run_button       = False
@@ -427,8 +427,9 @@ with tab_screener:
             strategy = st.radio(
                 "🎯 STRATEJİ",
                 options=["Rocket 🚀", "Balanced ⚖️", "Shield 🛡️", "Hepsi"],
-                index=2,
+                index=3,
                 horizontal=True,
+                help="Rocket: mktCap<10B | Balanced: 10-50B | Shield: >50B | Hepsi: tümü",
             )
 
         sc1, sc2, sc3 = st.columns([1, 1, 1])
