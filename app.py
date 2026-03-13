@@ -630,18 +630,56 @@ with tab_screener:
                 st.markdown(
                     f'{category_chip(kategori)}'
                     f'<br>{recommendation_badge(tavsiye)}'
-                    f'<div class="kpi-meta" style="margin-top:0.7rem;">'
-                    f'  Sektör : {meta.get("sector","N/A")}<br>'
-                    f'  Fiyat  : ${meta.get("price",0):.2f} ({meta.get("change_pct",0):+.1f}%)<br>'
-                    f'  Mkt Cap: ${(meta.get("mktCap") or 0)/1e9:.2f}B<br>'
-                    f'  Beta   : {(meta.get("beta") or 0):.2f}<br>'
-                    f'  P/E    : {(meta.get("peRatio") or 0):.1f}<br>'
-                    f'  D/E    : {(meta.get("debtToEquity") or 0):.2f}<br>'
-                    f'  ROIC   : {(meta.get("roic") or 0):.1%}<br>'
-                    f'  FCF    : ${(meta.get("freeCashFlow") or 0)/1e6:.0f}M'
+                    f'<div class="kpi-meta" style="margin-top:0.7rem;">',
+                    unsafe_allow_html=True,
+                )
+
+                # Güvenilir metrikleri hesapla
+                _mc      = (meta.get("mktCap") or 0)
+                _beta    = (meta.get("beta") or 0)
+                _price   = (meta.get("price") or 0)
+                _chg     = (meta.get("change_pct") or 0)
+                _52h     = (meta.get("52wHigh") or 0)
+                _52l     = (meta.get("52wLow") or 0)
+                _tgt     = (meta.get("analystTarget") or 0)
+                _div     = (meta.get("dividendYield") or 0)
+                _revgr   = (meta.get("revenueGrowth") or 0)
+                _fpe     = (meta.get("forwardPE") or 0)
+                _rec     = (meta.get("recommendation") or "N/A")
+                _acnt    = (meta.get("analystCount") or 0)
+                _sector  = meta.get("sector", "N/A")
+
+                # Upside hesapla
+                _upside  = ((_tgt - _price) / _price * 100) if (_price > 0 and _tgt > 0) else 0
+                _upside_str = f"{_upside:+.1f}%" if _upside != 0 else "N/A"
+
+                # 52 hafta pozisyonu
+                _range_str = "N/A"
+                if _52h > 0 and _52l > 0 and _price > 0:
+                    _pct_range = (_price - _52l) / (_52h - _52l) * 100
+                    _range_str = f"{_pct_range:.0f}%"
+
+                _div_str = f"{_div:.1%}" if _div > 0 else "—"
+                _revgr_str = f"{_revgr:+.1%}" if _revgr != 0 else "N/A"
+                _fpe_str = f"{_fpe:.1f}" if _fpe > 0 else "N/A"
+                _mc_str  = f"${_mc/1e9:.1f}B" if _mc > 0 else "N/A"
+
+                st.markdown(
+                    f'<div class="kpi-meta" style="margin-top:0.3rem;">'
+                    f'  Sektör     : {_sector}<br>'
+                    f'  Fiyat      : ${_price:.2f} ({_chg:+.1f}%)<br>'
+                    f'  Mkt Cap    : {_mc_str}<br>'
+                    f'  Beta       : {_beta:.2f}<br>'
+                    f'  Forward P/E: {_fpe_str}<br>'
+                    f'  Gelir Büy. : {_revgr_str}<br>'
+                    f'  52H Pos.   : {_range_str}<br>'
+                    f'  Analist Hdf: ${_tgt:.2f} ({_upside_str})<br>'
+                    f'  Temettü    : {_div_str}<br>'
+                    f'  Analist    : {_acnt} uzman / {_rec}'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
+
 
             # ── Middle: Analiz özeti + risk haritası ────────────────────────────
             with col_mid:

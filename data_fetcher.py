@@ -255,6 +255,14 @@ def enrich_ticker(ticker: str) -> dict:
         "recommendation":   yf_info.get("recommendationKey", "") or "",
         "analystCount":     yf_info.get("numberOfAnalystOpinions", 0) or 0,
 
+        # Güvenilir gösterge alanları
+        "dividendYield":    yf_info.get("dividendYield", 0) or 0,
+        "52wHigh":          yf_info.get("fiftyTwoWeekHigh", 0) or 0,
+        "52wLow":           yf_info.get("fiftyTwoWeekLow", 0) or 0,
+        "forwardPE":        yf_info.get("forwardPE", 0) or 0,
+        "priceToSales":     yf_info.get("priceToSalesTrailing12Months", 0) or 0,
+        "shortPercent":     yf_info.get("shortPercentOfFloat", 0) or 0,
+
         # Raw — backward compat
         "_profile":    profile,
         "_financials": combined_fin,
