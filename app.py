@@ -1288,41 +1288,95 @@ with tab_portfolio:
                         import anthropic as _anthropic
                         _client = _anthropic.Anthropic(api_key=api_key)
 
-                        # Portföy özeti hazırla
+                        # Portföy özeti hazırla — zengin veri
                         portfolio_lines = []
-                        sector_counts = {}
+                        sector_counts   = {}
+                        total_value     = 0.0
+
                         for p in positions:
-                            sec = p.get("sector", "Bilinmiyor")
-                            sector_counts[sec] = sector_counts.get(sec, 0) + 1
+                            sec    = p.get("sector", "Bilinmiyor")
+                            shares = p.get("shares", 0)
+                            cost   = p.get("avg_cost", 0)
+                            val    = shares * cost
+                            total_value += val
+                            sector_counts[sec] = sector_counts.get(sec, 0) + val
                             portfolio_lines.append(
-                                f"  {p['ticker']:6s} | {p.get('shares',0):.0f} adet | "
-                                f"Ort. Maliyet: ${p.get('avg_cost',0):.2f} | Sektör: {sec}"
+                                f"  {p['ticker']:6s} | {shares:.0f} adet | "
+                                f"Ort. Maliyet: ${cost:.2f} | Toplam: ${val:,.0f} | Sektör: {sec}"
                             )
 
-                        sector_summary = " | ".join(f"{s}: {c} hisse" for s, c in
-                                                    sorted(sector_counts.items(), key=lambda x: -x[1]))
+                        # Sektör ağırlıkları (%)
+                        sector_weights = {
+                            s: (v / total_value * 100) if total_value > 0 else 0
+                            for s, v in sorted(sector_counts.items(), key=lambda x: -x[1])
+                        }
+                        sector_summary = " | ".join(
+                            f"{s}: %{w:.0f}" for s, w in sector_weights.items()
+                        )
                         portfolio_text = "\n".join(portfolio_lines)
 
-                        prompt = f"""Aşağıdaki yatırım portföyünü bütünsel olarak analiz et:
+                        prompt = f"""Sen deneyimli bir portföy yöneticisisin. Aşağıdaki portföyü kurumsal düzeyde analiz et ve SOMUT aksiyon önerileri sun.
 
-PORTFÖY ({len(positions)} pozisyon):
+═══════════════════════════════════════
+PORTFÖY ({len(positions)} pozisyon | Toplam: ${total_value:,.0f})
+═══════════════════════════════════════
 {portfolio_text}
 
-SEKTÖR DAĞILIMI: {sector_summary}
+SEKTÖR AĞIRLIKLARI: {sector_summary}
+═══════════════════════════════════════
 
-Lütfen şunları değerlendir:
-1. **En Büyük Sistematik Risk**: Tüm portföyü aynı anda etkileyebilecek makro faktörler neler?
-2. **Sektörel Yoğunlaşma Riski**: Hangi sektörde aşırı yoğunlaşma var, bu nasıl bir risk yaratıyor?
-3. **Korelasyon Riski**: Hangi hisseler birlikte hareket eder (düşüşte birlikte düşer)?
-4. **Çeşitlendirme Önerisi**: Dengeyi iyileştirmek için ne eklenmeli/çıkarılmalı?
-5. **Genel Değerlendirme**: Bu portföyün güçlü ve zayıf yanları kısaca.
+Raporun şu yapıda olsun:
 
-Türkçe, net ve pratik bir dille yaz. Her bölüm için somut örnekler ver."""
+## 🔴 RİSK DEĞERLENDİRMESİ
+
+Her risk kategorisini 1-10 arası puanla (10 = kritik risk):
+
+| Risk Kategorisi | Puan | Açıklama |
+|---|---|---|
+| Sektörel Yoğunlaşma | X/10 | ... |
+| Korelasyon Riski | X/10 | ... |
+| Sistematik/Makro Risk | X/10 | ... |
+| Likidite Riski | X/10 | ... |
+| Döviz/Jeopolitik Risk | X/10 | ... |
+
+**Genel Risk Skoru: X/10** — [Düşük / Orta / Yüksek / Kritik]
+
+---
+
+## 📊 SEKTÖREL ANALİZ
+
+Hangi sektörde aşırı yoğunlaşma var, neden tehlikeli? Hangi hisseler aynı anda düşer?
+
+---
+
+## ⚡ ACİL AKSİYON ÖNERİLERİ (Öncelik Sırasına Göre)
+
+Her öneri için şu formatta yaz:
+
+**[1. Öncelik]** 🔴 [Aksiyon]: [TICKER] → [ne yapılacak: sat/azalt/artır/tut]
+- **Neden**: [tek cümle, spesifik gerekçe]
+- **Hedef**: [%X azalt / tamamen sat / X adede çıkar]
+- **Yerine**: [varsa alternatif hisse önerisi ve neden o]
+
+**[2. Öncelik]** 🟡 ...
+**[3. Öncelik]** 🟢 ...
+
+(En az 3, en fazla 5 öneri)
+
+---
+
+## 🎯 PORTFÖY HEDEFİ
+
+Bu değişiklikler sonrasında portföy nasıl görünmeli? İdeal sektör dağılımı nedir?
+
+---
+
+Türkçe yaz. Her öneri somut, ölçülebilir ve uygulanabilir olsun. Genel laflar etme — "azaltabilirsin" değil "X'i sat, yerine Y al" de."""
 
                         try:
                             resp = _client.messages.create(
                                 model="claude-opus-4-5",
-                                max_tokens=1500,
+                                max_tokens=2500,
                                 messages=[{"role": "user", "content": prompt}]
                             )
                             analysis_text = resp.content[0].text if resp.content else ""
