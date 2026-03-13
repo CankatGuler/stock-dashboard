@@ -633,12 +633,12 @@ with tab_screener:
                     f'<div class="kpi-meta" style="margin-top:0.7rem;">'
                     f'  Sektör : {meta.get("sector","N/A")}<br>'
                     f'  Fiyat  : ${meta.get("price",0):.2f} ({meta.get("change_pct",0):+.1f}%)<br>'
-                    f'  Mkt Cap: ${meta.get("mktCap",0)/1e9:.2f}B<br>'
-                    f'  Beta   : {meta.get("beta",0):.2f}<br>'
-                    f'  P/E    : {meta.get("peRatio",0):.1f}<br>'
-                    f'  D/E    : {meta.get("debtToEquity",0):.2f}<br>'
-                    f'  ROIC   : {meta.get("roic",0):.1%}<br>'
-                    f'  FCF    : ${meta.get("freeCashFlow",0)/1e6:.0f}M'
+                    f'  Mkt Cap: ${(meta.get("mktCap") or 0)/1e9:.2f}B<br>'
+                    f'  Beta   : {(meta.get("beta") or 0):.2f}<br>'
+                    f'  P/E    : {(meta.get("peRatio") or 0):.1f}<br>'
+                    f'  D/E    : {(meta.get("debtToEquity") or 0):.2f}<br>'
+                    f'  ROIC   : {(meta.get("roic") or 0):.1%}<br>'
+                    f'  FCF    : ${(meta.get("freeCashFlow") or 0)/1e6:.0f}M'
                     f'</div>',
                     unsafe_allow_html=True,
                 )

@@ -157,86 +157,108 @@ def get_quote(ticker: str) -> dict | None:
     return None
 
 
-def _yfinance_enrich(ticker: str) -> dict:
-    """yfinance'den tüm finansal metrikleri çek — FMP fallback için."""
-    try:
-        import yfinance as yf
-        info = yf.Ticker(ticker).info
-        return {
-            "yf_mktCap":       info.get("marketCap", 0) or 0,
-            "yf_beta":         info.get("beta", 0) or 0,
-            "yf_peRatio":      info.get("trailingPE", 0) or 0,
-            "yf_pbRatio":      info.get("priceToBook", 0) or 0,
-            "yf_debtToEquity": info.get("debtToEquity", 0) or 0,
-            "yf_roic":         info.get("returnOnEquity", 0) or 0,  # ROE as proxy
-            "yf_freeCashFlow": info.get("freeCashflow", 0) or 0,
-            "yf_revenue":      info.get("totalRevenue", 0) or 0,
-            "yf_netIncome":    info.get("netIncomeToCommon", 0) or 0,
-            "yf_revenueGrowth": info.get("revenueGrowth", 0) or 0,
-            "yf_name":         info.get("longName", ""),
-            "yf_sector":       info.get("sector", ""),
-            "yf_industry":     info.get("industry", ""),
-        }
-    except Exception:
-        return {}
-
-
 def enrich_ticker(ticker: str) -> dict:
     """
-    Aggregate all relevant data for a single ticker.
-    Önce FMP profile (şirket adı, sektör, açıklama), ardından yfinance
-    finansal metrikler için kullanılır — FMP ücretsiz plan eksik veri döndürdüğünde
-    yfinance devreye girer.
+    Tüm hisse verisini tek bir yfinance çağrısıyla + FMP profile ile topla.
+    yfinance: fiyat, metrikler, finansallar (ücretsiz, güvenilir)
+    FMP profile: şirket adı, açıklama, logo (ek bilgi)
     """
-    profile  = get_profile(ticker)          or {}
-    income   = get_income_statement(ticker)  or {}
-    cashflow = get_cash_flow(ticker)         or {}
-    metrics  = get_key_metrics(ticker)       or {}
-    quote    = get_quote(ticker)             or {}
-    yf       = _yfinance_enrich(ticker)
+    # ── 1. yfinance — önce fast_info (hızlı), sonra info (tam) ─────────
+    yf_info = {}
+    try:
+        import yfinance as yf
+        tk = yf.Ticker(ticker)
 
-    combined_fin = {**income, **cashflow}
+        # fast_info: fiyat, mktCap, beta — her zaman hızlı gelir
+        try:
+            fi = tk.fast_info
+            yf_info["currentPrice"]   = getattr(fi, "last_price", None) or getattr(fi, "regularMarketPrice", None)
+            yf_info["previousClose"]  = getattr(fi, "previous_close", None)
+            yf_info["marketCap"]      = getattr(fi, "market_cap", None)
+            yf_info["beta"]           = getattr(fi, "three_month_average_price", None)  # placeholder
+        except Exception:
+            pass
 
-    # Yardımcı: FMP değeri varsa onu, yoksa yfinance değerini al
-    def fmp_or_yf(fmp_val, yf_val):
-        return fmp_val if (fmp_val and fmp_val != 0) else yf_val
+        # info: tüm temel metrikler — biraz daha yavaş ama kapsamlı
+        try:
+            full_info = tk.info or {}
+            yf_info.update(full_info)  # full_info her şeyi ezer, daha doğru
+        except Exception as exc:
+            logger.warning("yfinance full info failed for %s: %s — fast_info ile devam", ticker, exc)
+
+    except Exception as exc:
+        logger.warning("yfinance tamamen başarısız %s: %s", ticker, exc)
+
+    # ── 2. FMP profile — sadece kimlik/açıklama için ─────────────────────
+    profile = {}
+    try:
+        profile = get_profile(ticker) or {}
+    except Exception:
+        pass
+
+    # ── Yardımcı: yfinance yoksa FMP, o da yoksa default ─────────────────
+    def yf_or_fmp(yf_key, fmp_dict, fmp_key, default=0):
+        yf_val  = yf_info.get(yf_key)
+        fmp_val = fmp_dict.get(fmp_key)
+        if yf_val is not None and yf_val != 0:
+            return yf_val
+        if fmp_val is not None and fmp_val != 0:
+            return fmp_val
+        return default
+
+    # Fiyat
+    price = (yf_info.get("currentPrice")
+             or yf_info.get("regularMarketPrice")
+             or profile.get("price", 0) or 0)
+
+    # Değişim %
+    prev  = yf_info.get("previousClose") or price
+    change_pct = ((price - prev) / prev * 100) if prev and price else 0
+
+    combined_fin = {}  # backward compat
 
     return {
-        # Identity — FMP profil en güvenilir kaynak
-        "ticker":        ticker,
-        "companyName":   profile.get("companyName", "") or yf.get("yf_name", ticker),
-        "sector":        profile.get("sector", "") or yf.get("yf_sector", "N/A"),
-        "industry":      profile.get("industry", "") or yf.get("yf_industry", "N/A"),
-        "description":   (profile.get("description", "") or "")[:400],
-        "exchange":      profile.get("exchangeShortName", ""),
-        "website":       profile.get("website", ""),
-        "image":         profile.get("image", ""),
+        # Kimlik
+        "ticker":       ticker,
+        "companyName":  (yf_info.get("longName") or profile.get("companyName") or ticker),
+        "sector":       (yf_info.get("sector")   or profile.get("sector", "N/A") or "N/A"),
+        "industry":     (yf_info.get("industry") or profile.get("industry", "N/A") or "N/A"),
+        "description":  (profile.get("description", "") or yf_info.get("longBusinessSummary", "") or "")[:400],
+        "exchange":     (yf_info.get("exchange")  or profile.get("exchangeShortName", "") or ""),
+        "website":      (yf_info.get("website")   or profile.get("website", "") or ""),
+        "image":        profile.get("image", ""),
 
-        # Market data
-        "price":      quote.get("price") or profile.get("price", 0),
-        "change_pct": quote.get("changesPercentage") or 0,
-        "mktCap":     fmp_or_yf(profile.get("mktCap", 0), yf.get("yf_mktCap", 0)),
-        "beta":       fmp_or_yf(profile.get("beta", 0),   yf.get("yf_beta", 0)),
-        "volAvg":     profile.get("volAvg", 0) or 0,
+        # Piyasa verisi
+        "price":        price,
+        "change_pct":   round(change_pct, 2),
+        "mktCap":       yf_info.get("marketCap")  or profile.get("mktCap", 0) or 0,
+        "beta":         yf_info.get("beta")        or profile.get("beta", 0) or 0,
+        "volAvg":       yf_info.get("averageVolume") or profile.get("volAvg", 0) or 0,
 
-        # Fundamentals — FMP yoksa yfinance
-        "revenue":        fmp_or_yf(combined_fin.get("revenue", 0),         yf.get("yf_revenue", 0)),
-        "netIncome":      fmp_or_yf(combined_fin.get("netIncome", 0),        yf.get("yf_netIncome", 0)),
-        "operatingCashFlow": combined_fin.get("operatingCashFlow", 0) or 0,
-        "freeCashFlow":   fmp_or_yf(combined_fin.get("freeCashFlow", 0),     yf.get("yf_freeCashFlow", 0)),
-        "researchAndDevelopmentExpenses": combined_fin.get("researchAndDevelopmentExpenses", 0) or 0,
-        "revenueGrowth":  yf.get("yf_revenueGrowth", 0),
+        # Finansallar
+        "revenue":       yf_info.get("totalRevenue", 0) or 0,
+        "netIncome":     yf_info.get("netIncomeToCommon", 0) or 0,
+        "operatingCashFlow": yf_info.get("operatingCashflow", 0) or 0,
+        "freeCashFlow":  yf_info.get("freeCashflow", 0) or 0,
+        "researchAndDevelopmentExpenses": yf_info.get("researchAndDevelopment", 0) or 0,
+        "revenueGrowth": yf_info.get("revenueGrowth", 0) or 0,
+        "earningsGrowth": yf_info.get("earningsGrowth", 0) or 0,
 
-        # Key metrics — FMP yoksa yfinance
-        "peRatio":      fmp_or_yf(metrics.get("peRatio", 0),      yf.get("yf_peRatio", 0)),
-        "pbRatio":      fmp_or_yf(metrics.get("pbRatio", 0),      yf.get("yf_pbRatio", 0)),
-        "debtToEquity": fmp_or_yf(metrics.get("debtToEquity", 0), yf.get("yf_debtToEquity", 0)),
-        "roic":         fmp_or_yf(metrics.get("roic", 0),         yf.get("yf_roic", 0)),
+        # Temel metrikler
+        "peRatio":      yf_info.get("trailingPE", 0)    or yf_info.get("forwardPE", 0) or 0,
+        "pbRatio":      yf_info.get("priceToBook", 0)   or 0,
+        "debtToEquity": yf_info.get("debtToEquity", 0)  or 0,
+        "roic":         yf_info.get("returnOnEquity", 0) or 0,  # ROE proxy
 
-        # Raw objects
+        # Analist
+        "analystTarget":    yf_info.get("targetMeanPrice", 0) or 0,
+        "recommendation":   yf_info.get("recommendationKey", "") or "",
+        "analystCount":     yf_info.get("numberOfAnalystOpinions", 0) or 0,
+
+        # Raw — backward compat
         "_profile":    profile,
         "_financials": combined_fin,
-        "_yfinance":   yf,
+        "_yf_info":    yf_info,
     }
 
 
