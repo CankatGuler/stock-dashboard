@@ -2533,74 +2533,204 @@ with tab_lookup:
 # ─────────────────────────────────────────────────────────────────────────────
 
 with tab_watchlist:
-    from breakout_scanner import (
-        load_watchlist, add_to_watchlist, remove_from_watchlist,
-        check_breakout,
-    )
+    import yfinance as _yf_wlt
+    import pandas as _pd_wlt
+    from breakout_scanner import load_watchlist, add_to_watchlist, remove_from_watchlist
 
     st.markdown(
         '<div style="font-size:0.7rem;color:#5a6a7a;text-transform:uppercase;'
         'letter-spacing:0.1em;margin-bottom:1rem;">'
-        '► TAKİP LİSTESİ — 52H Kırılma Takibi</div>',
+        '► TAKİP LİSTESİ — Canlı Veri & Analiz</div>',
         unsafe_allow_html=True,
     )
 
-    # ── Watchlist yönetimi ────────────────────────────────────────────────
-    wl_col1, wl_col2 = st.columns([2, 1])
+    # ── Hisse ekle / çıkar ───────────────────────────────────────────────
+    wl_top1, wl_top2, wl_top3 = st.columns([2.5, 1, 1])
+    with wl_top1:
+        wl_new = st.text_input("Takibe al:", placeholder="örn: AAPL",
+                               key="wl_add_input", label_visibility="collapsed").upper().strip()
+    with wl_top2:
+        if st.button("➕ Ekle", key="wl_add_btn", use_container_width=True):
+            if wl_new:
+                add_to_watchlist(wl_new)
+                st.success(f"{wl_new} eklendi.")
+                st.rerun()
+    with wl_top3:
+        wl_refresh = st.button("🔄 Yenile", key="wl_refresh_btn", use_container_width=True)
 
-    with wl_col1:
-        watchlist = load_watchlist()
+    watchlist = load_watchlist()
+
+    if not watchlist:
+        st.info("Takip listesi boş. Yukarıdan hisse ekleyebilirsin.")
+    else:
         st.markdown(
-            f'<div style="font-size:0.65rem;color:#5a6a7a;margin-bottom:0.5rem;">'
-            f'{len(watchlist)} hisse takip ediliyor — sabah radarında otomatik 52H kontrolü yapılır</div>',
+            f'<div style="font-size:0.65rem;color:#5a6a7a;margin-bottom:0.8rem;">'
+            f'{len(watchlist)} hisse takip ediliyor</div>',
             unsafe_allow_html=True,
         )
-        add_c, btn_c = st.columns([3, 1])
-        with add_c:
-            wl_new = st.text_input("Takibe al:", placeholder="örn: AAPL",
-                                   key="wl_add_input", label_visibility="collapsed").upper().strip()
-        with btn_c:
-            if st.button("➕ Ekle", key="wl_add_btn", use_container_width=True):
-                if wl_new:
-                    add_to_watchlist(wl_new)
-                    st.success(f"{wl_new} eklendi.")
-                    st.rerun()
 
-        if watchlist:
-            for i in range(0, len(watchlist), 6):
-                chunk = watchlist[i:i+6]
-                cols  = st.columns(len(chunk))
-                for col, tk in zip(cols, chunk):
-                    if col.button(f"✕ {tk}", key=f"wl_rm_{tk}", use_container_width=True):
-                        remove_from_watchlist(tk)
+        # ── Canlı veri çek ───────────────────────────────────────────────
+        if "wl_table_data" not in st.session_state or wl_refresh:
+            with st.spinner("Canlı veriler yükleniyor..."):
+                wl_rows = []
+                for _tk in watchlist:
+                    try:
+                        _info = _yf_wlt.Ticker(_tk).info
+                        _fi   = _yf_wlt.Ticker(_tk).fast_info
+
+                        _price   = float(_info.get("currentPrice") or _info.get("regularMarketPrice") or
+                                         getattr(_fi, "last_price", 0) or 0)
+                        _prev    = float(_info.get("previousClose") or _price or 1)
+                        _chg     = round((_price - _prev) / _prev * 100, 2) if _prev else 0
+                        _w52h    = float(_info.get("fiftyTwoWeekHigh") or getattr(_fi, "year_high", 0) or 0)
+                        _w52l    = float(_info.get("fiftyTwoWeekLow")  or getattr(_fi, "year_low",  0) or 0)
+                        _mktcap  = float(_info.get("marketCap") or getattr(_fi, "market_cap", 0) or 0)
+                        _pe      = float(_info.get("trailingPE") or 0)
+                        _fpe     = float(_info.get("forwardPE") or 0)
+                        _tgt     = float(_info.get("targetMeanPrice") or 0)
+                        _rec     = (_info.get("recommendationKey") or "").replace("-", " ").title()
+                        _ancount = int(_info.get("numberOfAnalystOpinions") or 0)
+                        _volume  = int(_info.get("regularMarketVolume") or getattr(_fi, "last_volume", 0) or 0)
+                        _avgvol  = int(_info.get("averageVolume") or 0)
+                        _sector  = _info.get("sector") or _info.get("industry") or "—"
+                        _beta    = float(_info.get("beta") or 0)
+                        _div     = float(_info.get("dividendYield") or 0)
+
+                        # 52H pozisyon
+                        _pos = round((_price - _w52l) / (_w52h - _w52l) * 100, 1) if (_w52h - _w52l) > 0 else 0
+
+                        # Alarm
+                        if _w52h > 0 and _price >= _w52h:
+                            _alarm = "🔥"
+                        elif _w52h > 0 and _price >= _w52h * 0.995:
+                            _alarm = "⚡"
+                        else:
+                            _alarm = ""
+
+                        # Analist upside
+                        _upside = round((_tgt - _price) / _price * 100, 1) if (_tgt > 0 and _price > 0) else 0
+
+                        # Hacim oranı
+                        _volr = round(_volume / _avgvol, 1) if _avgvol > 0 else 0
+
+                        wl_rows.append({
+                            "ticker":   _tk,
+                            "price":    _price,
+                            "chg":      _chg,
+                            "mktcap":   _mktcap,
+                            "pe":       _pe,
+                            "fpe":      _fpe,
+                            "beta":     _beta,
+                            "w52h_pos": _pos,
+                            "alarm":    _alarm,
+                            "tgt":      _tgt,
+                            "upside":   _upside,
+                            "rec":      _rec,
+                            "ancount":  _ancount,
+                            "div":      _div,
+                            "volr":     _volr,
+                            "sector":   _sector,
+                        })
+                    except Exception:
+                        wl_rows.append({"ticker": _tk, "price": 0, "chg": 0, "mktcap": 0,
+                                        "pe": 0, "fpe": 0, "beta": 0, "w52h_pos": 0,
+                                        "alarm": "?", "tgt": 0, "upside": 0, "rec": "—",
+                                        "ancount": 0, "div": 0, "volr": 0, "sector": "—"})
+                st.session_state["wl_table_data"] = wl_rows
+
+        wl_rows = st.session_state.get("wl_table_data", [])
+
+        if wl_rows:
+            # ── Tablo oluştur ──────────────────────────────────────────────
+            def _mc(v):
+                if v >= 1e12: return f"${v/1e12:.1f}T"
+                if v >= 1e9:  return f"${v/1e9:.1f}B"
+                if v >= 1e6:  return f"${v/1e6:.0f}M"
+                return "—" if v == 0 else f"${v:.0f}"
+
+            df_wl = _pd_wlt.DataFrame([{
+                "🔔":          r["alarm"],
+                "Ticker":      r["ticker"],
+                "Sektör":      r["sector"],
+                "Fiyat":       f"${r['price']:.2f}" if r["price"] else "—",
+                "Günlük %":    f"{r['chg']:+.2f}%" if r["price"] else "—",
+                "Mkt Cap":     _mc(r["mktcap"]),
+                "Beta":        f"{r['beta']:.2f}" if r["beta"] else "—",
+                "P/E":         f"{r['pe']:.1f}x" if r["pe"] else "—",
+                "Fwd P/E":     f"{r['fpe']:.1f}x" if r["fpe"] else "—",
+                "52H Pos.":    f"%{r['w52h_pos']:.0f}" if r["price"] else "—",
+                "Analist Hdf": f"${r['tgt']:.0f} ({r['upside']:+.1f}%)" if r["tgt"] else "—",
+                "Tavsiye":     r["rec"] or "—",
+                "# Analist":   str(r["ancount"]) if r["ancount"] else "—",
+                "Temettü":     f"{r['div']:.1%}" if r["div"] else "—",
+                "Hacim":       f"{r['volr']:.1f}x" if r["volr"] else "—",
+            } for r in wl_rows])
+
+            # Renk fonksiyonları
+            def _color_chg(val):
+                if isinstance(val, str) and "+" in val: return "color:#00c48c;font-weight:600"
+                if isinstance(val, str) and val.startswith("-"): return "color:#e74c3c;font-weight:600"
+                return ""
+
+            def _color_alarm(val):
+                if val == "🔥": return "background-color:#1a0a00;font-size:1rem;"
+                if val == "⚡": return "background-color:#1a1500;font-size:1rem;"
+                return ""
+
+            def _color_rec(val):
+                if isinstance(val, str):
+                    v = val.lower()
+                    if "strong buy" in v or "buy" in v: return "color:#00c48c;font-weight:600"
+                    if "sell" in v: return "color:#e74c3c;font-weight:600"
+                    if "hold" in v: return "color:#ffb300"
+                return ""
+
+            def _color_upside(val):
+                if isinstance(val, str) and "+" in val: return "color:#00c48c"
+                if isinstance(val, str) and "-" in val: return "color:#e74c3c"
+                return ""
+
+            st.dataframe(
+                df_wl.style
+                    .map(_color_alarm, subset=["🔔"])
+                    .map(_color_chg,   subset=["Günlük %"])
+                    .map(_color_rec,   subset=["Tavsiye"])
+                    .map(_color_upside, subset=["Analist Hdf"]),
+                use_container_width=True,
+                hide_index=True,
+                height=min(len(wl_rows) * 38 + 40, 700),
+            )
+
+            # ── Hisse çıkarma ──────────────────────────────────────────────
+            st.markdown('<hr style="border-color:#1e2833;margin:0.8rem 0;">', unsafe_allow_html=True)
+            rm_col1, rm_col2 = st.columns([2, 1])
+            with rm_col1:
+                wl_rm = st.selectbox(
+                    "Listeden çıkar:",
+                    options=["— seç —"] + watchlist,
+                    key="wl_rm_select",
+                    label_visibility="collapsed",
+                )
+            with rm_col2:
+                if st.button("🗑 Çıkar", key="wl_rm_btn", use_container_width=True):
+                    if wl_rm != "— seç —":
+                        remove_from_watchlist(wl_rm)
+                        if "wl_table_data" in st.session_state:
+                            del st.session_state["wl_table_data"]
+                        st.success(f"{wl_rm} listeden çıkarıldı.")
                         st.rerun()
-        else:
-            st.info("Takip listesi boş. Yukarıdan hisse ekleyebilirsin.")
 
-    with wl_col2:
-        st.markdown(
-            '<div style="font-size:0.72rem;color:#8a9ab0;line-height:1.8;">'
-            '• Sabah radarında otomatik taranır<br>'
-            '• %0.5 yakın → ⚡ alarm<br>'
-            '• 52H kırılınca → 🔥 alarm<br>'
-            '• Portföy hisseleri zaten takip edilir<br>'
-            '• Alarm Telegram\'a gönderilir'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-
-    # ── Manuel anlık tarama ───────────────────────────────────────────────
-    st.markdown('<hr style="border-color:#1e2833;margin:1rem 0;">', unsafe_allow_html=True)
-
-    scan_c1, scan_c2, scan_c3 = st.columns(3)
-    with scan_c1:
-        wl_scan_trigger = st.button("🔍 52H Kontrol Et", key="wl_scan_btn", use_container_width=True)
-    with scan_c2:
-        wl_phase1_btn = st.button("📡 Faz 1 — Erken Uyarı", key="wl_phase1_btn", use_container_width=True)
-        st.caption("T1+T4 · Claude yok · hızlı radar")
-    with scan_c3:
-        wl_phase2_btn = st.button("🧠 Faz 2 — Tam Analiz", key="wl_phase2_btn", use_container_width=True)
-        st.caption("6 tetikleyici · Claude aktif · al/sat önerisi")
+        # ── Manuel tarama butonları ───────────────────────────────────────
+        st.markdown('<hr style="border-color:#1e2833;margin:1rem 0;">', unsafe_allow_html=True)
+        scan_c1, scan_c2, scan_c3 = st.columns(3)
+        with scan_c1:
+            wl_scan_trigger = st.button("🔍 52H Kontrol Et", key="wl_scan_btn", use_container_width=True)
+        with scan_c2:
+            wl_phase1_btn = st.button("📡 Faz 1 — Erken Uyarı", key="wl_phase1_btn", use_container_width=True)
+            st.caption("T1+T4 · Claude yok · hızlı radar")
+        with scan_c3:
+            wl_phase2_btn = st.button("🧠 Faz 2 — Tam Analiz", key="wl_phase2_btn", use_container_width=True)
+            st.caption("6 tetikleyici · Claude aktif · al/sat önerisi")
 
     # ── Faz 1: Erken Uyarı ───────────────────────────────────────────────
     if wl_phase1_btn:
