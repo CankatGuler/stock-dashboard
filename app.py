@@ -431,6 +431,8 @@ if "comparison_result" not in st.session_state:
     st.session_state["comparison_result"] = ""
 if "comparison_title" not in st.session_state:
     st.session_state["comparison_title"] = ""
+if "insider_results" not in st.session_state:
+    st.session_state["insider_results"] = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2657,6 +2659,76 @@ with tab_watchlist:
         if rows:
             df_wl = _pd_wl.DataFrame(rows).sort_values("52H Pozisyon %", ascending=False)
             st.dataframe(df_wl, use_container_width=True, hide_index=True)
+
+    # ── İçeriden Alım/Satım (Insider) ────────────────────────────────────
+    st.markdown('<hr style="border-color:#1e2833;margin:1.5rem 0;">', unsafe_allow_html=True)
+    st.markdown(
+        '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+        'letter-spacing:0.1em;margin-bottom:0.5rem;">🔎 İÇERİDEN ALIM/SATIM (SEC Form 4)</div>',
+        unsafe_allow_html=True,
+    )
+    st.caption("Portföy + takip listesindeki hisselerde yönetici alım/satım işlemlerini tara.")
+
+    ins_col1, ins_col2 = st.columns([1, 2])
+    with ins_col1:
+        ins_days = st.selectbox("Tarama süresi:", [7, 14, 30], format_func=lambda x: f"Son {x} gün", key="ins_days")
+    with ins_col2:
+        st.markdown('<div style="margin-top:1.7rem;"></div>', unsafe_allow_html=True)
+        ins_btn = st.button("🔍 Insider Tara", key="btn_insider", use_container_width=True)
+
+    if ins_btn:
+        from insider_tracker import run_insider_scan
+        # Portföy + watchlist
+        _ins_tickers = [p["ticker"] for p in load_portfolio()]
+        _ins_tickers += load_watchlist()
+        _ins_tickers  = list(dict.fromkeys(_ins_tickers))[:25]
+
+        if not _ins_tickers:
+            st.warning("Portföy ve takip listesi boş.")
+        else:
+            with st.spinner(f"{len(_ins_tickers)} hisse için SEC Form 4 taranıyor..."):
+                _ins_results = run_insider_scan(_ins_tickers, days=ins_days)
+                st.session_state["insider_results"] = _ins_results
+
+    if st.session_state.get("insider_results") is not None:
+        _ins_results = st.session_state["insider_results"]
+        if not _ins_results:
+            st.success("✅ Seçilen dönemde anlamlı içeriden işlem sinyali bulunamadı.")
+        else:
+            for _ir in _ins_results:
+                _sig   = _ir["signal"]
+                _score = _ir["score"]
+                _sig_c = "#00c48c" if _score >= 2 else ("#e74c3c" if _score <= -2 else "#ffb300")
+                _sig_e = "📈" if _score >= 2 else ("📉" if _score <= -2 else "➡️")
+
+                with st.expander(
+                    f"{_sig_e}  {_ir['ticker']}  ·  {_sig}  ·  Skor: {_score:+.1f}  ·  {_ir['summary']}",
+                    expanded=(_score >= 4 or _score <= -4)
+                ):
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        st.markdown(
+                            f'<div style="font-size:0.78rem;line-height:1.8;">'
+                            f'Alım: <b style="color:#00c48c;">{_ir["buy_count"]} işlem · ${_ir["buy_value"]/1000:.0f}K</b><br>'
+                            f'Satış: <b style="color:#e74c3c;">{_ir["sell_count"]} işlem · ${_ir["sell_value"]/1000:.0f}K</b><br>'
+                            f'CEO/CFO: {"✅ Dahil" if _ir["ceo_involved"] else "—"}<br>'
+                            f'Küme: {"⚡ Var" if _ir["cluster"] else "—"}'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
+                    with c2:
+                        if _ir.get("transactions"):
+                            import pandas as _pd_ins
+                            _tx_rows = [{
+                                "Tarih":    t.get("trade_date", t.get("filing_date", ""))[:10],
+                                "Kişi":     t.get("insider_name", "")[:20],
+                                "Unvan":    t.get("title", "")[:15],
+                                "İşlem":    "AL" if "P" in t.get("trade_type","").upper() else "SAT",
+                                "Fiyat":    f"${t.get('price',0):.2f}" if t.get('price') else "—",
+                                "Değer":    f"${t.get('value',0)/1000:.0f}K" if t.get('value') else "—",
+                            } for t in _ir["transactions"][:8]]
+                            if _tx_rows:
+                                st.dataframe(_pd_ins.DataFrame(_tx_rows), use_container_width=True, hide_index=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

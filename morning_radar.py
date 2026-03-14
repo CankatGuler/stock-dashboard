@@ -45,7 +45,35 @@ def main():
     else:
         logger.info("52H kırılımı yok.")
 
-    # ── 2. Fırsat Radarı ──────────────────────────────────────────────────
+    # ── 2. İçeriden Alım/Satım Taraması ─────────────────────────────────
+    logger.info("Insider taraması başlıyor...")
+    try:
+        from insider_tracker import run_insider_scan, format_insider_telegram
+        from breakout_scanner import load_watchlist
+
+        # Portföy + watchlist tickerları
+        _insider_tickers = []
+        try:
+            from portfolio_manager import load_portfolio
+            _port = load_portfolio()
+            _insider_tickers += [p["ticker"] for p in _port if p.get("ticker")]
+        except Exception:
+            pass
+        _insider_tickers += load_watchlist()
+        _insider_tickers = list(dict.fromkeys(_insider_tickers))[:30]  # Max 30
+
+        if _insider_tickers:
+            insider_results = run_insider_scan(_insider_tickers, days=7)
+            if insider_results:
+                insider_msg = format_insider_telegram(insider_results)
+                ok_i = send_message(insider_msg)
+                logger.info("Insider alarmı gönderildi (%d hisse): %s", len(insider_results), ok_i)
+            else:
+                logger.info("Insider: Anlamlı sinyal yok.")
+    except Exception as e:
+        logger.warning("Insider tarama hatası: %s", e)
+
+    # ── 3. Fırsat Radarı ──────────────────────────────────────────────────
     results = run_radar(
         max_age_hours=8,
         min_radar_score=50,
