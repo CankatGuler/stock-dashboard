@@ -2941,7 +2941,7 @@ with tab_library:
                 with col_left:
                     st.markdown("**Ne anlama gelir?**")
                     st.markdown(
-                        f'<div style="font-size:0.8rem;color:#dde3ea;line-height:1.7;">'
+                        f'<div style="font-size:0.8rem;line-height:1.7;">'
                         f'{term["definition"]}</div>',
                         unsafe_allow_html=True,
                     )
@@ -2960,7 +2960,7 @@ with tab_library:
                 with col_right:
                     st.markdown("**Nasıl okunur?**")
                     st.markdown(
-                        f'<div style="font-size:0.78rem;color:#dde3ea;line-height:1.75;">'
+                        f'<div style="font-size:0.78rem;line-height:1.75;">'
                         f'{term["how_to_read"].replace(chr(10), "<br>")}</div>',
                         unsafe_allow_html=True,
                     )
@@ -2972,7 +2972,7 @@ with tab_library:
                 with port_col:
                     st.markdown("**💼 Portföy kararında kullanımı:**")
                     st.markdown(
-                        f'<div style="font-size:0.78rem;color:#dde3ea;line-height:1.7;">'
+                        f'<div style="font-size:0.78rem;line-height:1.7;">'
                         f'{term["portfolio"]}</div>',
                         unsafe_allow_html=True,
                     )
@@ -2980,7 +2980,7 @@ with tab_library:
                 with ex_col:
                     st.markdown("**📌 Gerçek örnek:**")
                     st.markdown(
-                        f'<div style="font-size:0.78rem;color:#dde3ea;line-height:1.7;">'
+                        f'<div style="font-size:0.78rem;line-height:1.7;">'
                         f'{term["example"].replace(chr(10), "<br>")}</div>',
                         unsafe_allow_html=True,
                     )
