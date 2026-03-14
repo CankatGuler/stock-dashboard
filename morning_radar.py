@@ -45,7 +45,31 @@ def main():
     else:
         logger.info("52H kırılımı yok.")
 
-    # ── 2. İçeriden Alım/Satım Taraması ─────────────────────────────────
+    # ── 2. Fiyat Hedefi Snapshot Güncelleme ─────────────────────────────
+    logger.info("Fiyat hedefi snapshot güncelleniyor...")
+    try:
+        from price_target_tracker import update_price_targets
+        from breakout_scanner import load_watchlist
+        from portfolio_manager import load_portfolio
+
+        _target_tickers = []
+        try:
+            _target_tickers += [p["ticker"] for p in load_portfolio() if p.get("ticker")]
+        except Exception:
+            pass
+        try:
+            _target_tickers += load_watchlist()
+        except Exception:
+            pass
+        _target_tickers = list(dict.fromkeys(_target_tickers))[:40]
+
+        if _target_tickers:
+            update_price_targets(_target_tickers)
+            logger.info("Fiyat hedefleri guncellendi: %d hisse", len(_target_tickers))
+    except Exception as e:
+        logger.warning("Fiyat hedefi guncelleme hatasi: %s", e)
+
+    # ── 3. İçeriden Alım/Satım Taraması ─────────────────────────────────
     logger.info("Insider taraması başlıyor...")
     try:
         from insider_tracker import run_insider_scan, format_insider_telegram

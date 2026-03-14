@@ -402,7 +402,7 @@ if missing_keys:
 # ─────────────────────────────────────────────────────────────────────────────
 # TABS
 # ─────────────────────────────────────────────────────────────────────────────
-tab_screener, tab_portfolio, tab_radar, tab_lookup, tab_memory, tab_watchlist, tab_macro, tab_library = st.tabs(["📡  Sektör Tarayıcı", "💼  Portföyüm", "🔭  Fırsat Radarı", "🔍  Hisse Sorgula", "🧠  Hafıza", "👁  Takip", "🌍  Makro", "📚  Kütüphane"])
+tab_screener, tab_portfolio, tab_radar, tab_lookup, tab_memory, tab_watchlist, tab_macro, tab_library, tab_targets = st.tabs(["📡  Sektör Tarayıcı", "💼  Portföyüm", "🔭  Fırsat Radarı", "🔍  Hisse Sorgula", "🧠  Hafıza", "👁  Takip", "🌍  Makro", "📚  Kütüphane", "🎯  Hedefler"])
 
 # ─────────────────────────────────────────────────────────────────────────────
 # STATE INIT
@@ -437,6 +437,8 @@ if "wl_full_result" not in st.session_state:
     st.session_state["wl_full_result"] = None
 if "wl_phase1_result" not in st.session_state:
     st.session_state["wl_phase1_result"] = None
+if "tgt_data" not in st.session_state:
+    st.session_state["tgt_data"] = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -3519,5 +3521,212 @@ Türkçe yaz."""
                         'color:#dde3ea;line-height:1.7;">'
                         + st.session_state[f"lib_answer_{term['id']}"]
                         + '</div>',
+                        unsafe_allow_html=True,
+                    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TAB 9 — FİYAT HEDEFİ TAKİPÇİSİ
+# ─────────────────────────────────────────────────────────────────────────────
+
+with tab_targets:
+    from price_target_tracker import (
+        get_all_targets_summary, update_price_targets,
+        get_revision_trend, get_upside_category,
+    )
+    import pandas as _pd_tgt
+
+    st.markdown(
+        '<div style="font-size:0.7rem;color:#5a6a7a;text-transform:uppercase;'
+        'letter-spacing:0.1em;margin-bottom:1rem;">'
+        '► ANALİST FİYAT HEDEFİ TAKİPÇİSİ</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Tüm ticker listesi: portföy + watchlist
+    from breakout_scanner import load_watchlist as _load_wl_tgt
+    _tgt_tickers = [p["ticker"] for p in load_portfolio()]
+    _tgt_tickers += _load_wl_tgt()
+    _tgt_tickers  = list(dict.fromkeys(_tgt_tickers))
+
+    tgt_c1, tgt_c2, tgt_c3 = st.columns([1, 1, 2])
+    with tgt_c1:
+        tgt_refresh = st.button("🔄 Verileri Güncelle", key="tgt_refresh", use_container_width=True)
+    with tgt_c2:
+        tgt_filter  = st.selectbox(
+            "Filtrele:",
+            ["Tümü", "Portföy", "Watchlist", "Yüksek Potansiyel (>%15)", "Hedefin Üzerinde"],
+            key="tgt_filter", label_visibility="collapsed",
+        )
+    with tgt_c3:
+        st.caption(f"📊 {len(_tgt_tickers)} hisse takip ediliyor · Portföy + Watchlist")
+
+    if tgt_refresh:
+        with st.spinner("Analist hedefleri yükleniyor..."):
+            update_price_targets(_tgt_tickers)
+            st.session_state["tgt_data"] = None  # Cache temizle
+
+    # Veri yükle
+    if st.session_state.get("tgt_data") is None:
+        with st.spinner("Hedef veriler yükleniyor..."):
+            _tgt_data = get_all_targets_summary(_tgt_tickers)
+            st.session_state["tgt_data"] = _tgt_data
+
+    _tgt_data = st.session_state.get("tgt_data") or []
+
+    # Filtrele
+    _port_tickers = {p["ticker"] for p in load_portfolio()}
+    _wl_tickers   = set(_load_wl_tgt())
+    if tgt_filter == "Portföy":
+        _tgt_data = [r for r in _tgt_data if r["ticker"] in _port_tickers]
+    elif tgt_filter == "Watchlist":
+        _tgt_data = [r for r in _tgt_data if r["ticker"] in _wl_tickers]
+    elif tgt_filter == "Yüksek Potansiyel (>%15)":
+        _tgt_data = [r for r in _tgt_data if r["upside"] >= 15]
+    elif tgt_filter == "Hedefin Üzerinde":
+        _tgt_data = [r for r in _tgt_data if r["upside"] < 0]
+
+    if not _tgt_data:
+        st.info("Veri bulunamadı. 'Verileri Güncelle' butonuna tıkla.")
+    else:
+        # ── Özet metrik bar ───────────────────────────────────────────────
+        _avg_upside   = sum(r["upside"] for r in _tgt_data) / len(_tgt_data)
+        _high_pot     = sum(1 for r in _tgt_data if r["upside"] >= 15)
+        _above_target = sum(1 for r in _tgt_data if r["upside"] < 0)
+        _revising_up  = sum(1 for r in _tgt_data if r["trend"]["direction"] in ("yukarı","güçlü_yukarı"))
+
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Ort. Upside", f"%{_avg_upside:.1f}")
+        m2.metric("Yüksek Potansiyel", f"{_high_pot} hisse")
+        m3.metric("Hedef Revize ↑", f"{_revising_up} hisse")
+        m4.metric("Hedefin Üzerinde", f"{_above_target} hisse")
+
+        st.markdown('<hr style="border-color:var(--color-border-tertiary);margin:0.8rem 0;">', unsafe_allow_html=True)
+
+        # ── Ana Tablo ─────────────────────────────────────────────────────
+        tbl_rows = []
+        for r in _tgt_data:
+            _trend_ch  = r["trend"].get("change_pct", 0)
+            _trend_str = f"{r['trend_arrow']} {_trend_ch:+.1f}%" if _trend_ch != 0 else "➡ Stabil"
+            tbl_rows.append({
+                "Ticker":       r["ticker"],
+                "Fiyat":        f"${r['price']:.2f}",
+                "Ort. Hedef":   f"${r['mean']:.2f}",
+                "En Yüksek":    f"${r['high']:.2f}",
+                "En Düşük":     f"${r['low']:.2f}",
+                "Upside":       f"{r['upside']:+.1f}%",
+                "Potansiyel":   r["upside_cat"],
+                "Revizyon(30g)":_trend_str,
+                "Konsensüs":    r["consensus"],
+                "Son Güncelleme": r["date"],
+            })
+
+        _df_tgt = _pd_tgt.DataFrame(tbl_rows)
+
+        def _color_upside(val):
+            if isinstance(val, str):
+                try:
+                    v = float(val.replace("%","").replace("+",""))
+                    if v >= 20: return "color:#00c48c;font-weight:600"
+                    if v >= 10: return "color:#4fc3f7"
+                    if v >= 0:  return "color:#ffb300"
+                    return "color:#e74c3c"
+                except Exception:
+                    pass
+            return ""
+
+        def _color_rev(val):
+            if isinstance(val, str):
+                if "⬆" in val: return "color:#00c48c"
+                if "⬇" in val: return "color:#e74c3c"
+            return ""
+
+        st.dataframe(
+            _df_tgt.style
+                .map(_color_upside, subset=["Upside"])
+                .map(_color_rev,    subset=["Revizyon(30g)"]),
+            use_container_width=True,
+            hide_index=True,
+            height=min(len(tbl_rows) * 38 + 40, 650),
+        )
+
+        # ── Detay Kartları ────────────────────────────────────────────────
+        st.markdown(
+            '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+            'letter-spacing:0.1em;margin:1rem 0 0.5rem;">Detaylı Görünüm</div>',
+            unsafe_allow_html=True,
+        )
+
+        for r in _tgt_data[:10]:  # İlk 10 detaylı göster
+            _u = r["upside"]
+            _uc = r["upside_color"]
+            _tc = r["trend_color"]
+            _trend = r["trend"]
+
+            with st.expander(
+                f"{r['trend_arrow']}  {r['ticker']}  ·  "
+                f"Upside: {_u:+.1f}%  ·  {r['upside_cat']}  ·  {r['consensus']}",
+                expanded=(_u >= 20 or _trend["direction"] in ("güçlü_yukarı","güçlü_aşağı")),
+            ):
+                dc1, dc2, dc3 = st.columns(3)
+
+                with dc1:
+                    st.markdown("**Hedef Fiyatlar**")
+                    st.markdown(
+                        f'<div style="font-size:0.78rem;line-height:2;">'
+                        f'Ort. Hedef: <b style="color:{_uc};">${r["mean"]:.2f}</b><br>'
+                        f'En Yüksek: <b>${r["high"]:.2f}</b><br>'
+                        f'En Düşük: <b>${r["low"]:.2f}</b><br>'
+                        f'Mevcut: <b>${r["price"]:.2f}</b><br>'
+                        f'<b style="color:{_uc};">Upside: {_u:+.1f}%</b>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                with dc2:
+                    st.markdown("**Konsensüs**")
+                    st.markdown(
+                        f'<div style="font-size:0.78rem;line-height:2;">'
+                        f'{r["consensus"]}<br>'
+                        f'Analist: {r["n_analysts"]}<br>'
+                        f'Öneri: {r["rec"]}'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                with dc3:
+                    st.markdown("**30 Günlük Revizyon**")
+                    _td = r["trend"]
+                    st.markdown(
+                        f'<div style="font-size:0.78rem;line-height:2;color:{_tc};">'
+                        f'{_td.get("description","—")}<br>'
+                        + (f'Eski hedef: ${_td.get("old_mean",0):.2f}<br>'
+                           f'Yeni hedef: ${_td.get("new_mean",0):.2f}'
+                           if _td.get("old_mean",0) != _td.get("new_mean",0) else "Yeterli geçmiş yok")
+                        + f'</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                # Fiyat/Hedef görsel bandı
+                if r["price"] > 0 and r["low"] > 0 and r["high"] > 0:
+                    _rng   = r["high"] - r["low"]
+                    _pos   = max(0, min(100, (r["price"] - r["low"]) / _rng * 100)) if _rng > 0 else 50
+                    _mean_pos = max(0, min(100, (r["mean"] - r["low"]) / _rng * 100)) if _rng > 0 else 50
+                    st.markdown(
+                        f'<div style="margin-top:0.5rem;">'
+                        f'<div style="font-size:0.65rem;color:#5a6a7a;margin-bottom:4px;">'
+                        f'Analist Aralığı: ${r["low"]:.0f} → ${r["high"]:.0f}</div>'
+                        f'<div style="position:relative;height:10px;background:var(--color-background-secondary);'
+                        f'border-radius:5px;overflow:visible;">'
+                        f'<div style="position:absolute;left:{_mean_pos:.0f}%;top:-3px;'
+                        f'width:3px;height:16px;background:#ffb300;border-radius:2px;" title="Ort. Hedef"></div>'
+                        f'<div style="position:absolute;left:{_pos:.0f}%;top:-4px;'
+                        f'width:4px;height:18px;background:{_uc};border-radius:2px;" title="Mevcut Fiyat"></div>'
+                        f'</div>'
+                        f'<div style="display:flex;justify-content:space-between;'
+                        f'font-size:0.6rem;color:#5a6a7a;margin-top:4px;">'
+                        f'<span>📍 Mevcut: ${r["price"]:.2f}</span>'
+                        f'<span>🎯 Ort. Hedef: ${r["mean"]:.2f}</span>'
+                        f'</div></div>',
                         unsafe_allow_html=True,
                     )
