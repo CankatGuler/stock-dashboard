@@ -2072,13 +2072,34 @@ with tab_radar:
 
     # ── Bilgi Kutusu ─────────────────────────────────────────────────────────
     st.markdown(
-        '<div style="background:#0d1f2d;border:1px solid #1e3a4a;border-radius:8px;'
+        '<div style="background:#0d1f2d;border:1px solid #1e3a4a;border-radius:8px;"'
         'padding:1rem;margin-bottom:1rem;font-size:0.78rem;color:#7a9ab5;">'
-        '<b style="color:#4fc3f7;">📊 3 Katmanlı Puanlama Sistemi</b><br><br>'
-        '• <b>Temel Skor × Çarpan (×0.30)</b> — Şirketin fundamentals kalitesi. '
-        'Güçlü temel → haber daha değerli.<br>'
-        '• <b>Haber Etkisi (×0.40)</b> — Bu haberin o hisse için önemi.<br>'
-        '• <b>Sürpriz Faktörü (×0.30)</b> — Piyasa bunu biliyor mu? Sürpriz → daha yüksek puan.'
+
+        '<b style="color:#4fc3f7;">🔭 Radar v3 — 6 Katmanlı Puanlama Sistemi</b><br><br>'
+
+        '<b style="color:#c8d8e8;">Formül:</b> '
+        '<span style="font-family:monospace;color:#ce93d8;">'
+        '(Temel×0.25 + Haber×0.30 + Sürpriz×0.20 + Momentum×0.15) × Makro_Çarpanı + Insider + Hafıza'
+        '</span><br><br>'
+
+        '• <b style="color:#4fc3f7;">Temel Skor (×0.25)</b> — '
+        '9 faktör: gelir büyümesi, FCF, ROE, brüt marj, P/E, analist konsensüs, beta, piyasa değeri, hedef upside.<br>'
+
+        '• <b style="color:#ff6b35;">Haber Etkisi (×0.30)</b> — '
+        'Gürültü filtrelenmiş kaynaklardan (Seeking Alpha/ZeroHedge engellendi) Claude analizi.<br>'
+
+        '• <b style="color:#ce93d8;">Sürpriz Faktörü (×0.20)</b> — '
+        'Claude tahmini ×0.6 + gerçek EPS/analist sapması ×0.4.<br>'
+
+        '• <b style="color:#ffb300;">Momentum (×0.15)</b> — '
+        '52H pozisyon (%40-80 ideal), hacim patlaması, günlük değişim. Fiyatlanmış haberi filtreler.<br>'
+
+        '• <b style="color:#00c48c;">Makro Çarpanı (×0.60–1.35)</b> — '
+        'VIX×0.30 + 10Y Faiz×0.25 + Yield Curve×0.20 + DXY×0.15 + S&P Trend×0.10.<br>'
+
+        '• <b style="color:#a5d6a7;">Insider & Hafıza Bonusu (+0–18)</b> — '
+        'CEO/küme alımı max +10 · Skor trendi max ±8.'
+
         '</div>',
         unsafe_allow_html=True,
     )
