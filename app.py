@@ -2072,35 +2072,53 @@ with tab_radar:
 
     # ── Bilgi Kutusu ─────────────────────────────────────────────────────────
     st.markdown(
-        '<div style="background:#0d1f2d;border:1px solid #1e3a4a;border-radius:8px;"'
-        'padding:1rem;margin-bottom:1rem;font-size:0.78rem;color:#7a9ab5;">'
+        '<div style="background:var(--color-background-secondary);'
+        'border:0.5px solid var(--color-border-tertiary);'
+        'border-radius:var(--border-radius-lg);padding:1.2rem 1.4rem;margin-bottom:1rem;">'
 
-        '<b style="color:#4fc3f7;">🔭 Radar v3 — 6 Katmanlı Puanlama Sistemi</b><br><br>'
+        '<div style="font-size:0.7rem;font-weight:500;color:var(--color-text-tertiary);'
+        'text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.8rem;">'
+        '🔭 Radar v3 — 6 Katmanlı Puanlama Sistemi</div>'
 
-        '<b style="color:#c8d8e8;">Formül:</b> '
-        '<span style="font-family:monospace;color:#ce93d8;">'
+        '<div style="font-size:0.72rem;color:var(--color-text-secondary);'
+        'font-family:monospace;background:var(--color-background-primary);'
+        'border-radius:var(--border-radius-md);padding:0.5rem 0.8rem;margin-bottom:1rem;">'
         '(Temel×0.25 + Haber×0.30 + Sürpriz×0.20 + Momentum×0.15) × Makro_Çarpanı + Insider + Hafıza'
-        '</span><br><br>'
+        '</div>'
 
-        '• <b style="color:#4fc3f7;">Temel Skor (×0.25)</b> — '
-        '9 faktör: gelir büyümesi, FCF, ROE, brüt marj, P/E, analist konsensüs, beta, piyasa değeri, hedef upside.<br>'
+        '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">'
 
-        '• <b style="color:#ff6b35;">Haber Etkisi (×0.30)</b> — '
-        'Gürültü filtrelenmiş kaynaklardan (Seeking Alpha/ZeroHedge engellendi) Claude analizi.<br>'
+        '<div style="background:var(--color-background-primary);border-radius:var(--border-radius-md);padding:0.7rem 0.8rem;border-left:3px solid #378ADD;">'
+        '<div style="font-size:0.68rem;font-weight:500;color:#378ADD;margin-bottom:3px;">Temel Skor ×0.25</div>'
+        '<div style="font-size:0.7rem;color:var(--color-text-secondary);line-height:1.55;">'
+        'Gelir büyümesi, FCF, ROE, brüt marj, P/E, analist konsensüsü, beta, piyasa değeri, hedef upside</div></div>'
 
-        '• <b style="color:#ce93d8;">Sürpriz Faktörü (×0.20)</b> — '
-        'Claude tahmini ×0.6 + gerçek EPS/analist sapması ×0.4.<br>'
+        '<div style="background:var(--color-background-primary);border-radius:var(--border-radius-md);padding:0.7rem 0.8rem;border-left:3px solid #E8593C;">'
+        '<div style="font-size:0.68rem;font-weight:500;color:#E8593C;margin-bottom:3px;">Haber Etkisi ×0.30</div>'
+        '<div style="font-size:0.7rem;color:var(--color-text-secondary);line-height:1.55;">'
+        'Gürültü filtrelenmiş kaynaklardan Claude analizi. Seeking Alpha ve ZeroHedge engellendi</div></div>'
 
-        '• <b style="color:#ffb300;">Momentum (×0.15)</b> — '
-        '52H pozisyon (%40-80 ideal), hacim patlaması, günlük değişim. Fiyatlanmış haberi filtreler.<br>'
+        '<div style="background:var(--color-background-primary);border-radius:var(--border-radius-md);padding:0.7rem 0.8rem;border-left:3px solid #7F77DD;">'
+        '<div style="font-size:0.68rem;font-weight:500;color:#7F77DD;margin-bottom:3px;">Sürpriz Faktörü ×0.20</div>'
+        '<div style="font-size:0.7rem;color:var(--color-text-secondary);line-height:1.55;">'
+        'Claude tahmini ×0.6 + gerçek EPS/analist konsensüs sapması ×0.4</div></div>'
 
-        '• <b style="color:#00c48c;">Makro Çarpanı (×0.60–1.35)</b> — '
-        'VIX×0.30 + 10Y Faiz×0.25 + Yield Curve×0.20 + DXY×0.15 + S&P Trend×0.10.<br>'
+        '<div style="background:var(--color-background-primary);border-radius:var(--border-radius-md);padding:0.7rem 0.8rem;border-left:3px solid #BA7517;">'
+        '<div style="font-size:0.68rem;font-weight:500;color:#BA7517;margin-bottom:3px;">Momentum ×0.15</div>'
+        '<div style="font-size:0.7rem;color:var(--color-text-secondary);line-height:1.55;">'
+        '52H pozisyon (%40–80 ideal), hacim patlaması, günlük değişim. Fiyatlanmış haberi filtreler</div></div>'
 
-        '• <b style="color:#a5d6a7;">Insider & Hafıza Bonusu (+0–18)</b> — '
-        'CEO/küme alımı max +10 · Skor trendi max ±8.'
+        '<div style="background:var(--color-background-primary);border-radius:var(--border-radius-md);padding:0.7rem 0.8rem;border-left:3px solid #1D9E75;">'
+        '<div style="font-size:0.68rem;font-weight:500;color:#1D9E75;margin-bottom:3px;">Makro Çarpanı ×0.60–1.35</div>'
+        '<div style="font-size:0.7rem;color:var(--color-text-secondary);line-height:1.55;">'
+        'VIX×0.30 · 10Y Faiz×0.25 · Yield Curve×0.20 · DXY×0.15 · S&P Trend×0.10</div></div>'
 
-        '</div>',
+        '<div style="background:var(--color-background-primary);border-radius:var(--border-radius-md);padding:0.7rem 0.8rem;border-left:3px solid #639922;">'
+        '<div style="font-size:0.68rem;font-weight:500;color:#639922;margin-bottom:3px;">Insider & Hafıza +0–18</div>'
+        '<div style="font-size:0.7rem;color:var(--color-text-secondary);line-height:1.55;">'
+        'CEO/küme alımı max +10 · Skor trendi bonusu max ±8</div></div>'
+
+        '</div></div>',
         unsafe_allow_html=True,
     )
 
