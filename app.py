@@ -433,6 +433,8 @@ if "comparison_title" not in st.session_state:
     st.session_state["comparison_title"] = ""
 if "insider_results" not in st.session_state:
     st.session_state["insider_results"] = None
+if "wl_full_result" not in st.session_state:
+    st.session_state["wl_full_result"] = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2588,7 +2590,108 @@ with tab_watchlist:
     # ── Manuel anlık tarama ───────────────────────────────────────────────
     st.markdown('<hr style="border-color:#1e2833;margin:1rem 0;">', unsafe_allow_html=True)
 
-    if st.button("🔍 Şimdi 52H Kontrol Et", key="wl_scan_btn"):
+    scan_c1, scan_c2 = st.columns(2)
+    with scan_c1:
+        wl_scan_trigger = st.button("🔍 52H Kontrol Et", key="wl_scan_btn", use_container_width=True)
+    with scan_c2:
+        wl_full_scan = st.button("🧠 Tam Analiz Çalıştır", key="wl_full_scan_btn", use_container_width=True)
+        st.caption("6 tetikleyici kontrolü + Claude analizi")
+
+    # ── Tam Watchlist Analizi ─────────────────────────────────────────────
+    if wl_full_scan:
+        if not watchlist:
+            st.warning("Takip listesi boş.")
+        else:
+            from watchlist_analyzer import run_watchlist_analysis
+            with st.spinner(f"{len(watchlist)} hisse için 6 tetikleyici kontrol ediliyor..."):
+                _wl_result = run_watchlist_analysis()
+                st.session_state["wl_full_result"] = _wl_result
+
+    if st.session_state.get("wl_full_result"):
+        _wlr = st.session_state["wl_full_result"]
+        _triggered = _wlr["triggered"]
+        _screened  = _wlr["screened"]
+
+        # Özet metrik
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Taranan", _wlr["total"])
+        m2.metric("Tetiklenen", _wlr["analyzed"])
+        m3.metric("Sakin", _wlr["total"] - _wlr["analyzed"])
+
+        if not _triggered:
+            st.success("✅ Bugün tetikleyici yok — tüm hisseler sakin.")
+        else:
+            st.markdown(
+                '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+                'letter-spacing:0.1em;margin:0.8rem 0 0.4rem;">Tetiklenen Hisseler</div>',
+                unsafe_allow_html=True,
+            )
+            for _r in _triggered:
+                _tk     = _r.get("hisse_sembolu", "")
+                _score  = _r.get("nihai_guven_skoru", 0)
+                _tav    = _r.get("tavsiye", "Tut")
+                _ozet   = _r.get("analiz_ozeti", "")[:120]
+                _trigs  = _r.get("_triggers", [])
+                _tdet   = _r.get("_trigger_details", {})
+                _tdata  = _r.get("_trigger_data", {})
+                _sc     = "#00c48c" if _score >= 70 else ("#ffb300" if _score >= 50 else "#e74c3c")
+
+                with st.expander(
+                    f"{'🟢' if _score>=70 else '🟡' if _score>=50 else '🔴'}  "
+                    f"{_tk}  ·  {_score}/100  ·  {_tav}  ·  "
+                    f"Tetikleyiciler: {', '.join(_trigs)}",
+                    expanded=(_score >= 70)
+                ):
+                    # Tetikleyici detayları
+                    for _t in _trigs:
+                        _d = _tdet.get(_t, "")
+                        _t_emoji = {
+                            "T1": "📈", "T2": "🚀", "T3": "👔",
+                            "T4": "📰", "T5": "📊", "T6": "🔻"
+                        }.get(_t, "•")
+                        st.markdown(
+                            f'<div style="font-size:0.75rem;padding:2px 0;">'
+                            f'{_t_emoji} <b>{_t}</b>: {_d}</div>',
+                            unsafe_allow_html=True,
+                        )
+
+                    st.markdown(
+                        f'<div style="margin-top:0.5rem;font-size:0.78rem;'
+                        f'border-left:3px solid {_sc};padding-left:0.6rem;">'
+                        f'{_ozet}</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                    # Metrik özeti
+                    _d = _tdata
+                    st.caption(
+                        f"Fiyat: ${_d.get('price',0):.2f} ({_d.get('change_pct',0):+.1f}%) · "
+                        f"52H: %{_d.get('w52h_pos',0):.0f} · "
+                        f"RSI: {_d.get('rsi',50):.0f} · "
+                        f"Hacim: {_d.get('vol_ratio',1):.1f}x"
+                    )
+
+        # Yakın kaçanlar
+        _near = [s for s in _screened if s["trigger_count"] == 1][:5]
+        if _near:
+            st.markdown(
+                '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+                'letter-spacing:0.1em;margin:0.8rem 0 0.4rem;">Yakın Kaçanlar (1 tetikleyici)</div>',
+                unsafe_allow_html=True,
+            )
+            import pandas as _pd_near
+            st.dataframe(
+                _pd_near.DataFrame([{
+                    "Ticker": s["ticker"],
+                    "Fiyat":  f"${s['price']:.2f}",
+                    "Değişim": f"{s['chg']:+.1f}%",
+                    "52H Pos.": f"%{s['w52h_pos']:.0f}",
+                    "Tetikleyici": ", ".join(s["triggers"]) if s["triggers"] else "—",
+                } for s in _near]),
+                use_container_width=True, hide_index=True,
+            )
+
+    if wl_scan_trigger:
         if not watchlist:
             st.warning("Takip listesi boş.")
         else:
