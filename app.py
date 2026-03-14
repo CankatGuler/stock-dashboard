@@ -435,6 +435,8 @@ if "insider_results" not in st.session_state:
     st.session_state["insider_results"] = None
 if "wl_full_result" not in st.session_state:
     st.session_state["wl_full_result"] = None
+if "wl_phase1_result" not in st.session_state:
+    st.session_state["wl_phase1_result"] = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2590,21 +2592,66 @@ with tab_watchlist:
     # ── Manuel anlık tarama ───────────────────────────────────────────────
     st.markdown('<hr style="border-color:#1e2833;margin:1rem 0;">', unsafe_allow_html=True)
 
-    scan_c1, scan_c2 = st.columns(2)
+    scan_c1, scan_c2, scan_c3 = st.columns(3)
     with scan_c1:
         wl_scan_trigger = st.button("🔍 52H Kontrol Et", key="wl_scan_btn", use_container_width=True)
     with scan_c2:
-        wl_full_scan = st.button("🧠 Tam Analiz Çalıştır", key="wl_full_scan_btn", use_container_width=True)
-        st.caption("6 tetikleyici kontrolü + Claude analizi")
+        wl_phase1_btn = st.button("📡 Faz 1 — Erken Uyarı", key="wl_phase1_btn", use_container_width=True)
+        st.caption("T1+T4 · Claude yok · hızlı radar")
+    with scan_c3:
+        wl_phase2_btn = st.button("🧠 Faz 2 — Tam Analiz", key="wl_phase2_btn", use_container_width=True)
+        st.caption("6 tetikleyici · Claude aktif · al/sat önerisi")
 
-    # ── Tam Watchlist Analizi ─────────────────────────────────────────────
+    # ── Faz 1: Erken Uyarı ───────────────────────────────────────────────
+    if wl_phase1_btn:
+        if not watchlist:
+            st.warning("Takip listesi boş.")
+        else:
+            from watchlist_analyzer import run_phase1_scan
+            with st.spinner(f"Pre-market erken uyarı taraması: {len(watchlist)} hisse..."):
+                _p1_result = run_phase1_scan()
+                st.session_state["wl_phase1_result"] = _p1_result
+
+    if st.session_state.get("wl_phase1_result"):
+        _p1 = st.session_state["wl_phase1_result"]
+        _alerts = _p1["alerts"]
+        if not _alerts:
+            st.success("✅ Pre-market sakin — dikkat çeken hareket yok.")
+        else:
+            st.markdown(
+                f'<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+                f'letter-spacing:0.1em;margin:0.8rem 0 0.4rem;">📡 {len(_alerts)} erken uyarı</div>',
+                unsafe_allow_html=True,
+            )
+            for _a in _alerts:
+                _chg = _a["chg"]
+                _clr = "#00c48c" if _chg > 0 else "#e74c3c"
+                _ar  = "▲" if _chg > 0 else "▼"
+                st.markdown(
+                    f'<div style="background:var(--color-background-secondary);'
+                    f'border-left:3px solid {_clr};padding:0.5rem 0.8rem;'
+                    f'margin-bottom:0.4rem;border-radius:0 6px 6px 0;font-size:0.78rem;">'
+                    f'<b>{_a["ticker"]}</b> &nbsp; '
+                    f'<span style="color:{_clr};">{_ar} %{abs(_chg):.1f}</span> &nbsp; '
+                    f'${_a["price"]:.2f} &nbsp;|&nbsp; '
+                    + " &nbsp;+&nbsp; ".join(_a["triggers"])
+                    + "<br>" + "<br>".join(f'<span style="color:var(--color-text-secondary);">{v}</span>'
+                                           for v in _a["details"].values())
+                    + f'<br><span style="color:var(--color-text-tertiary);font-size:0.7rem;">⏳ {_a["note"]}</span>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+
+    # ── Faz 2: Tam Analiz ────────────────────────────────────────────────
+    wl_full_scan = wl_phase2_btn
+
     if wl_full_scan:
         if not watchlist:
             st.warning("Takip listesi boş.")
         else:
-            from watchlist_analyzer import run_watchlist_analysis
-            with st.spinner(f"{len(watchlist)} hisse için 6 tetikleyici kontrol ediliyor..."):
-                _wl_result = run_watchlist_analysis()
+            from watchlist_analyzer import run_phase2_analysis
+            with st.spinner(f"{len(watchlist)} hisse için 6 tetikleyici + Claude analizi..."):
+                _wl_result = run_phase2_analysis()
                 st.session_state["wl_full_result"] = _wl_result
 
     if st.session_state.get("wl_full_result"):

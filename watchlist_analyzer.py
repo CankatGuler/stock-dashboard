@@ -20,13 +20,19 @@ import yfinance as yf
 
 logger = logging.getLogger(__name__)
 
+# ─── Faz tanımları ───────────────────────────────────────────────────────────
+
+PHASE_1 = "phase1"   # 11:00 TR — Erken uyarı, sadece T1+T4, Claude YOK
+PHASE_2 = "phase2"   # 23:30 TR — Tam analiz, 6 tetikleyici, Claude AKTİF
+
 # ─── Tetikleyici eşikleri ────────────────────────────────────────────────────
 
-PRICE_MOVE_THRESHOLD   = 5.0    # T1: %5 fiyat hareketi
+PRICE_MOVE_THRESHOLD   = 5.0    # T1: %5 fiyat hareketi (her iki faz)
+PREMARKET_THRESHOLD    = 3.0    # T1 Faz-1: pre-market %3+ hareket (daha hassas)
 W52H_THRESHOLD         = 90.0   # T2: 52H pozisyon %90+
 VOLUME_RATIO_THRESHOLD = 2.0    # T2+T5: Hacim 2x ortalama
 RSI_OVERSOLD           = 35.0   # T6: RSI < 35
-MIN_TRIGGERS           = 2      # Minimum tetikleyici sayısı
+MIN_TRIGGERS           = 2      # Minimum tetikleyici sayısı (Faz-2)
 
 
 def _safe(val, default=0.0):
@@ -377,3 +383,237 @@ def format_watchlist_telegram(result: dict) -> list[str]:
     )
 
     return messages
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FAZ 1 — Erken Uyarı (11:00 TR)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def run_phase1_scan(extra_tickers: list[str] = None) -> dict:
+    """
+    Faz 1: Pre-market erken uyarı taraması.
+    Sadece T1 (pre-market fiyat hareketi) ve T4 (sinyal haberi) kontrol eder.
+    Claude analizi yok — sadece alarm üretir.
+    """
+    tickers = _collect_tickers(extra_tickers)
+    if not tickers:
+        return {"alerts": [], "total": 0, "phase": PHASE_1}
+
+    logger.info("FAZ 1 taraması: %d hisse (pre-market)", len(tickers))
+    alerts = []
+
+    for ticker in tickers:
+        try:
+            fi    = yf.Ticker(ticker).fast_info
+            price = _safe(getattr(fi, "last_price", 0))
+            prev  = _safe(getattr(fi, "previous_close", price) or price)
+            chg   = ((price - prev) / prev * 100) if prev > 0 else 0
+
+            triggered  = []
+            details    = {}
+
+            # T1 — Pre-market fiyat hareketi (eşik daha düşük: %3)
+            if abs(chg) >= PREMARKET_THRESHOLD:
+                direction = "yukarı ▲" if chg > 0 else "aşağı ▼"
+                triggered.append("T1")
+                details["T1"] = f"Pre-market %{abs(chg):.1f} {direction}"
+
+            # T4 — Sinyal haberi (son 18 saat — dün kapanışından bu yana)
+            try:
+                from news_fetcher import fetch_news
+                articles = fetch_news([ticker], days=1)
+                signal_news = [a for a in articles if a.get("is_signal")]
+                if signal_news:
+                    triggered.append("T4")
+                    details["T4"] = f"{len(signal_news)} sinyal haber: {signal_news[0].get('title','')[:55]}..."
+            except Exception:
+                pass
+
+            if triggered:
+                alerts.append({
+                    "ticker":   ticker,
+                    "price":    price,
+                    "chg":      round(chg, 2),
+                    "triggers": triggered,
+                    "details":  details,
+                    "note":     "Faz 2 (23:30 TR) tam analizini bekle",
+                })
+
+            time.sleep(0.25)
+        except Exception as e:
+            logger.warning("Faz1 check hatası %s: %s", ticker, e)
+
+    alerts.sort(key=lambda x: abs(x["chg"]), reverse=True)
+    logger.info("Faz 1 tamamlandı: %d alarm", len(alerts))
+    return {"alerts": alerts, "total": len(tickers), "phase": PHASE_1}
+
+
+def format_phase1_telegram(result: dict) -> str:
+    """Faz 1 Telegram mesajı — kısa, aksiyon yok, sadece radar."""
+    from datetime import timezone
+    now_tr = (datetime.now(timezone.utc) + timedelta(hours=3)).strftime("%H:%M")
+
+    alerts = result["alerts"]
+    total  = result["total"]
+
+    if not alerts:
+        return (
+            f"📡 <b>Sabah Radarı {now_tr} TR</b>\n"
+            f"<i>{total} hisse tarandı — pre-market sakin</i>\n"
+            f"💤 Dikkat çeken hareket yok. Piyasa açılışını normal izle."
+        )
+
+    lines = [
+        f"📡 <b>Sabah Radarı — {now_tr} TR</b>",
+        f"<i>Pre-market erken uyarı · {total} hisse · Claude analizi YOK</i>",
+        f"━━━━━━━━━━━━━━━━━━━━",
+        f"",
+    ]
+
+    for a in alerts:
+        chg    = a["chg"]
+        emoji  = "🔥" if abs(chg) >= 5 else "⚡"
+        arrow  = "▲" if chg > 0 else "▼"
+        t_list = " + ".join(a["triggers"])
+
+        lines.append(
+            f"{emoji} <b>{a['ticker']}</b>  "
+            f"{arrow} %{abs(chg):.1f}  ·  ${a['price']:.2f}"
+        )
+        for k, v in a["details"].items():
+            lines.append(f"   <i>{v}</i>")
+        lines.append(f"   📌 Tetikleyici: {t_list}")
+        lines.append("")
+
+    lines.extend([
+        "━━━━━━━━━━━━━━━━━━━━",
+        "⏳ <i>Gece 23:30 TR tam analiz raporu geliyor.</i>",
+        "<i>Bu alarm sadece dikkat için — henüz işlem yapma.</i>",
+    ])
+
+    return "\n".join(lines)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FAZ 2 — Tam Analiz (23:30 TR)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def run_phase2_analysis(extra_tickers: list[str] = None) -> dict:
+    """
+    Faz 2: Kapanış sonrası tam analiz.
+    Tüm 6 tetikleyici çalışır. En az 2 tetikleyici → Claude analizi.
+    """
+    result = run_watchlist_analysis(extra_tickers=extra_tickers, min_triggers=MIN_TRIGGERS)
+    result["phase"] = PHASE_2
+    return result
+
+
+def format_phase2_telegram(result: dict) -> list[str]:
+    """
+    Faz 2 Telegram mesajları — tam analiz formatı.
+    Mevcut format_watchlist_telegram'ı kullanır ama başlık farklı.
+    """
+    from datetime import timezone
+    now_tr = (datetime.now(timezone.utc) + timedelta(hours=3)).strftime("%d.%m.%Y %H:%M")
+
+    messages  = []
+    triggered = result["triggered"]
+    screened  = result["screened"]
+    total     = result["total"]
+    analyzed  = result["analyzed"]
+
+    # Başlık
+    trigger_emoji = "🔥" if analyzed >= 3 else ("⚡" if analyzed >= 1 else "😴")
+    header = (
+        f"{trigger_emoji} <b>GECE RAPORU — TAM ANALİZ</b>\n"
+        f"<i>{now_tr} TR · Piyasa kapandıktan sonra · Claude analizi aktif</i>\n\n"
+        f"📊 {total} hisse tarandı · "
+        f"✅ {analyzed} tetiklendi · "
+        f"💤 {total - analyzed} sakin\n"
+        f"━━━━━━━━━━━━━━━━━━━━"
+    )
+    messages.append(header)
+
+    if not triggered:
+        messages.append(
+            "😴 <b>Bugün tetikleyici eşiği aşılmadı</b>\n\n"
+            "<i>Tüm hisseler sakin. Yarın tekrar kontrol edilecek.</i>"
+        )
+    else:
+        chunk = []
+        for i, r in enumerate(triggered, 1):
+            ticker   = r.get("hisse_sembolu", r.get("_stock_meta", {}).get("ticker", ""))
+            score    = r.get("nihai_guven_skoru", 0)
+            tavsiye  = r.get("tavsiye", "Tut")
+            ozet     = r.get("analiz_ozeti", "")[:130]
+            triggers = r.get("_triggers", [])
+            tdetails = r.get("_trigger_details", {})
+            tdata    = r.get("_trigger_data", {})
+
+            price    = tdata.get("price", 0)
+            chg      = tdata.get("change_pct", 0)
+            w52h_pos = tdata.get("w52h_pos", 0)
+            rsi      = tdata.get("rsi", 0)
+            vol_r    = tdata.get("vol_ratio", 0)
+
+            score_emoji = "🟢" if score >= 70 else ("🟡" if score >= 50 else "🔴")
+            tav_emoji   = {"Ağırlık Artır": "⬆️", "Tut": "➡️", "Azalt": "⬇️"}.get(tavsiye, "➡️")
+
+            # Tetikleyici özeti
+            t_strs = []
+            for t in triggers:
+                detail = tdetails.get(t, "")[:45]
+                t_strs.append(f"  • {t}: {detail}")
+
+            entry = (
+                f"\n{score_emoji} <b>#{i} {ticker}</b> — {score} puan\n"
+                f"   💰 ${price:.2f} ({chg:+.1f}%)"
+                + (f" · 52H %{w52h_pos:.0f}" if w52h_pos else "")
+                + (f" · RSI {rsi:.0f}" if rsi and rsi != 50 else "")
+                + (f" · Hacim {vol_r:.1f}x" if vol_r >= 1.5 else "")
+                + f"\n   {tav_emoji} <b>{tavsiye}</b>\n"
+                + "\n".join(t_strs) + "\n"
+                + f"   💬 <i>{ozet}</i>"
+            )
+            chunk.append(entry)
+
+            if len(chunk) == 4 or i == len(triggered):
+                messages.append("\n".join(chunk))
+                chunk = []
+
+    # Yakın kaçanlar
+    near = [s for s in screened if s["trigger_count"] == 1][:4]
+    if near:
+        nm = ["📡 <b>1 tetikleyici (eşiği geçemedi):</b>"]
+        for s in near:
+            nm.append(
+                f"  • {s['ticker']}: ${s['price']:.2f} ({s['chg']:+.1f}%) "
+                f"· {', '.join(s['triggers'])}"
+            )
+        messages.append("\n".join(nm))
+
+    messages.append(
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "⚠️ <i>Bu analiz yatırım tavsiyesi değildir. DYOR.</i>\n"
+        "<i>Sonraki sabah radarı: 11:00 TR</i>"
+    )
+
+    return messages
+
+
+# ─── Yardımcı: Ticker toplama ────────────────────────────────────────────────
+
+def _collect_tickers(extra: list[str] = None) -> list[str]:
+    """Portföy + watchlist + extra tickerları topla, tekrar kaldır."""
+    tickers = list(extra or [])
+    try:
+        from breakout_scanner import load_watchlist
+        tickers += load_watchlist()
+    except Exception:
+        pass
+    try:
+        from portfolio_manager import load_portfolio
+        tickers += [p["ticker"] for p in load_portfolio() if p.get("ticker")]
+    except Exception:
+        pass
+    return list(dict.fromkeys(tickers))

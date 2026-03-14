@@ -14,9 +14,11 @@ on:
     - cron: "0 19 * * 1-5"
     - cron: "0 20 * * 1-5"
 
-    # ── Watchlist günlük analiz — ABD açılış öncesi ──────────────────────
-    # 15:00 TR = 12:00 UTC (yaz/kış farkı yok, NYSE 16:30 TR açılıyor)
-    - cron: "0 12 * * 1-5"
+    # ── Watchlist Faz 1 — Erken uyarı (11:00 TR = 08:00 UTC) ─────────────
+    - cron: "0 8 * * 1-5"
+
+    # ── Watchlist Faz 2 — Tam analiz (23:30 TR = 20:30 UTC) ──────────────
+    - cron: "30 20 * * 1-5"
 
     # ── Haftalık S&P 500 raporu — Pazar ────────────────────────────────────
     # UTC 17:00 = TR 20:00
@@ -54,10 +56,10 @@ jobs:
           GITHUB_EVENT_NAME:  ${{ github.event_name }}
         run: python morning_radar.py
 
-  # ── Watchlist Günlük Analiz ─────────────────────────────────────────────
-  watchlist-daily:
+  # ── Watchlist Faz 1: Erken Uyarı (11:00 TR) ─────────────────────────────
+  watchlist-phase1:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 12 * * 1-5'
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 8 * * 1-5'
 
     steps:
       - name: Kodu çek
@@ -71,8 +73,37 @@ jobs:
       - name: Bağımlılıkları yükle
         run: pip install -r requirements.txt
 
-      - name: Watchlist analizini çalıştır
+      - name: Faz 1 erken uyarı taraması
         env:
+          PHASE:              "1"
+          ANTHROPIC_API_KEY:  ${{ secrets.ANTHROPIC_API_KEY }}
+          NEWS_API_KEY:       ${{ secrets.NEWS_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          GITHUB_TOKEN:       ${{ secrets.GH_TOKEN }}
+          GITHUB_REPO:        ${{ secrets.GITHUB_REPO }}
+        run: python watchlist_runner.py
+
+  # ── Watchlist Faz 2: Tam Analiz (23:30 TR) ───────────────────────────────
+  watchlist-phase2:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '30 20 * * 1-5'
+
+    steps:
+      - name: Kodu çek
+        uses: actions/checkout@v4
+
+      - name: Python kur
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Bağımlılıkları yükle
+        run: pip install -r requirements.txt
+
+      - name: Faz 2 tam analiz
+        env:
+          PHASE:              "2"
           ANTHROPIC_API_KEY:  ${{ secrets.ANTHROPIC_API_KEY }}
           NEWS_API_KEY:       ${{ secrets.NEWS_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
