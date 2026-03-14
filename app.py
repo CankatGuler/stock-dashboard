@@ -2114,6 +2114,29 @@ with tab_radar:
             st.success(f"✅ {len(radar_results)} fırsat tespit edildi!")
             st.markdown("---")
 
+            # ── Makro Özet Bandı ─────────────────────────────────────────────
+            if radar_results:
+                _md = radar_results[0].get("macro_detail", {})
+                _mc = radar_results[0].get("macro_multiplier", 1.0)
+                _ms = _md.get("macro_score", 0)
+                _mc_color = "#00c48c" if _mc >= 1.1 else ("#ffb300" if _mc >= 0.9 else "#e74c3c")
+                st.markdown(
+                    f'<div style="background:var(--color-background-secondary);'
+                    f'border:0.5px solid var(--color-border-tertiary);'
+                    f'border-left:3px solid {_mc_color};'
+                    f'border-radius:0 8px 8px 0;padding:0.6rem 1rem;'
+                    f'margin-bottom:1rem;font-size:0.75rem;">'
+                    f'<b style="color:{_mc_color};">Makro Çarpanı: ×{_mc}</b>'
+                    f' &nbsp;|&nbsp; Makro Skor: {_ms:.0f}/100'
+                    + (f' &nbsp;|&nbsp; VIX {_md.get("vix",0):.0f}'
+                       f' &nbsp;|&nbsp; 10Y %{_md.get("tnx",0):.1f}'
+                       f' &nbsp;|&nbsp; Spread {_md.get("spread",0):+.2f}%'
+                       f' &nbsp;|&nbsp; DXY {_md.get("dxy",0):.0f}'
+                       if _md else "")
+                    + '</div>',
+                    unsafe_allow_html=True,
+                )
+
             # ── Sonuç Kartları ───────────────────────────────────────────────
             for res in radar_results:
                 ticker        = res["ticker"]
@@ -2126,6 +2149,12 @@ with tab_radar:
                 price         = res["price"]
                 haber_sayisi  = res["haber_sayisi"]
                 articles      = res["articles"]
+                pos_rec       = res.get("position_rec", {})
+                memory_desc   = res.get("memory_desc", "")
+                eps_desc      = res.get("eps_desc", "")
+                insider_bonus = res.get("insider_bonus", 0)
+                memory_bonus  = res.get("memory_bonus", 0)
+                macro_mult    = res.get("macro_multiplier", 1.0)
 
                 # Renk
                 if radar_score >= 80:
@@ -2146,59 +2175,87 @@ with tab_radar:
                 else:
                     tavsiye_color = "#5a6a7a"
 
+                # Pozisyon aksiyonu rengi
+                _action = pos_rec.get("action", "İzle")
+                _act_color = {
+                    "Güçlü Al": "#00e676", "Al": "#4fc3f7",
+                    "Küçük Pozisyon": "#ffb300", "İzle": "#5a6a7a", "Kaçın": "#e74c3c"
+                }.get(_action, "#5a6a7a")
+
                 with st.expander(
                     f"🎯 {ticker}  —  Radar: {radar_score}  |  "
-                    f"{tavsiye}  |  {haber_sayisi} haber  |  "
+                    f"{_action}  |  {haber_sayisi} haber  |  "
                     f"{'${:,.2f}'.format(price) if price else 'N/A'}",
                     expanded=(radar_score >= 75),
                 ):
-                    c1, c2, c3, c4 = st.columns(4)
-                    with c1:
-                        st.markdown(
-                            f'<div style="background:#0a1929;border:1px solid {border_color};'
-                            f'border-radius:8px;padding:0.8rem;text-align:center;">'
-                            f'<div style="font-size:0.6rem;color:#5a6a7a;">RADAR PUANI</div>'
-                            f'<div style="font-size:1.8rem;font-weight:800;color:{badge_color};">'
-                            f'{radar_score}</div></div>',
-                            unsafe_allow_html=True,
-                        )
-                    with c2:
-                        st.markdown(
+                    # ── Üst KPI satırı (6 metrik) ────────────────────────────
+                    c1, c2, c3, c4, c5, c6 = st.columns(6)
+                    for _col, _label, _val, _clr in [
+                        (c1, "RADAR", radar_score, badge_color),
+                        (c2, "TEMEL", fund_score, "#4fc3f7"),
+                        (c3, "HABER", haber_etkisi, "#ff6b35"),
+                        (c4, "SÜRPRİZ", surpriz, "#ce93d8"),
+                        (c5, "MOMENTUM", res.get("momentum_score", 0), "#ffb300"),
+                        (c6, "MAKRO ×", macro_mult, "#00e676" if macro_mult >= 1.0 else "#e74c3c"),
+                    ]:
+                        _col.markdown(
                             f'<div style="background:#0a1929;border:1px solid #1e3a4a;'
-                            f'border-radius:8px;padding:0.8rem;text-align:center;">'
-                            f'<div style="font-size:0.6rem;color:#5a6a7a;">TEMEL SKOR</div>'
-                            f'<div style="font-size:1.8rem;font-weight:800;color:#4fc3f7;">'
-                            f'{fund_score}</div></div>',
-                            unsafe_allow_html=True,
-                        )
-                    with c3:
-                        st.markdown(
-                            f'<div style="background:#0a1929;border:1px solid #1e3a4a;'
-                            f'border-radius:8px;padding:0.8rem;text-align:center;">'
-                            f'<div style="font-size:0.6rem;color:#5a6a7a;">HABER ETKİSİ</div>'
-                            f'<div style="font-size:1.8rem;font-weight:800;color:#ff6b35;">'
-                            f'{haber_etkisi}</div></div>',
-                            unsafe_allow_html=True,
-                        )
-                    with c4:
-                        st.markdown(
-                            f'<div style="background:#0a1929;border:1px solid #1e3a4a;'
-                            f'border-radius:8px;padding:0.8rem;text-align:center;">'
-                            f'<div style="font-size:0.6rem;color:#5a6a7a;">SÜRPRİZ</div>'
-                            f'<div style="font-size:1.8rem;font-weight:800;color:#ce93d8;">'
-                            f'{surpriz}</div></div>',
+                            f'border-radius:8px;padding:0.6rem;text-align:center;">'
+                            f'<div style="font-size:0.55rem;color:#5a6a7a;">{_label}</div>'
+                            f'<div style="font-size:1.5rem;font-weight:800;color:{_clr};">{_val}</div>'
+                            f'</div>',
                             unsafe_allow_html=True,
                         )
 
-                    # Neden ve tavsiye
+                    # ── Pozisyon Önerisi ─────────────────────────────────────
+                    st.markdown('<div style="margin-top:0.8rem;"></div>', unsafe_allow_html=True)
+                    if pos_rec:
+                        _pos_pct = pos_rec.get("position_pct", 0)
+                        _stop    = pos_rec.get("stop_loss_pct", 0)
+                        _upside  = pos_rec.get("upside_pct", 0)
+                        _rr      = pos_rec.get("rr_ratio", 0)
+                        _risk    = pos_rec.get("risk_level", "")
+                        _rat     = pos_rec.get("rationale", "")
+                        st.markdown(
+                            f'<div style="background:#0a1929;border:1px solid {_act_color}33;'
+                            f'border-left:3px solid {_act_color};border-radius:0 8px 8px 0;'
+                            f'padding:0.7rem 1rem;margin-bottom:0.5rem;">'
+                            f'<span style="color:{_act_color};font-weight:700;font-size:0.85rem;">{_action}</span>'
+                            + (f' &nbsp;·&nbsp; <span style="font-size:0.75rem;">Portföy: %{_pos_pct:.1f}</span>' if _pos_pct > 0 else "")
+                            + (f' &nbsp;·&nbsp; <span style="font-size:0.75rem;">Stop: -%{_stop}</span>' if _stop > 0 else "")
+                            + (f' &nbsp;·&nbsp; <span style="font-size:0.75rem;">Upside: +%{_upside:.0f}</span>' if _upside > 0 else "")
+                            + (f' &nbsp;·&nbsp; <span style="font-size:0.75rem;">R/R: {_rr:.1f}x</span>' if _rr > 0 else "")
+                            + (f' &nbsp;·&nbsp; <span style="font-size:0.7rem;color:#5a6a7a;">Risk: {_risk}</span>' if _risk else "")
+                            + f'<br><span style="font-size:0.72rem;color:#8a9ab0;">{_rat}</span>'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
+
+                    # ── Neden & Tavsiye ──────────────────────────────────────
+                    _extras = []
+                    if insider_bonus > 0:
+                        _extras.append(f"👔 Insider bonus: +{insider_bonus:.1f}")
+                    if memory_bonus != 0:
+                        _extras.append(f"🧠 Hafıza trend: {memory_bonus:+.1f}")
+                    if eps_desc and eps_desc != "Veri yetersiz":
+                        _extras.append(f"📊 {eps_desc[:60]}")
+                    if memory_desc:
+                        _extras.append(f"📈 {memory_desc[:60]}")
+
+                    extras_html = (
+                        '<br><span style="font-size:0.7rem;color:#4fc3f7;">'
+                        + " &nbsp;|&nbsp; ".join(_extras) + '</span>'
+                    ) if _extras else ""
+
                     st.markdown(
-                        f'<div style="margin-top:0.8rem;padding:0.8rem;background:#0d1f2d;'
+                        f'<div style="margin-top:0.3rem;padding:0.8rem;background:#0d1f2d;'
                         f'border-radius:6px;border-left:3px solid {tavsiye_color};">'
                         f'<span style="color:#7a9ab5;font-size:0.75rem;">📌 </span>'
                         f'<span style="color:#c8d8e8;font-size:0.82rem;">{neden}</span>'
                         f'<span style="margin-left:1rem;background:{tavsiye_color}22;'
                         f'color:{tavsiye_color};border-radius:4px;padding:2px 8px;'
                         f'font-size:0.7rem;font-weight:700;">{tavsiye}</span>'
+                        f'{extras_html}'
                         f'</div>',
                         unsafe_allow_html=True,
                     )

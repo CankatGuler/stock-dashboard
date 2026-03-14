@@ -317,48 +317,144 @@ def get_momentum_score(ticker: str, fundamental_meta: dict) -> float:
 
 # ─── Katman 4: Makro Çarpanı ──────────────────────────────────────────────────
 
-def get_macro_multiplier() -> tuple[float, str]:
+def get_macro_multiplier() -> tuple[float, str, dict]:
     """
-    VIX ve piyasa rejiminden makro çarpanı hesapla.
-    Streamlit session state yoksa yfinance'ten direkt çek.
-    Returns (multiplier, description)
+    6 faktörlü gelişmiş makro çarpanı:
+      VIX×0.30 + Faiz(10Y)×0.25 + YieldCurve×0.20 + DXY×0.15 + SPX_trend×0.10
+    Her faktör 0-100 arasında puanlanır, ağırlıklı ortalamayla 0.60-1.35 arasında çarpan üretilir.
+    Returns (multiplier, description, detail_dict)
     """
     try:
         import yfinance as yf
-        vix   = float(yf.Ticker("^VIX").fast_info.last_price or 20)
-        spx_fi = yf.Ticker("^GSPC").fast_info
-        spx_chg = 0.0
-        spx_prev = float(getattr(spx_fi, "previous_close", 0) or 0)
-        spx_price= float(getattr(spx_fi, "last_price", 0) or 0)
-        if spx_prev > 0:
-            spx_chg = (spx_price - spx_prev) / spx_prev * 100
 
-        if vix < 15:
-            multiplier = 1.3
-            desc = f"VIX {vix:.0f} — Sakin piyasa, risk iştahı yüksek"
-        elif vix < 20:
-            multiplier = 1.1
-            desc = f"VIX {vix:.0f} — Normal, olumlu ortam"
-        elif vix < 25:
-            multiplier = 1.0
-            desc = f"VIX {vix:.0f} — Orta belirsizlik"
-        elif vix < 30:
-            multiplier = 0.85
-            desc = f"VIX {vix:.0f} — Yüksek volatilite, dikkatli ol"
-        else:
-            multiplier = 0.70
-            desc = f"VIX {vix:.0f} — Panik ortamı, spekülatif girişten kaçın"
+        def _safe_price(ticker):
+            try:
+                return float(yf.Ticker(ticker).fast_info.last_price or 0)
+            except Exception:
+                return 0.0
 
-        # S&P 500 sert düşüşünde ek ceza
-        if spx_chg < -2.0:
-            multiplier = max(0.6, multiplier - 0.15)
-            desc += f" | S&P {spx_chg:.1f}% — Piyasa düşüşte"
+        def _safe_prev(ticker):
+            try:
+                fi = yf.Ticker(ticker).fast_info
+                return float(getattr(fi, "previous_close", 0) or 0)
+            except Exception:
+                return 0.0
 
-        return round(multiplier, 2), desc
+        # ── Veri çek ─────────────────────────────────────────────────────
+        vix       = _safe_price("^VIX")       or 20.0
+        tnx       = _safe_price("^TNX")       or 4.0    # 10Y tahvil faizi (%)
+        irx       = _safe_price("^IRX")       or 4.0    # 3M tahvil faizi (%)
+        dxy       = _safe_price("DX-Y.NYB")   or 102.0  # Dolar endeksi
+        gold      = _safe_price("GC=F")       or 2000.0 # Altın
+        copper    = _safe_price("HG=F")       or 4.0    # Bakır
+
+        spx_price = _safe_price("^GSPC")
+        spx_prev  = _safe_prev("^GSPC")
+        spx_chg   = ((spx_price - spx_prev) / spx_prev * 100) if spx_prev > 0 else 0
+
+        # S&P 500 200 günlük MA yaklaşımı: son 1 yıl değişimi
+        try:
+            spx_hist  = yf.Ticker("^GSPC").history(period="1y", interval="1d")["Close"]
+            spx_ma200 = float(spx_hist.mean()) if len(spx_hist) > 0 else spx_price
+        except Exception:
+            spx_ma200 = spx_price
+
+        # ── Faktör 1: VIX (ağırlık %30) ──────────────────────────────────
+        if   vix < 12:  vix_score, vix_note = 95, f"VIX {vix:.0f} — Aşırı sakin"
+        elif vix < 16:  vix_score, vix_note = 85, f"VIX {vix:.0f} — Sakin, risk iştahı yüksek"
+        elif vix < 20:  vix_score, vix_note = 70, f"VIX {vix:.0f} — Normal"
+        elif vix < 25:  vix_score, vix_note = 50, f"VIX {vix:.0f} — Orta gerginlik"
+        elif vix < 30:  vix_score, vix_note = 30, f"VIX {vix:.0f} — Yüksek volatilite"
+        elif vix < 40:  vix_score, vix_note = 15, f"VIX {vix:.0f} — Panik bölgesi"
+        else:           vix_score, vix_note = 5,  f"VIX {vix:.0f} — Ekstrem panik"
+
+        # ── Faktör 2: 10Y Faiz (ağırlık %25) ─────────────────────────────
+        # Yüksek faiz büyüme hisselerini ezer, değerlemeyi baskılar
+        if   tnx < 3.0: faiz_score, faiz_note = 90, f"10Y %{tnx:.1f} — Düşük, hisse dostu"
+        elif tnx < 3.5: faiz_score, faiz_note = 75, f"10Y %{tnx:.1f} — Makul"
+        elif tnx < 4.0: faiz_score, faiz_note = 60, f"10Y %{tnx:.1f} — Orta baskı"
+        elif tnx < 4.5: faiz_score, faiz_note = 45, f"10Y %{tnx:.1f} — Yüksek, değerleme baskısı"
+        elif tnx < 5.0: faiz_score, faiz_note = 25, f"10Y %{tnx:.1f} — Çok yüksek"
+        else:           faiz_score, faiz_note = 10, f"10Y %{tnx:.1f} — Tehlike bölgesi"
+
+        # ── Faktör 3: Yield Curve 10Y-3M (ağırlık %20) ───────────────────
+        # Negatif = ters eğri = resesyon sinyali
+        spread = tnx - irx
+        if   spread > 1.5:  yc_score, yc_note = 90, f"Yield spread +{spread:.1f}% — Sağlıklı eğri"
+        elif spread > 0.5:  yc_score, yc_note = 75, f"Yield spread +{spread:.1f}% — Normal"
+        elif spread > 0.0:  yc_score, yc_note = 55, f"Yield spread +{spread:.1f}% — Düzleşiyor"
+        elif spread > -0.5: yc_score, yc_note = 35, f"Yield spread {spread:.1f}% — Ters eğri başlangıcı"
+        elif spread > -1.0: yc_score, yc_note = 20, f"Yield spread {spread:.1f}% — Ters eğri — resesyon riski"
+        else:               yc_score, yc_note = 8,  f"Yield spread {spread:.1f}% — Derin ters eğri"
+
+        # ── Faktör 4: DXY (ağırlık %15) ──────────────────────────────────
+        # Güçlü dolar = uluslararası gelirler düşer, gelişen piyasalar sıkışır
+        if   dxy < 95:   dxy_score, dxy_note = 85, f"DXY {dxy:.0f} — Zayıf dolar, olumlu"
+        elif dxy < 100:  dxy_score, dxy_note = 70, f"DXY {dxy:.0f} — Normal bölge"
+        elif dxy < 103:  dxy_score, dxy_note = 55, f"DXY {dxy:.0f} — Biraz güçlü"
+        elif dxy < 106:  dxy_score, dxy_note = 35, f"DXY {dxy:.0f} — Güçlü dolar, baskı"
+        else:            dxy_score, dxy_note = 15, f"DXY {dxy:.0f} — Çok güçlü dolar"
+
+        # ── Faktör 5: S&P 500 Trendi (ağırlık %10) ───────────────────────
+        # Piyasa 200 MA üzerinde mi + bugünkü yön
+        spx_above_ma = spx_price > spx_ma200 if spx_ma200 > 0 else True
+        if   spx_above_ma and spx_chg > 0.5:  spx_score, spx_note = 85, f"S&P +{spx_chg:.1f}% — Trend yukarı"
+        elif spx_above_ma and spx_chg > -0.5: spx_score, spx_note = 65, f"S&P {spx_chg:+.1f}% — Stabil"
+        elif spx_above_ma:                     spx_score, spx_note = 45, f"S&P {spx_chg:.1f}% — 200MA üzeri ama düşüyor"
+        elif spx_chg < -1.5:                   spx_score, spx_note = 15, f"S&P {spx_chg:.1f}% — Piyasa kötü gün"
+        else:                                  spx_score, spx_note = 30, f"S&P {spx_chg:+.1f}% — 200MA altı"
+
+        # ── Altın/Bakır oranı — bonus/ceza ───────────────────────────────
+        # Altın/Bakır yüksekse risk-off (güvenli limana kaçış)
+        gc_ratio = (gold / copper / 500) if copper > 0 else 1.0  # normalize
+        gc_penalty = 0
+        if gc_ratio > 1.2:   gc_penalty = -5   # Belirgin risk-off
+        elif gc_ratio > 1.4: gc_penalty = -10  # Güçlü risk-off
+
+        # ── Ağırlıklı makro skoru ─────────────────────────────────────────
+        macro_score = (
+            vix_score   * 0.30 +
+            faiz_score  * 0.25 +
+            yc_score    * 0.20 +
+            dxy_score   * 0.15 +
+            spx_score   * 0.10
+        ) + gc_penalty
+
+        macro_score = max(0, min(100, macro_score))
+
+        # ── Skor → Çarpan ─────────────────────────────────────────────────
+        if   macro_score >= 80: multiplier = 1.35
+        elif macro_score >= 65: multiplier = 1.15
+        elif macro_score >= 50: multiplier = 1.00
+        elif macro_score >= 35: multiplier = 0.85
+        elif macro_score >= 20: multiplier = 0.70
+        else:                   multiplier = 0.60
+
+        # Özet açıklama
+        desc = (f"Makro Skor: {macro_score:.0f}/100 → Çarpan: ×{multiplier} | "
+                f"{vix_note} | {faiz_note} | {yc_note} | {dxy_note} | {spx_note}")
+
+        detail = {
+            "macro_score":  round(macro_score, 1),
+            "multiplier":   multiplier,
+            "vix":          vix,   "vix_score":  vix_score,
+            "tnx":          tnx,   "faiz_score": faiz_score,
+            "spread":       round(spread, 2), "yc_score": yc_score,
+            "dxy":          dxy,   "dxy_score":  dxy_score,
+            "spx_chg":      round(spx_chg, 2), "spx_score": spx_score,
+            "gc_ratio":     round(gc_ratio, 2),
+            "notes": {
+                "vix": vix_note, "faiz": faiz_note, "yc": yc_note,
+                "dxy": dxy_note, "spx": spx_note,
+            }
+        }
+
+        logger.info("Makro çarpan: %.2f (skor: %.0f)", multiplier, macro_score)
+        return round(multiplier, 2), desc, detail
 
     except Exception as e:
-        logger.debug("Macro multiplier failed: %s", e)
-        return 1.0, "Makro veri alınamadı"
+        logger.warning("Macro multiplier failed: %s", e)
+        return 1.0, "Makro veri alınamadı", {}
 
 
 # ─── Katman 5: Insider Bonus ──────────────────────────────────────────────────
@@ -383,7 +479,239 @@ def get_insider_bonus(ticker: str) -> float:
         return 0.0
 
 
-# ─── Claude Radar Analizi ─────────────────────────────────────────────────────
+# ─── Gerçek Sürpriz: EPS Beat ────────────────────────────────────────────────
+
+def get_eps_surprise(ticker: str) -> tuple[float, str]:
+    """
+    yfinance'ten son çeyrek EPS sürprizi çek.
+    Returns (surprise_score 0-100, description)
+    """
+    try:
+        import yfinance as yf
+        info = yf.Ticker(ticker).info
+
+        # yfinance EPS sürpriz alanları
+        eps_actual   = float(info.get("trailingEps") or 0)
+        eps_estimate = float(info.get("epsForward") or 0)
+
+        # Earnings history varsa daha kesin veri
+        try:
+            cal = yf.Ticker(ticker).calendar
+            if cal is not None and not cal.empty:
+                # Bazı versiyonlarda earnings_surprise geliyor
+                pass
+        except Exception:
+            pass
+
+        # Analist konsensüs sapmaya bak
+        rec_mean   = float(info.get("recommendationMean") or 3.0)
+        n_analysts = int(info.get("numberOfAnalystOpinions") or 0)
+        tgt        = float(info.get("targetMeanPrice") or 0)
+        price      = float(info.get("currentPrice") or info.get("regularMarketPrice") or 0)
+
+        score = 50.0
+        desc_parts = []
+
+        # Analist hedef sapması — temel sürpriz göstergesi
+        if tgt > 0 and price > 0:
+            upside = (tgt - price) / price * 100
+            if upside > 40:
+                score += 25
+                desc_parts.append(f"Analist hedefi %{upside:.0f} yukarıda — büyük sürpriz potansiyeli")
+            elif upside > 20:
+                score += 15
+                desc_parts.append(f"Analist hedefi %{upside:.0f} yukarıda")
+            elif upside > 10:
+                score += 8
+                desc_parts.append(f"Analist hedefi %{upside:.0f} yukarıda")
+            elif upside < -5:
+                score -= 15
+                desc_parts.append(f"Analist hedefi %{abs(upside):.0f} aşağıda — negatif sapma")
+
+        # Analist konsensüs kuvveti
+        if rec_mean <= 1.5 and n_analysts >= 10:
+            score += 15
+            desc_parts.append(f"Güçlü konsensüs alım ({n_analysts} analist)")
+        elif rec_mean <= 2.0 and n_analysts >= 5:
+            score += 8
+            desc_parts.append(f"Al konsensüsü ({n_analysts} analist)")
+        elif rec_mean >= 4.0:
+            score -= 15
+            desc_parts.append(f"Satış konsensüsü")
+
+        # EPS forward vs trailing karşılaştırması
+        if eps_estimate > 0 and eps_actual > 0:
+            eps_growth = (eps_estimate - eps_actual) / abs(eps_actual) * 100
+            if eps_growth > 30:
+                score += 15
+                desc_parts.append(f"EPS %{eps_growth:.0f} büyüme beklentisi")
+            elif eps_growth > 15:
+                score += 8
+            elif eps_growth < -10:
+                score -= 10
+                desc_parts.append(f"EPS düşüş beklentisi")
+
+        score = max(0, min(100, score))
+        desc  = " | ".join(desc_parts) if desc_parts else "Veri yetersiz"
+        return round(score, 1), desc
+
+    except Exception as e:
+        logger.debug("EPS surprise failed %s: %s", ticker, e)
+        return 50.0, "EPS verisi alınamadı"
+
+
+# ─── Hafıza Bağlantısı ───────────────────────────────────────────────────────
+
+def get_memory_context(ticker: str) -> tuple[float, str]:
+    """
+    Hafıza sisteminden geçmiş radar skorunu çek.
+    Returns (trend_bonus -5 ile +8 arası, description)
+    """
+    try:
+        from analysis_memory import get_ticker_history
+        history = get_ticker_history(ticker, limit=5)
+        if not history or len(history) < 2:
+            return 0.0, ""
+
+        # Son 5 analizin skorlarını al
+        scores = []
+        for record in history[:5]:
+            s = record.get("nihai_guven_skoru") or record.get("score") or 0
+            if s:
+                scores.append(float(s))
+
+        if len(scores) < 2:
+            return 0.0, ""
+
+        latest  = scores[0]
+        prev    = scores[1]
+        avg     = sum(scores) / len(scores)
+        trend   = latest - prev
+
+        bonus = 0.0
+        desc_parts = []
+
+        # Trend yönü
+        if trend >= 15:
+            bonus += 5
+            desc_parts.append(f"Skor hızla yükseliyor (+{trend:.0f} son analizde)")
+        elif trend >= 8:
+            bonus += 3
+            desc_parts.append(f"Skor artıyor (+{trend:.0f})")
+        elif trend <= -15:
+            bonus -= 5
+            desc_parts.append(f"Skor hızla düşüyor ({trend:.0f})")
+        elif trend <= -8:
+            bonus -= 3
+            desc_parts.append(f"Skor geriliyor ({trend:.0f})")
+
+        # Tutarlı yüksek performans
+        if avg >= 75 and latest >= 70:
+            bonus += 3
+            desc_parts.append(f"Sürekli güçlü ({len(scores)} analizde ort. {avg:.0f})")
+        elif avg <= 40:
+            bonus -= 2
+            desc_parts.append(f"Tarihsel olarak zayıf (ort. {avg:.0f})")
+
+        desc = " | ".join(desc_parts) if desc_parts else f"Geçmiş: {len(scores)} analiz, ort. {avg:.0f}"
+        return round(max(-8, min(8, bonus)), 1), desc
+
+    except Exception as e:
+        logger.debug("Memory context failed %s: %s", ticker, e)
+        return 0.0, ""
+
+
+# ─── Pozisyon Büyüklüğü Önerisi ──────────────────────────────────────────────
+
+def get_position_recommendation(
+    ticker: str,
+    radar_score: float,
+    fundamental_score: float,
+    macro_multiplier: float,
+    meta: dict,
+) -> dict:
+    """
+    Risk/ödül oranına göre pozisyon büyüklüğü önerisi.
+    Kelly Criterion'un basitleştirilmiş versiyonu.
+
+    Returns:
+        {
+          "action":        "Güçlü Al" | "Al" | "Küçük Pozisyon" | "İzle" | "Kaçın",
+          "position_pct":  Portföy yüzdesi önerisi (0-15),
+          "stop_loss_pct": Önerilen stop loss yüzdesi,
+          "rationale":     Açıklama,
+          "risk_level":    "Düşük" | "Orta" | "Yüksek" | "Çok Yüksek",
+        }
+    """
+    price  = meta.get("price", 0)
+    tgt    = meta.get("tgt", 0)
+    beta   = meta.get("beta", 1.0) or 1.0
+    sector = meta.get("sector", "")
+    rec    = (meta.get("rec", "") or "").lower()
+
+    # Risk/ödül oranı
+    if tgt > 0 and price > 0:
+        upside    = (tgt - price) / price * 100
+        downside  = beta * 15  # Beta'ya göre tahmini düşüş riski
+        rr_ratio  = upside / downside if downside > 0 else 0
+    else:
+        upside   = 0
+        rr_ratio = 0
+
+    # Risk seviyesi
+    if   beta < 0.8:                 risk_level = "Düşük"
+    elif beta < 1.3:                 risk_level = "Orta"
+    elif beta < 1.8:                 risk_level = "Yüksek"
+    else:                            risk_level = "Çok Yüksek"
+
+    # Makro ortam etkisi
+    macro_ok = macro_multiplier >= 1.0
+
+    # Temel karar matrisi
+    if radar_score >= 75 and fundamental_score >= 65 and macro_ok and rr_ratio >= 2:
+        action       = "Güçlü Al"
+        position_pct = min(12, 4 + (radar_score - 75) * 0.3)
+        rationale    = f"Yüksek radar skoru + güçlü temel + elverişli makro + R/R {rr_ratio:.1f}x"
+
+    elif radar_score >= 65 and fundamental_score >= 55 and macro_ok:
+        action       = "Al"
+        position_pct = min(8, 2 + (radar_score - 65) * 0.2)
+        rationale    = f"Güçlü sinyal, makro destekli. R/R: {rr_ratio:.1f}x"
+
+    elif radar_score >= 55 and macro_ok:
+        action       = "Küçük Pozisyon"
+        position_pct = min(4, 1 + (radar_score - 55) * 0.15)
+        rationale    = f"Fırsat var ama temkinli gir. Stop loss kullan."
+
+    elif radar_score >= 50 and not macro_ok:
+        action       = "İzle"
+        position_pct = 0
+        rationale    = f"Sinyal var ama makro ortam olumsuz (çarpan {macro_multiplier}x). Beklemeye al."
+
+    else:
+        action       = "Kaçın"
+        position_pct = 0
+        rationale    = f"Yetersiz skor veya olumsuz makro."
+
+    # Beta yüksekse pozisyonu küçült
+    if beta > 1.8 and position_pct > 0:
+        position_pct = position_pct * 0.6
+        rationale   += f" | Beta={beta:.1f} → Pozisyon küçültüldü"
+
+    # Stop loss hesapla — ATR proxy olarak beta kullan
+    stop_loss_pct = round(beta * 8, 1)  # Yüksek beta = daha geniş stop
+
+    return {
+        "action":        action,
+        "position_pct":  round(position_pct, 1),
+        "stop_loss_pct": min(stop_loss_pct, 20),
+        "upside_pct":    round(upside, 1),
+        "rr_ratio":      round(rr_ratio, 2),
+        "risk_level":    risk_level,
+        "rationale":     rationale,
+    }
+
+
 
 RADAR_SYSTEM_PROMPT = """Sen bir fırsat tarama uzmanısın.
 
@@ -447,23 +775,24 @@ def run_radar(
     progress_callback=None,
 ) -> list[dict]:
     """
-    Fırsat Radarı v2 — 5 katmanlı puanlama.
+    Fırsat Radarı v3 — 6 katmanlı puanlama.
 
     Formül:
       Radar = (Temel×0.25 + Haber×0.30 + Sürpriz×0.20 + Momentum×0.15)
-              × Makro_Çarpanı + Insider_Bonus
+              × Makro_Çarpanı(6 faktör) + Insider_Bonus + Hafıza_Trend
     """
-    # Makro çarpanı — bir kez hesapla
-    macro_multiplier, macro_desc = get_macro_multiplier()
-    logger.info("Makro çarpan: %.2f (%s)", macro_multiplier, macro_desc)
+    # ── Makro çarpanı — bir kez hesapla (6 faktör) ───────────────────────
+    macro_multiplier, macro_desc, macro_detail = get_macro_multiplier()
+    logger.info("Makro çarpan: %.2f (skor: %.0f)", macro_multiplier,
+                macro_detail.get("macro_score", 0))
 
-    # Haberleri çek ve filtrele
+    # ── Haberleri çek ve filtrele ─────────────────────────────────────────
     all_articles    = fetch_radar_news(max_age_hours=max_age_hours)
     signal_articles = filter_signal_articles(all_articles)
     if not signal_articles:
         signal_articles = all_articles[:50]
 
-    # Ticker tespiti
+    # ── Ticker tespiti ────────────────────────────────────────────────────
     ticker_map = extract_tickers_from_articles(signal_articles)
     if not ticker_map:
         logger.warning("Radar: No tickers found")
@@ -477,52 +806,75 @@ def run_radar(
         if progress_callback:
             progress_callback(ticker, idx + 1, total)
 
-        # Katman 1: Zengin Temel Skor
+        # Katman 1: Zengin Temel Skor (9 faktör)
         fundamental_score, meta = get_fundamental_score(ticker)
         multiplier = get_base_multiplier(fundamental_score)
 
-        # Katman 2: Haber Etkisi (Claude)
+        # Katman 2: Haber Etkisi + Gerçek EPS Sürprizi (Claude)
+        eps_score, eps_desc = get_eps_surprise(ticker)
         claude_result = analyse_radar_opportunity(ticker, articles, macro_desc)
         if not claude_result:
             continue
 
         haber_etkisi    = claude_result["haber_etkisi"]
-        surpriz_faktoru = claude_result["surpriz_faktoru"]
+        # Sürpriz = Claude tahmini × 0.6 + EPS/analist verisi × 0.4
+        surpriz_faktoru = round(
+            claude_result["surpriz_faktoru"] * 0.6 + eps_score * 0.4, 1
+        )
 
-        # Katman 3: Momentum
+        # Katman 3: Momentum (52H, hacim, günlük değişim)
         momentum_score = get_momentum_score(ticker, meta)
 
         # Katman 4: Insider Bonus
         insider_bonus = get_insider_bonus(ticker)
-        if insider_bonus > 0:
-            logger.info("Insider bonus %s: +%.1f", ticker, insider_bonus)
 
-        # Final Formül
-        radar_score = (
+        # Katman 5: Hafıza Trendi
+        memory_bonus, memory_desc = get_memory_context(ticker)
+
+        # ── Final Formül ──────────────────────────────────────────────────
+        base_score = (
             fundamental_score * 0.25 +
             haber_etkisi       * 0.30 +
             surpriz_faktoru    * 0.20 +
             momentum_score     * 0.15
-        ) * macro_multiplier + insider_bonus
-
+        )
+        radar_score = base_score * macro_multiplier + insider_bonus + memory_bonus
         radar_score = round(min(100, max(0, radar_score)), 1)
 
         if radar_score < min_radar_score:
             continue
 
+        # ── Pozisyon Büyüklüğü Önerisi ────────────────────────────────────
+        position_rec = get_position_recommendation(
+            ticker, radar_score, fundamental_score, macro_multiplier, meta
+        )
+
         results.append({
+            # Temel
             "ticker":            ticker,
             "radar_score":       radar_score,
             "fundamental_score": fundamental_score,
             "momentum_score":    momentum_score,
+            # Haber & Sürpriz
             "haber_etkisi":      haber_etkisi,
             "surpriz_faktoru":   surpriz_faktoru,
-            "insider_bonus":     insider_bonus,
+            "eps_score":         eps_score,
+            "eps_desc":          eps_desc,
+            # Makro
             "macro_multiplier":  macro_multiplier,
             "macro_desc":        macro_desc,
+            "macro_detail":      macro_detail,
+            # Insider & Hafıza
+            "insider_bonus":     insider_bonus,
+            "memory_bonus":      memory_bonus,
+            "memory_desc":       memory_desc,
+            # Pozisyon
+            "position_rec":      position_rec,
+            # Claude
             "neden":             claude_result["neden"],
             "tavsiye":           claude_result["tavsiye"],
             "katalizor":         claude_result.get("katalizor", ""),
+            # Meta
             "articles":          articles[:5],
             "price":             meta.get("price", 0),
             "market_cap":        meta.get("market_cap", 0),
@@ -539,5 +891,5 @@ def run_radar(
         time.sleep(0.3)
 
     results.sort(key=lambda x: x["radar_score"], reverse=True)
-    logger.info("Radar v2: %d opportunities above %.0f", len(results), min_radar_score)
+    logger.info("Radar v3: %d opportunities above %.0f", len(results), min_radar_score)
     return results
