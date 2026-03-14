@@ -397,7 +397,7 @@ if missing_keys:
 # ─────────────────────────────────────────────────────────────────────────────
 # TABS
 # ─────────────────────────────────────────────────────────────────────────────
-tab_screener, tab_portfolio, tab_radar, tab_lookup, tab_memory, tab_watchlist = st.tabs(["📡  Sektör Tarayıcı", "💼  Portföyüm", "🔭  Fırsat Radarı", "🔍  Hisse Sorgula", "🧠  Hafıza", "👁  Takip"])
+tab_screener, tab_portfolio, tab_radar, tab_lookup, tab_memory, tab_watchlist, tab_macro = st.tabs(["📡  Sektör Tarayıcı", "💼  Portföyüm", "🔭  Fırsat Radarı", "🔍  Hisse Sorgula", "🧠  Hafıza", "👁  Takip", "🌍  Makro"])
 
 # ─────────────────────────────────────────────────────────────────────────────
 # STATE INIT
@@ -416,6 +416,12 @@ if "scenario_analysis" not in st.session_state:
     st.session_state["scenario_analysis"] = ""
 if "scenario_title" not in st.session_state:
     st.session_state["scenario_title"] = ""
+if "macro_data" not in st.session_state:
+    st.session_state["macro_data"] = {}
+if "macro_regime" not in st.session_state:
+    st.session_state["macro_regime"] = {}
+if "macro_claude_analysis" not in st.session_state:
+    st.session_state["macro_claude_analysis"] = ""
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2468,3 +2474,180 @@ with tab_watchlist:
         if rows:
             df_wl = _pd_wl.DataFrame(rows).sort_values("52H Pozisyon %", ascending=False)
             st.dataframe(df_wl, use_container_width=True, hide_index=True)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TAB 7 — MAKRO GÖSTERGE PANELİ
+# ─────────────────────────────────────────────────────────────────────────────
+
+with tab_macro:
+    from macro_dashboard import (
+        fetch_macro_data, compute_market_regime, build_claude_macro_context
+    )
+
+    st.markdown(
+        '<div style="font-size:0.7rem;color:#5a6a7a;text-transform:uppercase;'
+        'letter-spacing:0.1em;margin-bottom:1rem;">'
+        '► MAKRO GÖSTERGE PANELİ — Piyasa Rejimi & Bağlam</div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── Veri Çek ─────────────────────────────────────────────────────────────
+    if st.button("🔄 Makro Verileri Güncelle", key="btn_macro_refresh"):
+        st.session_state.pop("macro_data", None)
+        st.session_state.pop("macro_regime", None)
+
+    if "macro_data" not in st.session_state:
+        with st.spinner("Makro veriler çekiliyor..."):
+            try:
+                _macro_data   = fetch_macro_data()
+                _macro_regime = compute_market_regime(_macro_data)
+                st.session_state["macro_data"]   = _macro_data
+                st.session_state["macro_regime"]  = _macro_regime
+            except Exception as _e:
+                st.error(f"Makro veri çekme hatası: {_e}")
+                _macro_data   = {}
+                _macro_regime = {"regime": "CAUTION", "label": "Veri Yok",
+                                 "color": "#5a6a7a", "bg": "#1e2833",
+                                 "description": "Veriler yüklenemedi."}
+
+    _macro_data   = st.session_state.get("macro_data", {})
+    _macro_regime = st.session_state.get("macro_regime", {})
+
+    if not _macro_data:
+        st.info("Verileri yüklemek için 'Makro Verileri Güncelle' butonuna bas.")
+    else:
+        # ── Rejim Kutusu ─────────────────────────────────────────────────────
+        _rc = _macro_regime.get("color", "#5a6a7a")
+        _rb = _macro_regime.get("bg", "#1e2833")
+        st.markdown(
+            f'<div style="border:1.5px solid {_rc};border-radius:10px;'
+            f'padding:1rem 1.2rem;margin-bottom:1.2rem;display:flex;'
+            f'align-items:flex-start;gap:1rem;">'
+            f'<div style="min-width:140px;">'
+            f'<div style="font-size:0.6rem;color:#5a6a7a;text-transform:uppercase;'
+            f'letter-spacing:0.08em;margin-bottom:4px;">Piyasa Rejimi</div>'
+            f'<div style="font-size:1.2rem;font-weight:700;color:{_rc};">'
+            f'{_macro_regime.get("label","")}</div>'
+            f'</div>'
+            f'<div style="font-size:0.78rem;color:#8a9ab0;line-height:1.7;padding-top:4px;">'
+            f'{_macro_regime.get("description","")}'
+            f'</div></div>',
+            unsafe_allow_html=True,
+        )
+
+        # ── Gösterge Grupları ─────────────────────────────────────────────────
+        _groups = [
+            ("fear",      "Korku & Volatilite", ["VIX", "YIELD_CURVE"]),
+            ("rates",     "Faiz Ortamı",        ["TNX", "IRX", "TLT"]),
+            ("fx_comm",   "Dolar & Emtia",      ["DXY", "GOLD", "OIL", "COPPER"]),
+            ("market",    "Piyasa",             ["SPX", "NDX"]),
+        ]
+
+        _signal_colors = {
+            "green":   ("#00c48c", "#0d2b1a", "✅"),
+            "amber":   ("#ffb300", "#2b1f00", "⚡"),
+            "red":     ("#e74c3c", "#2b0a0a", "⚠"),
+            "neutral": ("#5a6a7a", "#1a1f26", "—"),
+        }
+
+        for _gkey, _glabel, _keys in _groups:
+            _items = [_macro_data[k] for k in _keys if k in _macro_data]
+            if not _items:
+                continue
+
+            st.markdown(
+                f'<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+                f'letter-spacing:0.08em;margin:1rem 0 0.4rem;">{_glabel}</div>',
+                unsafe_allow_html=True,
+            )
+
+            _cols = st.columns(len(_items))
+            for _col, _item in zip(_cols, _items):
+                _sc, _bg, _emoji = _signal_colors.get(_item.signal, _signal_colors["neutral"])
+                _prefix = "$" if _item.unit == "$" else ""
+                _suffix = _item.unit if _item.unit != "$" else ""
+                _chg_c  = "#00c48c" if _item.change_pct >= 0 else "#e74c3c"
+                _chg_s  = f"{_item.change_pct:+.2f}%"
+
+                _col.markdown(
+                    f'<div style="background:#0d1117;border:1px solid {_sc}33;'
+                    f'border-left:3px solid {_sc};border-radius:0 8px 8px 0;'
+                    f'padding:0.7rem 0.8rem;">'
+                    f'<div style="font-size:0.6rem;color:#5a6a7a;margin-bottom:3px;">{_item.label}</div>'
+                    f'<div style="font-size:1.1rem;font-weight:700;color:{_sc};">'
+                    f'{_prefix}{_item.value:.2f}{_suffix}</div>'
+                    f'<div style="font-size:0.65rem;color:{_chg_c};margin-top:1px;">{_chg_s}</div>'
+                    f'<div style="font-size:0.6rem;color:#5a6a7a;margin-top:4px;line-height:1.5;">'
+                    f'{_item.note}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+
+        # ── Sinyal Özet Tablosu ───────────────────────────────────────────────
+        st.markdown(
+            '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+            'letter-spacing:0.08em;margin:1.2rem 0 0.4rem;">Sinyal Özeti</div>',
+            unsafe_allow_html=True,
+        )
+
+        _all_items = list(_macro_data.values())
+        _all_items.sort(key=lambda x: {"red": 0, "amber": 1, "green": 2, "neutral": 3}.get(x.signal, 3))
+
+        for _item in _all_items:
+            _sc, _, _emoji = _signal_colors.get(_item.signal, _signal_colors["neutral"])
+            _prefix = "$" if _item.unit == "$" else ""
+            _suffix = _item.unit if _item.unit != "$" else ""
+            st.markdown(
+                f'<div style="display:flex;align-items:center;gap:10px;'
+                f'padding:6px 0;border-bottom:0.5px solid #1e2833;">'
+                f'<span style="font-size:11px;color:{_sc};min-width:16px;">{_emoji}</span>'
+                f'<span style="font-size:12px;color:#8a9ab0;min-width:180px;">{_item.label}</span>'
+                f'<span style="font-size:12px;font-weight:600;color:#e0e6ed;min-width:80px;">'
+                f'{_prefix}{_item.value:.2f}{_suffix}</span>'
+                f'<span style="font-size:11px;color:#5a6a7a;">{_item.note}</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+        # ── Claude Makro Analizi ──────────────────────────────────────────────
+        st.markdown('<hr style="border-color:#1e2833;margin:1.2rem 0;">', unsafe_allow_html=True)
+        st.markdown(
+            '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+            'letter-spacing:0.08em;margin-bottom:0.5rem;">Claude Makro Yorumu</div>',
+            unsafe_allow_html=True,
+        )
+
+        if st.button("🧠 Claude ile Makroyu Yorumla", key="btn_macro_claude"):
+            _macro_ctx = build_claude_macro_context(_macro_data, _macro_regime)
+            _api_key   = os.getenv("ANTHROPIC_API_KEY", "")
+            if not _api_key:
+                st.error("ANTHROPIC_API_KEY eksik.")
+            else:
+                with st.spinner("Claude makro ortamı analiz ediyor..."):
+                    import anthropic as _ant
+                    _client = _ant.Anthropic(api_key=_api_key)
+                    _prompt = f"""{_macro_ctx}
+
+Yukarıdaki makro verilere bakarak şunları değerlendir:
+
+1. **Genel Piyasa Ortamı**: Şu an hangi aşamadayız? (genişleme, yavaşlama, daralma, toparlanma)
+2. **En Kritik Risk**: Şu an portföy için en tehlikeli gösterge hangisi ve neden?
+3. **En Önemli Fırsat**: Mevcut ortamda hangi sektör veya varlık tipi öne çıkıyor?
+4. **Portföy Tavsiyesi**: Bu makro ortamda ideal portföy dağılımı nasıl olmalı? (savunmacı/saldırgan/dengeli)
+5. **Önümüzdeki 4-8 Hafta**: Dikkat edilmesi gereken kritik gelişmeler neler?
+
+Türkçe, net ve somut yaz. Genel laflar değil, bu spesifik rakamlara dayalı yorum yap."""
+
+                    try:
+                        _resp = _client.messages.create(
+                            model="claude-opus-4-5",
+                            max_tokens=1500,
+                            messages=[{"role": "user", "content": _prompt}]
+                        )
+                        st.session_state["macro_claude_analysis"] = _resp.content[0].text
+                    except Exception as _e:
+                        st.error(f"Claude bağlantı hatası: {_e}")
+
+        if st.session_state.get("macro_claude_analysis"):
+            st.markdown(st.session_state["macro_claude_analysis"])
