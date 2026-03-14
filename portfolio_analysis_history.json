@@ -1,0 +1,31 @@
+[
+  {
+    "date": "2026-03-14",
+    "timestamp": "2026-03-14T12:23:00",
+    "type": "risk",
+    "analysis": "# 📈 KURUMSAL PORTFÖY ANALİZ RAPORU\n\n---\n\n## 🔴 RİSK DEĞERLENDİRMESİ\n\n| Risk Kategorisi | Puan | Açıklama |\n|---|---|---|\n| **Sektörel Yoğunlaşma** | 8/10 | Teknoloji %29 ile kritik seviyede. Financial Services+Tech birlikte %44 - tek bir Fed kararı portföyün yarısını vurabilir |\n| **Korelasyon Riski** | 7/10 | AVGO-AMD-QCOM aynı yarı iletken döngüsüne bağlı. SOFI-IREN ikisi de fintech/kripto korelasyonlu. 6 hisse birlikte hareket ediyor |\n| **Sistematik/Makro Risk** | 7/10 | Portföyün %60'ı faiz hassasiyeti yüksek growth hisselerden oluşuyor. Stagflasyon senaryosunda ciddi kayıp riski |\n| **Likidite Riski** | 4/10 | ONDS, OKLO, ZETA gibi küçük hacimli hisseler %13 ağırlıkta - acil çıkışta spread kaybı olabilir |\n| **Döviz/Jeopolitik Risk** | 6/10 | QCOM ve AVGO'nun Çin gelir bağımlılığı %20+. Ticaret savaşı tırmanırsa doğrudan etkilenir |\n\n**Genel Risk Skoru: 7/10** — 🟠 **YÜKSEK**\n\n> Portföy agresif büyüme odaklı, defansif varlık neredeyse yok. Risk-getiri dengesi bozuk.\n\n---\n\n## 📊 SEKTÖREL ANALİZ\n\n### 🚨 Kritik Yoğunlaşma: Teknoloji (%29)\n```\nAVGO (-5.3%) + AMD (-12.1%) + QCOM (-27.1%) + CRWD (-7.2%) + ZETA (-12.2%)\n= $1,857 toplam değer | Toplam P&L: -$230\n```\n\n**Tehlike:** Bu 5 hissenin 4'ü zararda ve hepsi aynı makro faktörlere (AI hype döngüsü, yarı iletken talebi, Fed politikası) bağımlı. Nasdaq %10 düzeltme yapsa portföy %15+ kaybeder.\n\n### ⚠️ Gizli Korelasyon: Kripto/Fintech Kümesi\n```\nSOFI (-26.2%) + IREN (-3.0%) \n= $981 toplam | Ağırlık: %15\n```\nIREN Bitcoin madencisi, SOFI kripto-meraklı müşteri tabanına sahip. BTC düşüşünde ikisi birlikte çöker.\n\n### ✅ Görece Sağlıklı: Defansif/Temettü\n```\nPPA (+13.9%) + SCHD (+0.1%) + CCJ (+6.2%)\n= $1,356 | Ağırlık: sadece %21\n```\nPortföyün tek defansif bacağı. Yetersiz.\n\n---\n\n## ⚡ ACİL AKSİYON ÖNERİLERİ\n\n### **[1. Öncelik]** 🔴 QCOM → **TAMAMEN SAT**\n| | |\n|---|---|\n| **Durum** | 🔴 Zararda: -27.1% | -$81 P&L |\n| **Güncel Değer** | $217 (2 adet × $129.82) |\n| **Neden** | Çin gelir bağımlılığı %62, Huawei lisans kaybı riski",
+    "macro_regime": "",
+    "scenario": "",
+    "tickers": [
+      "PPA",
+      "VRT",
+      "AVGO",
+      "AMZN",
+      "SOFI",
+      "NBIS",
+      "IREN",
+      "CRWD",
+      "CCJ",
+      "ZETA",
+      "RKLB",
+      "OKLO",
+      "AMD",
+      "SCHD",
+      "QCOM",
+      "ONDS"
+    ],
+    "total_value": 6452.26025929125,
+    "position_count": 16,
+    "extra": {}
+  }
+]
