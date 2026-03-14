@@ -187,20 +187,40 @@ def update_position(ticker: str, shares: float, avg_cost: float) -> list[dict]:
     return positions
 
 
-def sell_position(ticker: str, shares_sold: float) -> tuple[list[dict], str]:
+def sell_position(ticker: str, shares_sold: float, sell_price: float = 0.0) -> tuple[list[dict], str]:
+    """
+    Pozisyon azalt veya kapat.
+    sell_price > 0 ise K/Z hesaplanır ve mesaja eklenir.
+    """
     positions, sha = _github_read()
     ticker = ticker.upper().strip()
 
     for i, pos in enumerate(positions):
         if pos["ticker"] == ticker:
+            avg_cost  = pos.get("avg_cost", 0)
             remaining = pos["shares"] - shares_sold
+
+            # K/Z hesapla
+            pnl_str = ""
+            if sell_price > 0 and avg_cost > 0:
+                pnl_per_share = sell_price - avg_cost
+                pnl_total     = pnl_per_share * shares_sold
+                pnl_pct       = (pnl_per_share / avg_cost) * 100
+                sign          = "+" if pnl_total >= 0 else ""
+                emoji         = "✅" if pnl_total >= 0 else "🔴"
+                pnl_str = (
+                    f" {emoji} Satış K/Z: {sign}${pnl_total:,.2f} "
+                    f"({sign}{pnl_pct:.2f}% / hisse başı {sign}${pnl_per_share:.2f})"
+                )
+
             if remaining <= 0:
                 positions.pop(i)
-                msg = f"{ticker} tamamen kapatıldı."
+                msg = f"{ticker} tamamen kapatıldı.{pnl_str}"
             else:
                 pos["shares"]  = remaining
                 pos["updated"] = datetime.now().strftime("%Y-%m-%d %H:%M")
-                msg = f"{ticker}: {remaining:.4f} adet kaldı."
+                msg = f"{ticker}: {remaining:.4f} adet kaldı.{pnl_str}"
+
             _github_write(positions, sha)
             return positions, msg
 
