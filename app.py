@@ -396,7 +396,7 @@ if missing_keys:
 # ─────────────────────────────────────────────────────────────────────────────
 # TABS
 # ─────────────────────────────────────────────────────────────────────────────
-tab_screener, tab_portfolio, tab_radar, tab_lookup, tab_memory = st.tabs(["📡  Sektör Tarayıcı", "💼  Portföyüm", "🔭  Fırsat Radarı", "🔍  Hisse Sorgula", "🧠  Hafıza"])
+tab_screener, tab_portfolio, tab_radar, tab_lookup, tab_memory, tab_watchlist = st.tabs(["📡  Sektör Tarayıcı", "💼  Portföyüm", "🔭  Fırsat Radarı", "🔍  Hisse Sorgula", "🧠  Hafıza", "👁  Takip"])
 
 # ─────────────────────────────────────────────────────────────────────────────
 # STATE INIT
@@ -2179,3 +2179,136 @@ with tab_lookup:
             '</div>',
             unsafe_allow_html=True,
         )
+# ─────────────────────────────────────────────────────────────────────────────
+
+with tab_watchlist:
+    from breakout_scanner import (
+        load_watchlist, add_to_watchlist, remove_from_watchlist,
+        check_breakout,
+    )
+
+    st.markdown(
+        '<div style="font-size:0.7rem;color:#5a6a7a;text-transform:uppercase;'
+        'letter-spacing:0.1em;margin-bottom:1rem;">'
+        '► TAKİP LİSTESİ — 52H Kırılma Takibi</div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── Watchlist yönetimi ────────────────────────────────────────────────
+    wl_col1, wl_col2 = st.columns([2, 1])
+
+    with wl_col1:
+        watchlist = load_watchlist()
+        st.markdown(
+            f'<div style="font-size:0.65rem;color:#5a6a7a;margin-bottom:0.5rem;">'
+            f'{len(watchlist)} hisse takip ediliyor — sabah radarında otomatik 52H kontrolü yapılır</div>',
+            unsafe_allow_html=True,
+        )
+        add_c, btn_c = st.columns([3, 1])
+        with add_c:
+            wl_new = st.text_input("Takibe al:", placeholder="örn: AAPL",
+                                   key="wl_add_input", label_visibility="collapsed").upper().strip()
+        with btn_c:
+            if st.button("➕ Ekle", key="wl_add_btn", use_container_width=True):
+                if wl_new:
+                    add_to_watchlist(wl_new)
+                    st.success(f"{wl_new} eklendi.")
+                    st.rerun()
+
+        if watchlist:
+            for i in range(0, len(watchlist), 6):
+                chunk = watchlist[i:i+6]
+                cols  = st.columns(len(chunk))
+                for col, tk in zip(cols, chunk):
+                    if col.button(f"✕ {tk}", key=f"wl_rm_{tk}", use_container_width=True):
+                        remove_from_watchlist(tk)
+                        st.rerun()
+        else:
+            st.info("Takip listesi boş. Yukarıdan hisse ekleyebilirsin.")
+
+    with wl_col2:
+        st.markdown(
+            '<div style="font-size:0.72rem;color:#8a9ab0;line-height:1.8;">'
+            '• Sabah radarında otomatik taranır<br>'
+            '• %0.5 yakın → ⚡ alarm<br>'
+            '• 52H kırılınca → 🔥 alarm<br>'
+            '• Portföy hisseleri zaten takip edilir<br>'
+            '• Alarm Telegram\'a gönderilir'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+    # ── Manuel anlık tarama ───────────────────────────────────────────────
+    st.markdown('<hr style="border-color:#1e2833;margin:1rem 0;">', unsafe_allow_html=True)
+
+    if st.button("🔍 Şimdi 52H Kontrol Et", key="wl_scan_btn"):
+        if not watchlist:
+            st.warning("Takip listesi boş.")
+        else:
+            results = []
+            prog = st.progress(0)
+            for i, tk in enumerate(watchlist):
+                r = check_breakout(tk)
+                if r:
+                    r["source"] = "watchlist"
+                    results.append(r)
+                prog.progress((i + 1) / len(watchlist))
+            prog.empty()
+            st.session_state["wl_scan_results"] = results
+            st.session_state["wl_all_checked"]  = watchlist[:]
+
+    if "wl_all_checked" in st.session_state:
+        all_checked      = st.session_state.get("wl_all_checked", [])
+        results          = st.session_state.get("wl_scan_results", [])
+        breakout_tickers = {r["ticker"] for r in results}
+
+        st.markdown(
+            f'<div style="font-size:0.65rem;color:#5a6a7a;margin:0.5rem 0;">'
+            f'{len(all_checked)} kontrol edildi — {len(results)} alarm</div>',
+            unsafe_allow_html=True,
+        )
+
+        if results:
+            for r in results:
+                emoji  = "🔥" if r["confirmed"] else "⚡"
+                status = "YENİ ZİRVE" if r["confirmed"] else "ZİRVEYE YAKLAŞIYOR"
+                sc     = "#00c48c" if r["confirmed"] else "#ffb300"
+                chg_c  = "#00c48c" if r["change_pct"] >= 0 else "#e74c3c"
+                vol_str = f'Hacim {r["vol_ratio"]:.1f}x &nbsp;|&nbsp; ' if r["vol_ratio"] >= 1.5 else ""
+                st.markdown(
+                    f'<div style="background:#0d1117;border:1px solid {sc};border-radius:8px;'
+                    f'padding:0.9rem 1.1rem;margin-bottom:0.5rem;">'
+                    f'<div style="display:flex;justify-content:space-between;">'
+                    f'<span style="font-size:1rem;font-weight:700;color:#e0e6ed;">{emoji} {r["ticker"]}</span>'
+                    f'<span style="font-size:0.7rem;color:{sc};font-weight:600;">{status}</span>'
+                    f'</div>'
+                    f'<div style="font-size:0.78rem;color:#8a9ab0;margin-top:6px;line-height:1.9;">'
+                    f'Fiyat: <b style="color:#e0e6ed;">${r["price"]:.2f}</b>'
+                    f' &nbsp;|&nbsp; Günlük: <span style="color:{chg_c};">{r["change_pct"]:+.1f}%</span>'
+                    f' &nbsp;|&nbsp; 52H: <b style="color:#e0e6ed;">${r["w52h"]:.2f}</b><br>'
+                    f'{vol_str}52H Pozisyon: <b style="color:{sc};">%{r["range_pct"]:.0f}</b>'
+                    f'{"&nbsp;— Kalan: %" + str(abs(r["upside"])) if not r["confirmed"] else " ✅ Zirve kırıldı"}'
+                    f'</div></div>',
+                    unsafe_allow_html=True,
+                )
+        else:
+            st.success("✅ 52H yakınında hisse yok.")
+
+        # Özet tablo
+        import yfinance as _yf_wl
+        import pandas as _pd_wl
+        rows = []
+        for tk in all_checked:
+            try:
+                fi    = _yf_wl.Ticker(tk).fast_info
+                price = float(getattr(fi, "last_price", 0) or 0)
+                w52h  = float(getattr(fi, "year_high", 0) or 0)
+                w52l  = float(getattr(fi, "year_low", 0) or 0)
+                pos   = round((price - w52l) / (w52h - w52l) * 100, 1) if (w52h - w52l) > 0 else 0
+                alarm = "🔥" if (tk in breakout_tickers and any(r["confirmed"] for r in results if r["ticker"] == tk))                         else "⚡" if tk in breakout_tickers else "—"
+                rows.append({"Ticker": tk, "Fiyat": f"${price:.2f}", "52H": f"${w52h:.2f}", "52H Pozisyon %": pos, "Alarm": alarm})
+            except Exception:
+                rows.append({"Ticker": tk, "Fiyat": "—", "52H": "—", "52H Pozisyon %": 0, "Alarm": "?"})
+        if rows:
+            df_wl = _pd_wl.DataFrame(rows).sort_values("52H Pozisyon %", ascending=False)
+            st.dataframe(df_wl, use_container_width=True, hide_index=True)

@@ -33,8 +33,19 @@ def main():
 
     from radar_engine      import run_radar
     from telegram_notifier import send_message, format_radar_summary
+    from breakout_scanner  import run_breakout_scan, format_breakout_message
 
-    # Radar çalıştır
+    # ── 1. 52H Kırılma Alarmı ─────────────────────────────────────────────
+    logger.info("52H kırılma taraması başlıyor...")
+    breakouts = run_breakout_scan()
+    if breakouts:
+        breakout_msg = format_breakout_message(breakouts)
+        ok_b = send_message(breakout_msg)
+        logger.info("52H alarmı gönderildi (%d kırılım): %s", len(breakouts), ok_b)
+    else:
+        logger.info("52H kırılımı yok.")
+
+    # ── 2. Fırsat Radarı ──────────────────────────────────────────────────
     results = run_radar(
         max_age_hours=8,
         min_radar_score=50,
@@ -43,14 +54,13 @@ def main():
 
     logger.info("%d fırsat bulundu", len(results))
 
-    # Telegram'a gönder
     message = format_radar_summary(results, title=f"🔭 {session_label}")
     ok      = send_message(message)
 
     if ok:
-        logger.info("Telegram mesajı başarıyla gönderildi.")
+        logger.info("Radar mesajı başarıyla gönderildi.")
     else:
-        logger.error("Telegram gönderimi başarısız.")
+        logger.error("Radar gönderimi başarısız.")
         sys.exit(1)
 
 
