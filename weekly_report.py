@@ -142,6 +142,66 @@ def format_surprise_telegram(results: list[dict], date_str: str) -> list[str]:
     return messages
 
 
+
+# ---------------------------------------------------------------------------
+# Makro Raporu Formatı
+# ---------------------------------------------------------------------------
+
+def format_macro_telegram(macro_data: dict, regime: dict, date_str: str) -> str:
+    """Makro gösterge özetini Telegram formatına çevir."""
+    rc = regime.get("label", "Bilinmiyor")
+    rdesc = regime.get("description", "")
+
+    lines = [
+        f"🌍 <b>Haftalık Makro Özet</b>",
+        f"<i>{date_str}</i>",
+        f"━━━━━━━━━━━━━━━━━━━━",
+        f"",
+        f"📊 <b>Piyasa Rejimi: {rc}</b>",
+        f"<i>{rdesc}</i>",
+        f"",
+    ]
+
+    signal_groups = {
+        "fear":      ("😰 Korku & Volatilite", ["VIX", "YIELD_CURVE"]),
+        "rates":     ("💵 Faiz Ortamı",        ["TNX", "IRX"]),
+        "fx":        ("💱 Dolar",              ["DXY"]),
+        "commodity": ("🏭 Emtia",              ["GOLD", "OIL", "COPPER"]),
+        "market":    ("📈 Piyasa",             ["SPX", "NDX"]),
+    }
+
+    emoji_map = {"green": "🟢", "amber": "🟡", "red": "🔴", "neutral": "⚪"}
+
+    for group_key, (group_label, keys) in signal_groups.items():
+        group_lines = []
+        for k in keys:
+            if k not in macro_data:
+                continue
+            ind = macro_data[k]
+            val   = ind.value if hasattr(ind, "value") else ind.get("value", 0)
+            chg   = ind.change_pct if hasattr(ind, "change_pct") else ind.get("change_pct", 0)
+            sig   = ind.signal if hasattr(ind, "signal") else ind.get("signal", "neutral")
+            note  = ind.note if hasattr(ind, "note") else ind.get("note", "")
+            unit  = ind.unit if hasattr(ind, "unit") else ind.get("unit", "")
+            label = ind.label if hasattr(ind, "label") else ind.get("label", k)
+            prefix = "$" if unit == "$" else ""
+            suffix = unit if unit != "$" else ""
+            em = emoji_map.get(sig, "⚪")
+            group_lines.append(
+                f"  {em} {label}: {prefix}{val:.2f}{suffix} ({chg:+.2f}%)"
+            )
+        if group_lines:
+            lines.append(f"<b>{group_label}</b>")
+            lines.extend(group_lines)
+            lines.append("")
+
+    lines.extend([
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"📊 <a href='{DASHBOARD_URL}'>Dashboard'u Aç</a>",
+    ])
+    return "\n".join(lines)
+
+
 # ---------------------------------------------------------------------------
 # Ana Fonksiyon
 # ---------------------------------------------------------------------------
@@ -187,6 +247,29 @@ def main():
             send_message(f"💼 <b>Portföy Raporu</b>\n\n📭 Veri alınamadı.")
     else:
         send_message(f"💼 <b>Portföy Raporu</b>\n\n📭 Portföyünüzde hisse bulunamadı.")
+
+    # ── RAPOR 0: Makro Özet ──────────────────────────────────────────────
+    logger.info("Makro raporu hazırlanıyor...")
+    try:
+        from macro_dashboard import fetch_macro_data, compute_market_regime
+        macro_data   = fetch_macro_data()
+        macro_regime = compute_market_regime(macro_data)
+
+        # Makro snapshot'ı hafızaya kaydet
+        try:
+            from analysis_memory import save_macro_snapshot
+            save_macro_snapshot(macro_data, macro_regime)
+        except Exception as e:
+            logger.warning("Makro snapshot kaydedilemedi: %s", e)
+
+        macro_msg = format_macro_telegram(macro_data, macro_regime, date_str)
+        if not send_message(macro_msg):
+            logger.error("Makro mesajı gönderilemedi")
+        else:
+            logger.info("Makro raporu gönderildi.")
+    except Exception as e:
+        logger.error("Makro raporu hatası: %s", e)
+        send_message(f"🌍 <b>Makro Özet</b>\n\n⚠️ Veriler alınamadı: {e}")
 
     # ── RAPOR 2: Sürpriz Hisseler ─────────────────────────────────────────
     logger.info("Sürpriz tarama başlatılıyor...")

@@ -22,7 +22,12 @@ from utils import (
 from data_fetcher import batch_enrich, get_quote
 from news_fetcher import fetch_news_batch, format_news_for_prompt
 from claude_analyzer import analyse_batch
-from analysis_memory import get_ticker_history, get_all_history, get_history_summary, get_top_tickers
+from analysis_memory import (
+    get_ticker_history, get_all_history, get_history_summary, get_top_tickers,
+    save_macro_snapshot, get_macro_history, get_macro_snapshot_by_date,
+    save_portfolio_analysis, get_portfolio_analysis_history,
+    find_comparison_record, build_comparison_context,
+)
 from radar_engine import run_radar
 
 
@@ -422,6 +427,10 @@ if "macro_regime" not in st.session_state:
     st.session_state["macro_regime"] = {}
 if "macro_claude_analysis" not in st.session_state:
     st.session_state["macro_claude_analysis"] = ""
+if "comparison_result" not in st.session_state:
+    st.session_state["comparison_result"] = ""
+if "comparison_title" not in st.session_state:
+    st.session_state["comparison_title"] = ""
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1525,11 +1534,23 @@ with tab_portfolio:
                         )
                         portfolio_text = "\n".join(portfolio_lines)
 
+                        # Makro bağlamı ekle
+                        _macro_ctx_str = ""
+                        _macro_regime_label = ""
+                        _m = st.session_state.get("macro_data", {})
+                        _mr = st.session_state.get("macro_regime", {})
+                        if _m and _mr:
+                            from macro_dashboard import build_claude_macro_context
+                            _macro_ctx_str = build_claude_macro_context(_m, _mr)
+                            _macro_regime_label = _mr.get("label", "")
+
                         prompt = f"""Sen deneyimli bir portföy yöneticisisin. Aşağıdaki portföyü kurumsal düzeyde analiz et ve SOMUT aksiyon önerileri sun.
 
 ÖNEMLI: Analizde hisselerin GÜNCEL PİYASA DEĞERİNİ ve P&L durumunu dikkate al.
 Zararda olan hisseler için "zararda satmak" vs "ortalama düşürmek" kararını değerlendir.
 Karda olan hisseler için "kârı realize etmek" vs "tutmak" kararını değerlendir.
+
+{_macro_ctx_str}
 
 ═══════════════════════════════════════
 PORTFÖY ({len(enriched_pos)} pozisyon | Toplam Güncel Değer: ${total_value:,.0f})
@@ -1600,6 +1621,16 @@ Genel laflar etme — "azaltabilirsin" değil "X'i sat, yerine Y al" de."""
                             )
                             analysis_text = resp.content[0].text if resp.content else ""
                             st.session_state["correlation_analysis"] = analysis_text
+                            # Hafızaya kaydet
+                            try:
+                                save_portfolio_analysis(
+                                    analysis_type="risk",
+                                    analysis_text=analysis_text,
+                                    portfolio_snapshot=enriched_pos,
+                                    macro_regime=_macro_regime_label,
+                                )
+                            except Exception:
+                                pass
                         except Exception as exc:
                             st.error(f"Claude bağlantı hatası: {exc}")
 
@@ -1671,9 +1702,21 @@ Genel laflar etme — "azaltabilirsin" değil "X'i sat, yerine Y al" de."""
                             f"{p['ticker']} ({p.get('sector','?')})" for p in positions
                         )
 
+                        # Makro bağlamı
+                        _sc_macro_str = ""
+                        _sc_macro_regime = ""
+                        _sm = st.session_state.get("macro_data", {})
+                        _smr = st.session_state.get("macro_regime", {})
+                        if _sm and _smr:
+                            from macro_dashboard import build_claude_macro_context
+                            _sc_macro_str = build_claude_macro_context(_sm, _smr)
+                            _sc_macro_regime = _smr.get("label", "")
+
                         prompt = f"""MAKRO SENARYO: "{scenario_input}"
 
 Bu senaryo gerçekleşirse aşağıdaki portföy hisseleri nasıl etkilenir?
+
+{_sc_macro_str}
 
 POZİSYONLAR: {sectors_list}
 
@@ -1697,6 +1740,16 @@ Türkçe yaz, kısa ve net ol."""
                             scenario_text = resp.content[0].text if resp.content else ""
                             st.session_state["scenario_analysis"] = scenario_text
                             st.session_state["scenario_title"] = scenario_input
+                            try:
+                                save_portfolio_analysis(
+                                    analysis_type="scenario",
+                                    analysis_text=scenario_text,
+                                    portfolio_snapshot=positions,
+                                    macro_regime=_sc_macro_regime,
+                                    scenario=scenario_input,
+                                )
+                            except Exception:
+                                pass
                         except Exception as exc:
                             st.error(f"Claude bağlantı hatası: {exc}")
 
@@ -1855,6 +1908,136 @@ with tab_memory:
                     "Fiyat":    f"${r['price']:.2f}" if r.get("price") else "—",
                 } for r in recent])
                 st.dataframe(df_recent, use_container_width=True, hide_index=True)
+
+        # ── Hisse Karşılaştırma Motoru ────────────────────────────────────────
+        st.markdown('<hr style="border-color:#1e2833;margin:1.5rem 0 0.8rem;">', unsafe_allow_html=True)
+        st.markdown(
+            '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+            'letter-spacing:0.1em;margin-bottom:0.6rem;">📊 Geçmişle Karşılaştır</div>',
+            unsafe_allow_html=True,
+        )
+        cmp_c1, cmp_c2, cmp_c3 = st.columns([1.5, 1, 1.5])
+        with cmp_c1:
+            cmp_ticker = st.text_input(
+                "Hisse:", placeholder="örn: NVDA", key="cmp_ticker"
+            ).upper().strip()
+        with cmp_c2:
+            cmp_weeks = st.selectbox(
+                "Ne kadar önce?",
+                [1, 2, 4, 8, 12],
+                format_func=lambda x: f"{x} hafta önce",
+                key="cmp_weeks",
+            )
+        with cmp_c3:
+            st.markdown('<div style="margin-top:1.7rem;"></div>', unsafe_allow_html=True)
+            cmp_btn = st.button("🔍 Karşılaştır", key="btn_compare", use_container_width=True)
+
+        if cmp_btn and cmp_ticker:
+            _cur_recs = get_ticker_history(cmp_ticker, limit=1)
+            _past_rec = find_comparison_record(cmp_ticker, weeks_ago=cmp_weeks)
+
+            if not _cur_recs:
+                st.warning(f"{cmp_ticker} için henüz analiz kaydı yok.")
+            elif not _past_rec:
+                st.info(f"{cmp_weeks} hafta öncesine ait kayıt bulunamadı — daha az seç veya daha fazla analiz bekle.")
+            else:
+                _cur_rec   = _cur_recs[0]
+                _cur_macro = get_macro_history(limit=1)
+                _cur_macro = _cur_macro[0] if _cur_macro else None
+                _past_macro = get_macro_snapshot_by_date(_past_rec["date"])
+
+                _cmp_ctx = build_comparison_context(
+                    cmp_ticker, _cur_rec, _past_rec,
+                    past_macro=_past_macro,
+                    current_macro=_cur_macro,
+                )
+
+                _api_key = os.getenv("ANTHROPIC_API_KEY", "")
+                if not _api_key:
+                    st.error("ANTHROPIC_API_KEY eksik.")
+                else:
+                    with st.spinner(f"{cmp_ticker} karşılaştırılıyor..."):
+                        import anthropic as _ant_cmp
+                        _cmp_client = _ant_cmp.Anthropic(api_key=_api_key)
+                        _cmp_prompt = f"""{_cmp_ctx}
+
+Bu iki analizi karşılaştır ve şunları yorumla:
+
+1. **Skor Değişimi**: {_past_rec.get('score')} → {_cur_rec.get('score')} — Bu değişim neden oldu?
+   - Şirket içi mi (earnings, ürün, yönetim)?
+   - Makro kaynaklı mı (faiz, VIX, dolar)?
+   - Sektörel baskı mı?
+
+2. **Fiyat vs Skor Uyumu**: Fiyat değişimi skor değişimiyle tutarlı mı? Ayrışma varsa ne anlama geliyor?
+
+3. **Makro Etki**: Geçen dönemle bugün arasındaki makro değişim bu hisseyi nasıl etkiledi?
+
+4. **Öneri**: Geçmiş analize göre şimdi pozisyon değişmeli mi? Tut / Artır / Azalt / Sat?
+
+Türkçe, net ve somut yaz. Spesifik rakamlara dayan."""
+
+                        try:
+                            _cmp_resp = _cmp_client.messages.create(
+                                model="claude-opus-4-5",
+                                max_tokens=1200,
+                                messages=[{"role": "user", "content": _cmp_prompt}]
+                            )
+                            _cmp_text = _cmp_resp.content[0].text if _cmp_resp.content else ""
+                            st.session_state["comparison_result"] = _cmp_text
+                            st.session_state["comparison_title"]  = f"{cmp_ticker} — {cmp_weeks} hafta karşılaştırması"
+                        except Exception as _e:
+                            st.error(f"Claude hatası: {_e}")
+
+        if st.session_state.get("comparison_result"):
+            st.markdown(
+                f'<div style="font-size:0.65rem;color:#ffb300;margin:0.5rem 0 0.3rem;">'
+                f'📌 {st.session_state.get("comparison_title","")}</div>',
+                unsafe_allow_html=True,
+            )
+            st.markdown(st.session_state["comparison_result"])
+
+        # ── Portföy Analiz Arşivi ─────────────────────────────────────────────
+        st.markdown('<hr style="border-color:#1e2833;margin:1.5rem 0 0.8rem;">', unsafe_allow_html=True)
+        st.markdown(
+            '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+            'letter-spacing:0.1em;margin-bottom:0.6rem;">🗂 Portföy Analiz Arşivi</div>',
+            unsafe_allow_html=True,
+        )
+
+        _arch_type = st.radio(
+            "Analiz türü:",
+            ["risk", "scenario", "correlation"],
+            format_func=lambda x: {"risk": "🔴 Risk Analizi", "scenario": "🎯 Senaryo", "correlation": "🔗 Korelasyon"}.get(x, x),
+            horizontal=True,
+            key="arch_type",
+        )
+
+        _arch_records = get_portfolio_analysis_history(analysis_type=_arch_type, limit=15)
+
+        if not _arch_records:
+            st.info(f"Henüz '{_arch_type}' türünde analiz kaydı yok.")
+        else:
+            for _ar in _arch_records:
+                _ar_label = (
+                    f"{_ar['date']} — {_ar.get('scenario', '') or _ar.get('macro_regime', '')} "
+                    f"| {_ar.get('position_count', 0)} hisse | ${_ar.get('total_value', 0):,.0f}"
+                ).strip(" —")
+                with st.expander(_ar_label, expanded=False):
+                    if _ar.get("macro_regime"):
+                        st.markdown(
+                            f'<div style="font-size:0.65rem;color:#5a6a7a;margin-bottom:0.4rem;">'
+                            f'Makro Rejim: {_ar["macro_regime"]}</div>',
+                            unsafe_allow_html=True,
+                        )
+                    if _ar.get("scenario"):
+                        st.markdown(
+                            f'<div style="font-size:0.65rem;color:#ffb300;margin-bottom:0.4rem;">'
+                            f'Senaryo: {_ar["scenario"]}</div>',
+                            unsafe_allow_html=True,
+                        )
+                    st.markdown(_ar.get("analysis", "")[:2000])
+                    if _ar.get("tickers"):
+                        st.caption("Pozisyonlar: " + ", ".join(_ar["tickers"]))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2504,6 +2687,11 @@ with tab_macro:
                 _macro_regime = compute_market_regime(_macro_data)
                 st.session_state["macro_data"]   = _macro_data
                 st.session_state["macro_regime"]  = _macro_regime
+                # Hafızaya kaydet
+                try:
+                    save_macro_snapshot(_macro_data, _macro_regime)
+                except Exception:
+                    pass
             except Exception as _e:
                 st.error(f"Makro veri çekme hatası: {_e}")
                 _macro_data   = {}

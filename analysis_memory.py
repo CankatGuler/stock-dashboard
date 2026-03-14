@@ -244,3 +244,310 @@ def get_top_tickers(limit: int = 10) -> list[dict]:
     # Önce en çok analiz edilenler, eşitlik durumunda en yüksek skor
     result.sort(key=lambda x: (-x["count"], -x["latest_score"]))
     return result[:limit]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Makro Snapshot Kayıt / Okuma
+# ─────────────────────────────────────────────────────────────────────────────
+
+MACRO_HISTORY_FILE = "macro_history.json"
+MAX_MACRO_RECORDS  = 200
+
+
+def _github_read_macro() -> tuple[list[dict], str]:
+    token = os.getenv("GITHUB_TOKEN", "")
+    repo  = os.getenv("GITHUB_REPO", "")
+    if not token or not repo:
+        return _local_read_json(MACRO_HISTORY_FILE), ""
+    url  = f"https://api.github.com/repos/{repo}/contents/{MACRO_HISTORY_FILE}"
+    hdrs = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
+    try:
+        r = requests.get(url, headers=hdrs, timeout=10)
+        if r.status_code == 404:
+            return [], ""
+        r.raise_for_status()
+        data = r.json()
+        return json.loads(base64.b64decode(data["content"]).decode()), data.get("sha", "")
+    except Exception as e:
+        logger.warning("macro_history read failed: %s", e)
+        return _local_read_json(MACRO_HISTORY_FILE), ""
+
+
+def _github_write_macro(records: list[dict], sha: str = "") -> bool:
+    token = os.getenv("GITHUB_TOKEN", "")
+    repo  = os.getenv("GITHUB_REPO", "")
+    if not token or not repo:
+        return _local_write_json(MACRO_HISTORY_FILE, records)
+    url  = f"https://api.github.com/repos/{repo}/contents/{MACRO_HISTORY_FILE}"
+    hdrs = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
+    payload = {
+        "message": f"Macro snapshot ({len(records)} records)",
+        "content": base64.b64encode(
+            json.dumps(records, indent=2, ensure_ascii=False).encode()
+        ).decode(),
+    }
+    if sha:
+        payload["sha"] = sha
+    try:
+        r = requests.put(url, headers=hdrs, json=payload, timeout=15)
+        r.raise_for_status()
+        return True
+    except Exception as e:
+        logger.warning("macro_history write failed: %s", e)
+        return _local_write_json(MACRO_HISTORY_FILE, records)
+
+
+def _local_read_json(filename: str) -> list[dict]:
+    if os.path.exists(filename):
+        try:
+            with open(filename, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return []
+
+
+def _local_write_json(filename: str, data) -> bool:
+    try:
+        with open(filename, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        return True
+    except Exception:
+        return False
+
+
+def save_macro_snapshot(macro_data: dict, regime: dict) -> bool:
+    """
+    Makro gösterge anlık görüntüsünü kaydet.
+    macro_data: {key: MacroIndicator} (dataclass değil dict olarak serialize edilmiş)
+    """
+    records, sha = _github_read_macro()
+    now = datetime.utcnow()
+
+    snapshot = {
+        "date":      now.strftime("%Y-%m-%d"),
+        "timestamp": now.strftime("%Y-%m-%dT%H:%M:%S"),
+        "regime":    regime.get("regime", ""),
+        "label":     regime.get("label", ""),
+        "indicators": {
+            k: {
+                "value":      v.value if hasattr(v, "value") else v.get("value", 0),
+                "change_pct": v.change_pct if hasattr(v, "change_pct") else v.get("change_pct", 0),
+                "signal":     v.signal if hasattr(v, "signal") else v.get("signal", ""),
+                "note":       v.note if hasattr(v, "note") else v.get("note", ""),
+            }
+            for k, v in macro_data.items()
+        }
+    }
+
+    records.append(snapshot)
+    if len(records) > MAX_MACRO_RECORDS:
+        records = records[-MAX_MACRO_RECORDS:]
+
+    return _github_write_macro(records, sha)
+
+
+def get_macro_history(limit: int = 52) -> list[dict]:
+    """Son N makro snapshot'ı döndür (en yeni önce)."""
+    records, _ = _github_read_macro()
+    return list(reversed(records))[:limit]
+
+
+def get_macro_snapshot_by_date(target_date: str) -> dict | None:
+    """
+    Belirli bir tarihe en yakın makro snapshot'ı bul.
+    target_date: 'YYYY-MM-DD'
+    """
+    records, _ = _github_read_macro()
+    if not records:
+        return None
+    records_sorted = sorted(records, key=lambda x: x.get("date", ""))
+    # En yakın tarihi bul
+    best = min(records_sorted, key=lambda x: abs(
+        (datetime.strptime(x["date"], "%Y-%m-%d") -
+         datetime.strptime(target_date, "%Y-%m-%d")).days
+    ))
+    return best
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Portföy Analizi Hafızası
+# ─────────────────────────────────────────────────────────────────────────────
+
+PORTFOLIO_ANALYSIS_FILE = "portfolio_analysis_history.json"
+MAX_PORTFOLIO_RECORDS   = 100
+
+
+def save_portfolio_analysis(
+    analysis_type: str,      # "risk" | "scenario" | "correlation"
+    analysis_text: str,
+    portfolio_snapshot: list[dict],
+    macro_regime: str = "",
+    scenario: str = "",
+    extra: dict = None,
+) -> bool:
+    """Portföy analizini hafızaya kaydet."""
+    records, sha = _read_portfolio_analysis_history()
+    now = datetime.utcnow()
+
+    record = {
+        "date":               now.strftime("%Y-%m-%d"),
+        "timestamp":          now.strftime("%Y-%m-%dT%H:%M:%S"),
+        "type":               analysis_type,
+        "analysis":           analysis_text[:2000],
+        "macro_regime":       macro_regime,
+        "scenario":           scenario,
+        "tickers":            [p.get("ticker", "") for p in portfolio_snapshot],
+        "total_value":        sum(p.get("current_value", 0) for p in portfolio_snapshot),
+        "position_count":     len(portfolio_snapshot),
+        "extra":              extra or {},
+    }
+
+    records.append(record)
+    if len(records) > MAX_PORTFOLIO_RECORDS:
+        records = records[-MAX_PORTFOLIO_RECORDS:]
+
+    return _write_portfolio_analysis_history(records, sha)
+
+
+def _read_portfolio_analysis_history() -> tuple[list[dict], str]:
+    token = os.getenv("GITHUB_TOKEN", "")
+    repo  = os.getenv("GITHUB_REPO", "")
+    if not token or not repo:
+        return _local_read_json(PORTFOLIO_ANALYSIS_FILE), ""
+    url  = f"https://api.github.com/repos/{repo}/contents/{PORTFOLIO_ANALYSIS_FILE}"
+    hdrs = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
+    try:
+        r = requests.get(url, headers=hdrs, timeout=10)
+        if r.status_code == 404:
+            return [], ""
+        r.raise_for_status()
+        data = r.json()
+        return json.loads(base64.b64decode(data["content"]).decode()), data.get("sha", "")
+    except Exception as e:
+        logger.warning("portfolio_analysis read failed: %s", e)
+        return _local_read_json(PORTFOLIO_ANALYSIS_FILE), ""
+
+
+def _write_portfolio_analysis_history(records: list[dict], sha: str = "") -> bool:
+    token = os.getenv("GITHUB_TOKEN", "")
+    repo  = os.getenv("GITHUB_REPO", "")
+    if not token or not repo:
+        return _local_write_json(PORTFOLIO_ANALYSIS_FILE, records)
+    url  = f"https://api.github.com/repos/{repo}/contents/{PORTFOLIO_ANALYSIS_FILE}"
+    hdrs = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
+    payload = {
+        "message": f"Portfolio analysis update ({len(records)} records)",
+        "content": base64.b64encode(
+            json.dumps(records, indent=2, ensure_ascii=False).encode()
+        ).decode(),
+    }
+    if sha:
+        payload["sha"] = sha
+    try:
+        r = requests.put(url, headers=hdrs, json=payload, timeout=15)
+        r.raise_for_status()
+        return True
+    except Exception as e:
+        logger.warning("portfolio_analysis write failed: %s", e)
+        return _local_write_json(PORTFOLIO_ANALYSIS_FILE, records)
+
+
+def get_portfolio_analysis_history(
+    analysis_type: str = None,
+    limit: int = 20
+) -> list[dict]:
+    """Portföy analiz geçmişini getir."""
+    records, _ = _read_portfolio_analysis_history()
+    if analysis_type:
+        records = [r for r in records if r.get("type") == analysis_type]
+    return list(reversed(records))[:limit]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Karşılaştırma Motoru
+# ─────────────────────────────────────────────────────────────────────────────
+
+def find_comparison_record(
+    ticker: str,
+    weeks_ago: int = 1,
+) -> dict | None:
+    """
+    Bir hisse için N hafta önceki analiz kaydını bul.
+    """
+    records, _ = _github_read_history()
+    ticker_records = [r for r in records if r.get("ticker", "").upper() == ticker.upper()]
+    if not ticker_records:
+        return None
+
+    target_date = datetime.utcnow() - __import__("datetime").timedelta(weeks=weeks_ago)
+    target_str  = target_date.strftime("%Y-%m-%d")
+
+    best = min(
+        ticker_records,
+        key=lambda x: abs(
+            (datetime.strptime(x["date"], "%Y-%m-%d") - target_date).days
+        )
+    )
+
+    # Eğer hedef tarihten çok uzaksa None döndür (2 haftalık tolerans)
+    if abs((datetime.strptime(best["date"], "%Y-%m-%d") - target_date).days) > 14:
+        return None
+    return best
+
+
+def build_comparison_context(
+    ticker: str,
+    current_record: dict,
+    past_record: dict,
+    past_macro: dict = None,
+    current_macro: dict = None,
+) -> str:
+    """
+    İki analiz kaydını karşılaştıran Claude prompt context'i oluştur.
+    """
+    lines = [
+        f"=== {ticker} ANALİZ KARŞILAŞTIRMASI ===",
+        "",
+        f"GÜNCEL ({current_record.get('date', '?')}):",
+        f"  Skor: {current_record.get('score', '?')}/100",
+        f"  Tavsiye: {current_record.get('tavsiye', '?')}",
+        f"  Fiyat: ${current_record.get('price', 0):.2f}",
+        f"  Özet: {current_record.get('ozet', '')[:200]}",
+        "",
+        f"GEÇMİŞ ({past_record.get('date', '?')}):",
+        f"  Skor: {past_record.get('score', '?')}/100",
+        f"  Tavsiye: {past_record.get('tavsiye', '?')}",
+        f"  Fiyat: ${past_record.get('price', 0):.2f}",
+        f"  Özet: {past_record.get('ozet', '')[:200]}",
+        "",
+    ]
+
+    # Değişimleri hesapla
+    score_diff = current_record.get("score", 0) - past_record.get("score", 0)
+    price_diff_pct = 0
+    if past_record.get("price", 0) > 0:
+        price_diff_pct = (
+            (current_record.get("price", 0) - past_record.get("price", 0))
+            / past_record.get("price", 0) * 100
+        )
+
+    lines.append(f"DEĞİŞİMLER:")
+    lines.append(f"  Skor: {past_record.get('score')} → {current_record.get('score')} ({score_diff:+d})")
+    lines.append(f"  Fiyat: ${past_record.get('price', 0):.2f} → ${current_record.get('price', 0):.2f} ({price_diff_pct:+.1f}%)")
+
+    # Makro bağlamı
+    if past_macro and current_macro:
+        lines.append("")
+        lines.append("MAKRO ORTAM DEĞİŞİMİ:")
+        for key in ["VIX", "TNX", "DXY", "SPX"]:
+            p_ind = past_macro.get("indicators", {}).get(key, {})
+            c_ind = current_macro.get("indicators", {}).get(key, {})
+            if p_ind and c_ind:
+                p_val = p_ind.get("value", 0)
+                c_val = c_ind.get("value", 0)
+                lines.append(f"  {key}: {p_val:.2f} → {c_val:.2f}")
+        lines.append(f"  Rejim: {past_macro.get('label', '?')} → {current_macro.get('label', '?')}")
+
+    lines.append("=" * 40)
+    return "\n".join(lines)
