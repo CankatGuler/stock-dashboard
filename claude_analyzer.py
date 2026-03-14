@@ -31,6 +31,14 @@ PUANLAMA KURALLARI:
 - Makro riskler (faiz artışı, jeopolitik, ambargo) skoru aşağı çeker.
 - Nötr ya da olumsuz haberler varsa skoru düşür.
 
+İÇERİDEN ALIM/SATIM KURALLARI (Form 4 verisi varsa uygula):
+- CEO veya CFO alım yapıyorsa: Skoru +5 ile +10 artır. Analiz özetinde mutlaka belirt.
+- 3+ yönetici küme alımı varsa: Skoru +8 ile +15 artır. Bu çok güçlü sinyaldir.
+- Yüksek tutarlı alım (>$1M): Skoru +3 ile +7 artır.
+- Küme satışı (3+ yönetici): Skoru -5 ile -10 düşür. Ciddi uyarı olarak değerlendir.
+- Tek kişilik satış: Kişisel sebep olabilir, skoru max -3 düşür, açıkla.
+- İçeriden işlem yoksa: Skoru etkileme, yorum yapma.
+
 ÇIKTI KURALI (KESİNLİKLE UYULACAK):
 Yanıtın SADECE ve SADECE aşağıdaki JSON formatında olmalıdır.
 JSON dışında hiçbir şey yazma; açıklama, markdown veya ```json fence kullanma.
@@ -39,7 +47,7 @@ JSON dışında hiçbir şey yazma; açıklama, markdown veya ```json fence kull
   "hisse_sembolu": "TICKER",
   "kategori": "Rocket 🚀 veya Balanced ⚖️ veya Shield 🛡️",
   "nihai_guven_skoru": <0-100 arası tam sayı>,
-  "analiz_ozeti": "<haber ve makro katalizörlerin net, tek cümlelik yorumu>",
+  "analiz_ozeti": "<haber, makro ve içeriden işlem verilerinin net, tek cümlelik yorumu>",
   "kritik_riskler": {
     "global_makro": "<dışsal riskler: faiz, jeopolitik, ambargo vb.>",
     "finansal_sirket_ozel": "<içsel riskler: borçluluk, Ar-Ge yükü vb.>"
@@ -48,7 +56,7 @@ JSON dışında hiçbir şey yazma; açıklama, markdown veya ```json fence kull
 }"""
 
 
-def _build_user_message(stock: dict, news_text: str, history_context: str = "") -> str:
+def _build_user_message(stock: dict, news_text: str, history_context: str = "", insider_context: str = "") -> str:
     """Construct the user-turn message with all relevant stock context."""
 
     mkt_cap_b = (stock.get("mktCap", 0) or 0) / 1e9
@@ -56,6 +64,10 @@ def _build_user_message(stock: dict, news_text: str, history_context: str = "") 
     fcf_m     = (stock.get("freeCashFlow", 0) or 0) / 1e6
     rd_m      = (stock.get("researchAndDevelopmentExpenses", 0) or 0) / 1e6
 
+    insider_section = (
+        f"İÇERİDEN ALIM/SATIM (SEC Form 4):\n{insider_context}\n---\n"
+        if insider_context else ""
+    )
     return f"""
 ANALİZ EDİLECEK HİSSE: {stock.get("ticker", "N/A")}
 Şirket Adı   : {stock.get("companyName", "N/A")}
@@ -77,8 +89,9 @@ ROIC         : {stock.get("roic", 0):.2%}
 FILTRELENMIŞ SON HABERLER (son 7 gün):
 {news_text}
 ---
+{insider_section}---
 {history_context}
-Yukarıdaki verilere ve haberlere dayanarak JSON formatında analiz yap.
+Yukarıdaki verilere, haberlere ve içeriden işlem verilerine dayanarak JSON formatında analiz yap.
 """.strip()
 
 
@@ -101,7 +114,40 @@ def analyse_stock(stock: dict, news_text: str, model: str = "claude-opus-4-5") -
 
     # Geçmiş analiz context'ini getir
     history_context = get_ticker_context_for_claude(stock.get("ticker", ""))
-    user_message = _build_user_message(stock, news_text, history_context)
+
+    # İçeriden alım/satım verisi (hata olursa atla — analizi engelleme)
+    insider_context = ""
+    try:
+        from insider_tracker import fetch_insider_transactions, score_transactions
+        _ins_txs    = fetch_insider_transactions(stock.get("ticker", ""), days=14)
+        _ins_scored = score_transactions(_ins_txs)
+        if _ins_txs:
+            _sig   = _ins_scored["signal"]
+            _score = _ins_scored["score"]
+            _parts = [f"Sinyal: {_sig} (Skor: {_score:+.1f})"]
+            if _ins_scored["buy_count"] > 0:
+                _parts.append(f"Alım: {_ins_scored['buy_count']} işlem, toplam ${_ins_scored['buy_value']/1000:.0f}K")
+            if _ins_scored["sell_count"] > 0:
+                _parts.append(f"Satış: {_ins_scored['sell_count']} işlem, toplam ${_ins_scored['sell_value']/1000:.0f}K")
+            if _ins_scored["ceo_involved"]:
+                _parts.append("CEO/CFO dahil — güçlü sinyal")
+            if _ins_scored["cluster_buy"]:
+                _parts.append("3+ yönetici küme alımı — çok güçlü boğa sinyali")
+            if _ins_scored["cluster_sell"]:
+                _parts.append("3+ yönetici küme satışı — dikkat")
+            # Son 3 işlem özeti
+            for t in _ins_txs[:3]:
+                tip   = "AL" if "P" in t.get("trade_type","").upper() else "SAT"
+                kisi  = t.get("insider_name","")[:25]
+                unvan = t.get("title","")[:20]
+                tarih = t.get("trade_date", t.get("filing_date",""))[:10]
+                deger = f"${t.get('value',0)/1000:.0f}K" if t.get('value') else ""
+                _parts.append(f"  [{tarih}] {kisi} ({unvan}): {tip} {deger}")
+            insider_context = "\n".join(_parts)
+    except Exception as _ie:
+        logger.debug("Insider veri alınamadı (%s): %s", stock.get("ticker"), _ie)
+
+    user_message = _build_user_message(stock, news_text, history_context, insider_context)
 
     try:
         message = client.messages.create(
