@@ -989,29 +989,39 @@ with tab_portfolio:
             price_map:  dict[str, float] = {}
             change_map: dict[str, float] = {}
             sector_map: dict[str, str]   = {}
+            w52h_map:   dict[str, float] = {}
+            w52l_map:   dict[str, float] = {}
             for pos in positions:
                 ticker_sym = pos["ticker"]
                 try:
-                    info = _yf_port.Ticker(ticker_sym).info
+                    info  = _yf_port.Ticker(ticker_sym).info
                     price = float(info.get("currentPrice") or info.get("regularMarketPrice") or 0)
                     prev  = float(info.get("previousClose") or price or 1)
                     chg   = ((price - prev) / prev * 100) if prev else 0
                     sec   = info.get("sector") or info.get("industry") or pos.get("sector", "Diğer")
+                    w52h  = float(info.get("fiftyTwoWeekHigh") or 0)
+                    w52l  = float(info.get("fiftyTwoWeekLow") or 0)
                     if price > 0:
                         price_map[ticker_sym]  = price
                         change_map[ticker_sym] = round(chg, 2)
                     else:
                         failed_tickers.append(ticker_sym)
                     sector_map[ticker_sym] = sec
+                    w52h_map[ticker_sym]   = w52h
+                    w52l_map[ticker_sym]   = w52l
                 except Exception:
                     # fast_info fallback
                     try:
-                        fi = _yf_port.Ticker(ticker_sym).fast_info
+                        fi    = _yf_port.Ticker(ticker_sym).fast_info
                         price = float(getattr(fi, "last_price", 0) or 0)
+                        w52h  = float(getattr(fi, "year_high", 0) or 0)
+                        w52l  = float(getattr(fi, "year_low", 0) or 0)
                         if price > 0:
                             price_map[ticker_sym] = price
                         else:
                             failed_tickers.append(ticker_sym)
+                        w52h_map[ticker_sym] = w52h
+                        w52l_map[ticker_sym] = w52l
                     except Exception:
                         failed_tickers.append(ticker_sym)
                     sector_map[ticker_sym] = pos.get("sector", "Diğer")
@@ -1025,9 +1035,29 @@ with tab_portfolio:
             )
 
         enriched_pos = enrich_portfolio_with_prices(positions, price_map)
-        # yfinance'ten gelen sektörü her pozisyona yaz
+        # yfinance'ten gelen sektör + 52H verilerini yaz
         for p in enriched_pos:
-            p["sector"] = sector_map.get(p["ticker"], p.get("sector", "Diğer"))
+            tk = p["ticker"]
+            p["sector"] = sector_map.get(tk, p.get("sector", "Diğer"))
+            p["w52h"]   = w52h_map.get(tk, 0)
+            p["w52l"]   = w52l_map.get(tk, 0)
+            # 52H pozisyon yüzdesi ve alarm durumu
+            price = p.get("current_price", 0)
+            w52h  = p["w52h"]
+            w52l  = p["w52l"]
+            if w52h > 0 and w52l > 0 and (w52h - w52l) > 0:
+                p["w52h_pos_pct"] = round((price - w52l) / (w52h - w52l) * 100, 1)
+            else:
+                p["w52h_pos_pct"] = 0
+            if w52h > 0 and price > 0:
+                if price >= w52h:
+                    p["breakout_status"] = "🔥"
+                elif price >= w52h * 0.995:
+                    p["breakout_status"] = "⚡"
+                else:
+                    p["breakout_status"] = ""
+            else:
+                p["breakout_status"] = ""
         summary      = portfolio_summary(enriched_pos)
         st.session_state["enriched_portfolio"] = enriched_pos  # korelasyon analizi için
 
@@ -1099,6 +1129,8 @@ with tab_portfolio:
             rows = []
             for p in enriched_pos:
                 sign = "+" if p["pnl_dollar"] >= 0 else ""
+                w52h_pos = p.get("w52h_pos_pct", 0)
+                alarm    = p.get("breakout_status", "")
                 rows.append({
                     "Ticker":        p["ticker"],
                     "Şirket":        p.get("notes", "")[:20] or p["ticker"],
@@ -1110,6 +1142,8 @@ with tab_portfolio:
                     "K/Z ($)":       f'{sign}${abs(p["pnl_dollar"]):,.0f}',
                     "K/Z (%)":       f'{sign}{p["pnl_pct"]:.2f}%',
                     "Ağırlık (%)":   f'{p["weight_pct"]:.1f}%',
+                    "52H Pos.":      f'%{w52h_pos:.0f}',
+                    "🔔":            alarm,
                 })
 
             df_port = pd.DataFrame(rows)
@@ -1121,8 +1155,22 @@ with tab_portfolio:
                     return "color: #e74c3c; font-weight: 600"
                 return ""
 
+            def color_52h(val):
+                if isinstance(val, str):
+                    pct = val.replace("%", "").strip()
+                    try:
+                        v = float(pct)
+                        if v >= 99:   return "color: #e74c3c; font-weight: 600"
+                        if v >= 90:   return "color: #ffb300; font-weight: 600"
+                        if v >= 75:   return "color: #00c48c"
+                    except Exception:
+                        pass
+                return ""
+
             st.dataframe(
-                df_port.style.map(color_pnl, subset=["K/Z ($)", "K/Z (%)"]),
+                df_port.style
+                    .map(color_pnl, subset=["K/Z ($)", "K/Z (%)"])
+                    .map(color_52h, subset=["52H Pos."]),
                 use_container_width=True,
                 hide_index=True,
             )
