@@ -955,20 +955,48 @@ with tab_portfolio:
             '</div>',
             unsafe_allow_html=True,
         )
-        sell_col1, sell_col2, sell_col3 = st.columns([1.2, 1, 1.5])
+        sell_col1, sell_col2, sell_col3 = st.columns([1.2, 1, 1.2])
         with sell_col1:
             s_ticker = st.text_input("Ticker", placeholder="AAPL", key="s_ticker").upper().strip()
         with sell_col2:
             s_shares = st.number_input("Satılan Adet", min_value=0.0, step=1.0, key="s_shares")
         with sell_col3:
-            st.markdown('<div style="margin-top:1.65rem;"></div>', unsafe_allow_html=True)
-            if st.button("📉  Satışı Onayla", key="btn_sell"):
-                if s_ticker and s_shares > 0:
-                    _, msg = sell_position(s_ticker, s_shares)
-                    st.success(f"✅ {msg}")
-                    st.rerun()
-                else:
-                    st.error("Ticker ve satılan adet girilmeli.")
+            s_price = st.number_input("Satış Fiyatı ($)", min_value=0.0, step=0.01, key="s_price")
+
+        # Anlık K/Z önizlemesi
+        if s_ticker and s_shares > 0 and s_price > 0:
+            _port_now  = load_portfolio()
+            _pos_match = next((p for p in _port_now if p["ticker"] == s_ticker), None)
+            if _pos_match:
+                _avg_cost = _pos_match.get("avg_cost", 0)
+                if _avg_cost > 0:
+                    _pnl_per = s_price - _avg_cost
+                    _pnl_tot = _pnl_per * s_shares
+                    _pnl_pct = (_pnl_per / _avg_cost) * 100
+                    _sign    = "+" if _pnl_tot >= 0 else ""
+                    _clr     = "#00c48c" if _pnl_tot >= 0 else "#e74c3c"
+                    _emoji   = "✅" if _pnl_tot >= 0 else "🔴"
+                    st.markdown(
+                        f'<div style="background:#0d1117;border:1px solid #1e2833;'
+                        f'border-radius:6px;padding:0.5rem 0.8rem;font-size:0.78rem;margin-top:0.3rem;">'
+                        f'<b style="color:#8a9ab0;">Önizleme:</b> '
+                        f'<span style="color:{_clr};font-weight:600;">{_emoji} {_sign}${_pnl_tot:,.2f}</span>'
+                        f' &nbsp;|&nbsp; '
+                        f'<span style="color:{_clr};">{_sign}{_pnl_pct:.2f}%</span>'
+                        f' &nbsp;|&nbsp; '
+                        f'Maliyet: ${_avg_cost:.2f} → Satış: ${s_price:.2f}'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+
+        st.markdown('<div style="margin-top:0.5rem;"></div>', unsafe_allow_html=True)
+        if st.button("📉  Satışı Onayla", key="btn_sell"):
+            if s_ticker and s_shares > 0:
+                _, msg = sell_position(s_ticker, s_shares, sell_price=s_price if s_price > 0 else 0.0)
+                st.success(f"✅ {msg}")
+                st.rerun()
+            else:
+                st.error("Ticker ve satılan adet girilmeli.")
 
     # ── Load & enrich portfolio ─────────────────────────────────────────────
     positions = load_portfolio()
