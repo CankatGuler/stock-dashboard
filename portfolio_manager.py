@@ -53,8 +53,15 @@ def _github_read() -> tuple[list[dict], str]:
         data    = resp.json()
         sha     = data.get("sha", "")
         content = base64.b64decode(data["content"]).decode("utf-8")
-        positions = json.loads(content)
-        return positions if isinstance(positions, list) else [], sha
+        raw = json.loads(content)
+        # Yeni format: {"positions": [...], "cash": 0.0}
+        if isinstance(raw, dict) and "positions" in raw:
+            positions = raw.get("positions", [])
+        elif isinstance(raw, list):
+            positions = raw
+        else:
+            positions = []
+        return positions, sha
     except Exception as exc:
         logger.warning("GitHub read failed: %s — falling back to local.", exc)
         return _local_read(), ""
@@ -74,8 +81,23 @@ def _github_write(positions: list[dict], sha: str = "") -> bool:
         "Authorization": f"token {token}",
         "Accept":        "application/vnd.github.v3+json",
     }
+    # Nakit miktarını koru — mevcut dosyadan oku
+    existing_cash = 0.0
+    try:
+        _raw_resp = requests.get(
+            f"https://api.github.com/repos/{repo}/contents/{GITHUB_PATH}",
+            headers=headers, timeout=10
+        )
+        if _raw_resp.status_code == 200:
+            _raw = json.loads(base64.b64decode(_raw_resp.json()["content"]).decode())
+            if isinstance(_raw, dict):
+                existing_cash = float(_raw.get("cash", 0.0))
+    except Exception:
+        pass
+
+    full_data = {"positions": positions, "cash": existing_cash}
     content = base64.b64encode(
-        json.dumps(positions, indent=2, ensure_ascii=False).encode("utf-8")
+        json.dumps(full_data, indent=2, ensure_ascii=False).encode("utf-8")
     ).decode("utf-8")
 
     payload = {
@@ -107,6 +129,8 @@ def _local_read() -> list[dict]:
     try:
         with open(PORTFOLIO_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
+            if isinstance(data, dict) and "positions" in data:
+                return data.get("positions", [])
             return data if isinstance(data, list) else []
     except Exception:
         return []
@@ -137,10 +161,14 @@ def save_portfolio(positions: list[dict]) -> bool:
     return _github_write(positions, sha)
 
 
-def add_position(ticker, shares, avg_cost, sector="Diğer", notes="") -> list[dict]:
-    """Add or update a position (weighted average cost)."""
-    positions, sha = _github_read()
+def add_position(ticker, shares, avg_cost, sector="Diğer", notes="", deduct_from_cash=True) -> list[dict]:
+    """
+    Add or update a position (weighted average cost).
+    deduct_from_cash=True ise alım tutarı nakitten düşülür.
+    """
+    positions, cash, sha = _read_full_portfolio()
     ticker = ticker.upper().strip()
+    purchase_total = shares * avg_cost
 
     for pos in positions:
         if pos["ticker"] == ticker:
@@ -152,7 +180,8 @@ def add_position(ticker, shares, avg_cost, sector="Diğer", notes="") -> list[di
             pos["sector"]   = sector
             pos["notes"]    = notes
             pos["updated"]  = datetime.now().strftime("%Y-%m-%d %H:%M")
-            _github_write(positions, sha)
+            new_cash = (cash - purchase_total) if deduct_from_cash else cash
+            _write_full_portfolio(positions, new_cash, sha)
             return positions
 
     positions.append({
@@ -164,7 +193,8 @@ def add_position(ticker, shares, avg_cost, sector="Diğer", notes="") -> list[di
         "added":    datetime.now().strftime("%Y-%m-%d %H:%M"),
         "updated":  datetime.now().strftime("%Y-%m-%d %H:%M"),
     })
-    _github_write(positions, sha)
+    new_cash = (cash - purchase_total) if deduct_from_cash else cash
+    _write_full_portfolio(positions, new_cash, sha)
     return positions
 
 
@@ -221,10 +251,129 @@ def sell_position(ticker: str, shares_sold: float, sell_price: float = 0.0) -> t
                 pos["updated"] = datetime.now().strftime("%Y-%m-%d %H:%M")
                 msg = f"{ticker}: {remaining:.4f} adet kaldı.{pnl_str}"
 
-            _github_write(positions, sha)
+            # Satış gelirini nakite ekle
+            sale_proceeds = (sell_price * shares_sold) if sell_price > 0 else 0.0
+            _, cur_cash, _ = _read_full_portfolio()
+            _write_full_portfolio(positions, cur_cash + sale_proceeds, sha)
             return positions, msg
 
     return positions, f"{ticker} portföyde bulunamadı."
+
+
+# ---------------------------------------------------------------------------
+# Cash Management
+# ---------------------------------------------------------------------------
+
+def _read_full_portfolio() -> tuple[list[dict], float, str]:
+    """
+    Returns (positions, cash, sha).
+    Hem eski list formatını hem yeni dict formatını destekler.
+    """
+    token, repo = _get_github_config()
+    if not token or not repo:
+        positions = _local_read()
+        cash = _local_read_cash()
+        return positions, cash, ""
+
+    url     = f"https://api.github.com/repos/{repo}/contents/{GITHUB_PATH}"
+    headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
+    try:
+        resp = requests.get(url, headers=headers, timeout=10)
+        if resp.status_code == 404:
+            return [], 0.0, ""
+        resp.raise_for_status()
+        data    = resp.json()
+        sha     = data.get("sha", "")
+        raw     = json.loads(base64.b64decode(data["content"]).decode("utf-8"))
+        if isinstance(raw, dict) and "positions" in raw:
+            return raw.get("positions", []), float(raw.get("cash", 0.0)), sha
+        elif isinstance(raw, list):
+            return raw, 0.0, sha
+        return [], 0.0, sha
+    except Exception as exc:
+        logger.warning("Full portfolio read failed: %s", exc)
+        return _local_read(), _local_read_cash(), ""
+
+
+def _write_full_portfolio(positions: list[dict], cash: float, sha: str = "") -> bool:
+    """Positions + cash birlikte yaz."""
+    token, repo = _get_github_config()
+    full_data = {"positions": positions, "cash": round(float(cash), 2)}
+
+    if not token or not repo:
+        return _local_write_full(full_data)
+
+    url     = f"https://api.github.com/repos/{repo}/contents/{GITHUB_PATH}"
+    headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
+    encoded = base64.b64encode(
+        json.dumps(full_data, indent=2, ensure_ascii=False).encode("utf-8")
+    ).decode("utf-8")
+    payload = {"message": f"Portfolio update (cash: ${cash:.2f})", "content": encoded}
+    if sha:
+        payload["sha"] = sha
+    try:
+        resp = requests.put(url, headers=headers, json=payload, timeout=15)
+        resp.raise_for_status()
+        return True
+    except Exception as exc:
+        logger.warning("Full portfolio write failed: %s", exc)
+        return _local_write_full(full_data)
+
+
+def _local_read_cash() -> float:
+    if not os.path.exists(PORTFOLIO_FILE):
+        return 0.0
+    try:
+        with open(PORTFOLIO_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, dict):
+                return float(data.get("cash", 0.0))
+    except Exception:
+        pass
+    return 0.0
+
+
+def _local_write_full(full_data: dict) -> bool:
+    try:
+        with open(PORTFOLIO_FILE, "w", encoding="utf-8") as f:
+            json.dump(full_data, f, indent=2, ensure_ascii=False)
+        return True
+    except Exception:
+        return False
+
+
+def get_cash() -> float:
+    """Mevcut nakit miktarını döndür."""
+    _, cash, _ = _read_full_portfolio()
+    return cash
+
+
+def set_cash(amount: float) -> bool:
+    """Nakiti doğrudan belirli bir değere ayarla."""
+    positions, _, sha = _read_full_portfolio()
+    return _write_full_portfolio(positions, max(0.0, amount), sha)
+
+
+def add_cash(amount: float, reason: str = "") -> tuple[float, str]:
+    """Nakit ekle (para yatırma veya satış geliri)."""
+    positions, cash, sha = _read_full_portfolio()
+    new_cash = cash + amount
+    _write_full_portfolio(positions, new_cash, sha)
+    msg = f"${amount:,.2f} nakit eklendi. Yeni bakiye: ${new_cash:,.2f}"
+    if reason:
+        msg = f"{reason} — {msg}"
+    return new_cash, msg
+
+
+def deduct_cash(amount: float, reason: str = "") -> tuple[float, str]:
+    """Nakit düş (hisse alımı veya para çekme)."""
+    positions, cash, sha = _read_full_portfolio()
+    new_cash = cash - amount
+    _write_full_portfolio(positions, new_cash, sha)
+    msg = f"${amount:,.2f} nakit düşüldü. Yeni bakiye: ${new_cash:,.2f}"
+    if reason:
+        msg = f"{reason} — {msg}"
+    return new_cash, msg
 
 
 # ---------------------------------------------------------------------------

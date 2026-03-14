@@ -34,6 +34,7 @@ from portfolio_manager import (
     load_portfolio, add_position, remove_position, update_position,
     sell_position, enrich_portfolio_with_prices, portfolio_summary,
     import_from_csv, export_to_csv, generate_csv_template,
+    get_cash, add_cash, deduct_cash, set_cash,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -936,6 +937,30 @@ with tab_portfolio:
 
         st.caption("💡 Sektör bilgisi otomatik olarak piyasadan çekilir.")
 
+        # Nakit önizlemesi
+        _buy_cash = get_cash()
+        if p_shares > 0 and p_cost > 0:
+            _buy_total = p_shares * p_cost
+            _remaining = _buy_cash - _buy_total
+            _clr = "#00c48c" if _remaining >= 0 else "#e74c3c"
+            _emoji = "✅" if _remaining >= 0 else "⚠️"
+            st.markdown(
+                f'<div style="background:#0d1117;border:1px solid #1e2833;border-radius:6px;'
+                f'padding:0.45rem 0.8rem;font-size:0.75rem;margin-bottom:0.3rem;">'
+                f'Mevcut nakit: <b style="color:#4fc3f7;">${_buy_cash:,.2f}</b>'
+                f' &nbsp;→&nbsp; Alım tutarı: <b>${_buy_total:,.2f}</b>'
+                f' &nbsp;→&nbsp; Kalan: <b style="color:{_clr};">{_emoji} ${_remaining:,.2f}</b>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                f'<div style="font-size:0.72rem;color:#5a6a7a;margin-bottom:0.3rem;">'
+                f'Mevcut nakit: <b style="color:#4fc3f7;">${_buy_cash:,.2f}</b> — '
+                f'Alım onaylandığında otomatik düşülür.</div>',
+                unsafe_allow_html=True,
+            )
+
         col_btn1, col_btn2 = st.columns([1, 3])
         with col_btn1:
             if st.button("💾  Kaydet", key="btn_add_pos"):
@@ -945,6 +970,51 @@ with tab_portfolio:
                     st.rerun()
                 else:
                     st.error("Ticker, hisse adedi ve maliyet zorunludur.")
+
+    # ── Cash Management ────────────────────────────────────────────────────
+    with st.expander("💵  Nakit Ekle / Çıkar", expanded=False):
+        _cur_cash = get_cash()
+        st.markdown(
+            f'<div style="background:#0d1117;border:1px solid #1e6a9e;border-radius:8px;'
+            f'padding:0.6rem 1rem;margin-bottom:0.8rem;display:flex;align-items:center;gap:12px;">'
+            f'<span style="font-size:0.7rem;color:#5a6a7a;text-transform:uppercase;letter-spacing:0.08em;">Mevcut Nakit</span>'
+            f'<span style="font-size:1.4rem;font-weight:700;color:#4fc3f7;">${_cur_cash:,.2f}</span>'
+            f'<span style="font-size:0.65rem;color:#5a6a7a;margin-left:auto;">Hisse alımında otomatik düşülür · Satışta otomatik eklenir</span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        cash_col1, cash_col2, cash_col3 = st.columns([1.5, 1, 2])
+        with cash_col1:
+            cash_op = st.radio(
+                "İşlem:", ["➕ Nakit Ekle", "➖ Nakit Çıkar", "🔄 Bakiyeyi Ayarla"],
+                key="cash_op", horizontal=False,
+            )
+        with cash_col2:
+            cash_amount = st.number_input(
+                "Miktar ($)", min_value=0.0, step=100.0, key="cash_amount"
+            )
+        with cash_col3:
+            cash_note = st.text_input(
+                "Not (isteğe bağlı)", placeholder="örn: Maaş, Temettü, Para yatırma...",
+                key="cash_note"
+            )
+            if cash_op == "🔄 Bakiyeyi Ayarla":
+                st.caption("Nakiti doğrudan girdiğin değere ayarlar (mevcut bakiyeyi ezer).")
+            st.markdown('<div style="margin-top:0.4rem;"></div>', unsafe_allow_html=True)
+            if st.button("✅ Uygula", key="btn_cash", use_container_width=True):
+                if cash_amount > 0:
+                    if cash_op == "➕ Nakit Ekle":
+                        new_bal, msg = add_cash(cash_amount, cash_note or "Nakit ekleme")
+                    elif cash_op == "➖ Nakit Çıkar":
+                        new_bal, msg = deduct_cash(cash_amount, cash_note or "Nakit çıkarma")
+                    else:
+                        set_cash(cash_amount)
+                        new_bal = cash_amount
+                        msg = f"Bakiye ${cash_amount:,.2f} olarak ayarlandı."
+                    st.success(f"✅ {msg}")
+                    st.rerun()
+                else:
+                    st.error("Miktar 0'dan büyük olmalı.")
 
     # ── Sell Position Form ──────────────────────────────────────────────────
     with st.expander("📉  Satış Yap (Pozisyon Azalt / Kapat)", expanded=False):
@@ -1090,7 +1160,8 @@ with tab_portfolio:
         st.session_state["enriched_portfolio"] = enriched_pos  # korelasyon analizi için
 
         # ── Summary KPI Bar ─────────────────────────────────────────────────
-        k1, k2, k3, k4, k5 = st.columns(5)
+        _cash_now = get_cash()
+        k1, k2, k3, k4, k5, k6 = st.columns(6)
 
         total_pnl_color = "#00c48c" if summary["total_pnl"] >= 0 else "#e74c3c"
         pnl_sign        = "+" if summary["total_pnl"] >= 0 else ""
@@ -1141,6 +1212,15 @@ with tab_portfolio:
                     f'<div style="color:{w_color};font-size:0.8rem;">{worst["pnl_pct"]:.1f}%</div>'
                     f'</div>', unsafe_allow_html=True,
                 )
+        with k6:
+            _total_with_cash = summary["total_value"] + _cash_now
+            st.markdown(
+                f'<div class="kpi-card" style="border-color:#1e6a9e;">'
+                f'<div class="kpi-score-label">NAKİT</div>'
+                f'<div style="font-size:1.3rem;font-weight:700;color:#4fc3f7;">${_cash_now:,.0f}</div>'
+                f'<div style="font-size:0.7rem;color:#5a6a7a;">Toplam: ${_total_with_cash:,.0f}</div>'
+                f'</div>', unsafe_allow_html=True,
+            )
 
         st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
 
