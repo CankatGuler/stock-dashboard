@@ -402,7 +402,7 @@ if missing_keys:
 # ─────────────────────────────────────────────────────────────────────────────
 # TABS
 # ─────────────────────────────────────────────────────────────────────────────
-tab_screener, tab_portfolio, tab_radar, tab_lookup, tab_memory, tab_watchlist, tab_macro = st.tabs(["📡  Sektör Tarayıcı", "💼  Portföyüm", "🔭  Fırsat Radarı", "🔍  Hisse Sorgula", "🧠  Hafıza", "👁  Takip", "🌍  Makro"])
+tab_screener, tab_portfolio, tab_radar, tab_lookup, tab_memory, tab_watchlist, tab_macro, tab_library = st.tabs(["📡  Sektör Tarayıcı", "💼  Portföyüm", "🔭  Fırsat Radarı", "🔍  Hisse Sorgula", "🧠  Hafıza", "👁  Takip", "🌍  Makro", "📚  Kütüphane"])
 
 # ─────────────────────────────────────────────────────────────────────────────
 # STATE INIT
@@ -2839,3 +2839,237 @@ Türkçe, net ve somut yaz. Genel laflar değil, bu spesifik rakamlara dayalı y
 
         if st.session_state.get("macro_claude_analysis"):
             st.markdown(st.session_state["macro_claude_analysis"])
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TAB 8 — FİNANSAL TERİMLER KÜTÜPHANESİ
+# ─────────────────────────────────────────────────────────────────────────────
+
+with tab_library:
+    from knowledge_library import (
+        get_all_terms, get_terms_by_category, search_terms,
+        get_term_by_id, CATEGORIES
+    )
+
+    st.markdown(
+        '<div style="font-size:0.7rem;color:#5a6a7a;text-transform:uppercase;'
+        'letter-spacing:0.1em;margin-bottom:1rem;">'
+        '► FİNANSAL TERİMLER KÜTÜPHANESİ — Öğren, Anla, Uygula</div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── Arama + Filtre ────────────────────────────────────────────────────
+    lib_s1, lib_s2 = st.columns([2, 3])
+    with lib_s1:
+        lib_search = st.text_input(
+            "Terim ara:", placeholder="örn: P/E, VIX, RSI, beta...",
+            key="lib_search", label_visibility="collapsed"
+        ).strip()
+    with lib_s2:
+        cat_options = {"hepsi": "Tümü"} | {k: f"{v['emoji']} {v['label']}" for k, v in CATEGORIES.items()}
+        lib_cat = st.selectbox(
+            "Kategori:", options=list(cat_options.keys()),
+            format_func=lambda x: cat_options[x],
+            key="lib_cat", label_visibility="collapsed"
+        )
+
+    # Seviye filtresi
+    lib_level = st.radio(
+        "Seviye:", ["hepsi", "başlangıç", "orta", "ileri"],
+        format_func=lambda x: {"hepsi": "Tüm seviyeler", "başlangıç": "🟢 Başlangıç",
+                                "orta": "🟡 Orta", "ileri": "🔴 İleri"}.get(x, x),
+        horizontal=True, key="lib_level",
+    )
+
+    # Filtreleme
+    if lib_search:
+        terms = search_terms(lib_search)
+    elif lib_cat != "hepsi":
+        terms = get_terms_by_category(lib_cat)
+    else:
+        terms = get_all_terms()
+
+    if lib_level != "hepsi":
+        terms = [t for t in terms if t.get("level") == lib_level]
+
+    # Özet sayaç
+    st.markdown(
+        f'<div style="font-size:0.65rem;color:#5a6a7a;margin:0.4rem 0 0.8rem;">'
+        f'{len(terms)} terim gösteriliyor · Toplam {len(get_all_terms())} terim</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Seviye renk/etiket
+    _level_badge = {
+        "başlangıç": ('<span style="background:#EAF3DE;color:#3B6D11;font-size:10px;'
+                      'padding:1px 6px;border-radius:4px;">Başlangıç</span>'),
+        "orta":      ('<span style="background:#FAEEDA;color:#854F0B;font-size:10px;'
+                      'padding:1px 6px;border-radius:4px;">Orta</span>'),
+        "ileri":     ('<span style="background:#FCEBEB;color:#A32D2D;font-size:10px;'
+                      'padding:1px 6px;border-radius:4px;">İleri</span>'),
+    }
+    _cat_emoji = {k: v["emoji"] for k, v in CATEGORIES.items()}
+
+    # ── Kart listesi ──────────────────────────────────────────────────────
+    if not terms:
+        st.info("Arama sonucu bulunamadı. Farklı bir terim dene.")
+    else:
+        for term in terms:
+            _lvl_badge = _level_badge.get(term.get("level", ""), "")
+            _cat_em    = _cat_emoji.get(term["category"], "")
+            _cat_label = CATEGORIES.get(term["category"], {}).get("label", "")
+            _header = (
+                f'{term["emoji"]} **{term["term"]}** '
+                f'<span style="color:#5a6a7a;font-size:0.75rem;">— {term["eng"]}</span>'
+            )
+
+            with st.expander(
+                f'{term["emoji"]}  {term["term"]}  ·  {term["eng"]}',
+                expanded=False
+            ):
+                # Üst etiketler
+                st.markdown(
+                    f'{_lvl_badge} &nbsp;'
+                    f'<span style="font-size:10px;color:#5a6a7a;">{_cat_em} {_cat_label}</span>',
+                    unsafe_allow_html=True,
+                )
+                st.markdown("")
+
+                # İçerik — 2 kolon
+                col_left, col_right = st.columns([1.1, 1])
+
+                with col_left:
+                    st.markdown("**Ne anlama gelir?**")
+                    st.markdown(
+                        f'<div style="font-size:0.8rem;color:#c0c8d0;line-height:1.7;">'
+                        f'{term["definition"]}</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                    if term.get("formula"):
+                        st.markdown('<div style="margin-top:0.6rem;"></div>', unsafe_allow_html=True)
+                        st.markdown("**Formül:**")
+                        st.markdown(
+                            f'<div style="background:#0d1117;border-left:3px solid #1e6a9e;'
+                            f'padding:0.4rem 0.7rem;border-radius:0 4px 4px 0;'
+                            f'font-size:0.75rem;color:#4fc3f7;font-family:monospace;">'
+                            f'{term["formula"]}</div>',
+                            unsafe_allow_html=True,
+                        )
+
+                with col_right:
+                    st.markdown("**Nasıl okunur?**")
+                    st.markdown(
+                        f'<div style="font-size:0.78rem;color:#c0c8d0;line-height:1.75;">'
+                        f'{term["how_to_read"].replace(chr(10), "<br>")}</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                # Portföy + örnek
+                st.markdown('<hr style="border-color:#1e2833;margin:0.7rem 0;">', unsafe_allow_html=True)
+                port_col, ex_col = st.columns(2)
+
+                with port_col:
+                    st.markdown("**💼 Portföy kararında kullanımı:**")
+                    st.markdown(
+                        f'<div style="font-size:0.78rem;color:#c0c8d0;line-height:1.7;">'
+                        f'{term["portfolio"]}</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                with ex_col:
+                    st.markdown("**📌 Gerçek örnek:**")
+                    st.markdown(
+                        f'<div style="font-size:0.78rem;color:#c0c8d0;line-height:1.7;">'
+                        f'{term["example"].replace(chr(10), "<br>")}</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                # İlişkili terimler
+                if term.get("related"):
+                    st.markdown('<div style="margin-top:0.6rem;"></div>', unsafe_allow_html=True)
+                    rel_labels = []
+                    for rid in term["related"]:
+                        rt = get_term_by_id(rid)
+                        if rt:
+                            rel_labels.append(f'{rt["emoji"]} {rt["term"]}')
+                    if rel_labels:
+                        st.markdown(
+                            '<span style="font-size:0.65rem;color:#5a6a7a;">İlgili terimler: </span>' +
+                            " &nbsp;·&nbsp; ".join(
+                                f'<span style="font-size:0.72rem;color:#4fc3f7;">{r}</span>'
+                                for r in rel_labels
+                            ),
+                            unsafe_allow_html=True,
+                        )
+
+                # ── Claude'a Sor ──────────────────────────────────────────
+                st.markdown('<div style="margin-top:0.7rem;"></div>', unsafe_allow_html=True)
+                ask_col1, ask_col2 = st.columns([2, 1])
+                with ask_col1:
+                    ask_input = st.text_input(
+                        "Claude'a sor:",
+                        placeholder=f"örn: Portföyümdeki NVDA için {term['term']}'i yorumla",
+                        key=f"ask_{term['id']}",
+                        label_visibility="collapsed",
+                    )
+                with ask_col2:
+                    ask_btn = st.button(
+                        "🧠 Sor", key=f"btn_ask_{term['id']}", use_container_width=True
+                    )
+
+                if ask_btn and ask_input.strip():
+                    _api_key = os.getenv("ANTHROPIC_API_KEY", "")
+                    if not _api_key:
+                        st.error("ANTHROPIC_API_KEY eksik.")
+                    else:
+                        with st.spinner("Claude yanıtlıyor..."):
+                            import anthropic as _ant_lib
+                            _lib_client = _ant_lib.Anthropic(api_key=_api_key)
+
+                            # Portföy bağlamı ekle
+                            _port = load_portfolio()
+                            _port_str = ""
+                            if _port:
+                                _port_str = (
+                                    "\nMevcut portföy: " +
+                                    ", ".join(p["ticker"] for p in _port[:10])
+                                )
+
+                            _lib_prompt = f"""Finans terimleri kütüphanesi sorusu.
+
+Terim: {term['term']} ({term['eng']})
+Tanım: {term['definition'][:200]}
+
+Kullanıcı sorusu: {ask_input}
+{_port_str}
+
+Lütfen bu soruya:
+1. Terimi sade Türkçe ile açıklayarak yanıtla
+2. Eğer portföy hissesi belirtildiyse o hisseyle bağlantı kur
+3. Pratik, uygulanabilir tavsiye ver
+4. 3–5 cümleyle kısa tut — uzun anlatım yapma
+
+Türkçe yaz."""
+
+                            try:
+                                _lib_resp = _lib_client.messages.create(
+                                    model="claude-opus-4-5",
+                                    max_tokens=600,
+                                    messages=[{"role": "user", "content": _lib_prompt}]
+                                )
+                                _lib_answer = _lib_resp.content[0].text if _lib_resp.content else ""
+                                st.session_state[f"lib_answer_{term['id']}"] = _lib_answer
+                            except Exception as _e:
+                                st.error(f"Claude hatası: {_e}")
+
+                if st.session_state.get(f"lib_answer_{term['id']}"):
+                    st.markdown(
+                        '<div style="background:#0d1117;border:1px solid #1e2833;'
+                        'border-left:3px solid #00c48c;border-radius:0 8px 8px 0;'
+                        'padding:0.7rem 0.9rem;margin-top:0.4rem;font-size:0.78rem;'
+                        'color:#c0c8d0;line-height:1.7;">'
+                        + st.session_state[f"lib_answer_{term['id']}"]
+                        + '</div>',
+                        unsafe_allow_html=True,
+                    )
