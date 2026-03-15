@@ -26,7 +26,7 @@ GITHUB_PATH  = "portfolio.json"
 
 def _get_github_config() -> tuple[str, str]:
     """Get GitHub token and repo from environment."""
-    token = os.getenv("GITHUB_TOKEN", "")
+    token = os.getenv("GH_PAT", "") or os.getenv("GITHUB_TOKEN", "")
     repo  = os.getenv("GITHUB_REPO", "")   # e.g. "CankatGuler/stock-dashboard"
     return token, repo
 

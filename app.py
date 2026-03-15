@@ -13,6 +13,18 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Streamlit Cloud secrets → os.environ'a taşı
+# (analysis_memory, portfolio_manager vs. os.getenv() kullandığı için)
+try:
+    for _k, _v in st.secrets.items():
+        if isinstance(_v, str) and _k not in os.environ:
+            os.environ[_k] = _v
+    # GH_TOKEN → GH_PAT alias
+    if "GH_TOKEN" in os.environ and "GH_PAT" not in os.environ:
+        os.environ["GH_PAT"] = os.environ["GH_TOKEN"]
+except Exception:
+    pass
+
 from utils import (
     SECTOR_TICKERS,
     categorise_stock,

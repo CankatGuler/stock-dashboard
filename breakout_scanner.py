@@ -24,7 +24,7 @@ WATCHLIST_FILE     = "watchlist.json"
 # ─── GitHub helpers ───────────────────────────────────────────────────────────
 
 def _github_config():
-    return os.getenv("GITHUB_TOKEN", ""), os.getenv("GITHUB_REPO", "")
+    return os.getenv("GH_PAT", "") or os.getenv("GITHUB_TOKEN", ""), os.getenv("GITHUB_REPO", "")
 
 
 def _gh_read(path):

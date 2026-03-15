@@ -30,7 +30,7 @@ MAX_RECORDS  = 500   # toplam max kayıt
 
 
 def _get_github_config():
-    token = os.getenv("GITHUB_TOKEN", "")
+    token = os.getenv("GH_PAT", "") or os.getenv("GITHUB_TOKEN", "")
     repo  = os.getenv("GITHUB_REPO", "")
     return token, repo
 
@@ -255,7 +255,7 @@ MAX_MACRO_RECORDS  = 200
 
 
 def _github_read_macro() -> tuple[list[dict], str]:
-    token = os.getenv("GITHUB_TOKEN", "")
+    token = os.getenv("GH_PAT", "") or os.getenv("GITHUB_TOKEN", "")
     repo  = os.getenv("GITHUB_REPO", "")
     if not token or not repo:
         return _local_read_json(MACRO_HISTORY_FILE), ""
@@ -274,7 +274,7 @@ def _github_read_macro() -> tuple[list[dict], str]:
 
 
 def _github_write_macro(records: list[dict], sha: str = "") -> bool:
-    token = os.getenv("GITHUB_TOKEN", "")
+    token = os.getenv("GH_PAT", "") or os.getenv("GITHUB_TOKEN", "")
     repo  = os.getenv("GITHUB_REPO", "")
     if not token or not repo:
         return _local_write_json(MACRO_HISTORY_FILE, records)
@@ -411,7 +411,7 @@ def save_portfolio_analysis(
 
 
 def _read_portfolio_analysis_history() -> tuple[list[dict], str]:
-    token = os.getenv("GITHUB_TOKEN", "")
+    token = os.getenv("GH_PAT", "") or os.getenv("GITHUB_TOKEN", "")
     repo  = os.getenv("GITHUB_REPO", "")
     if not token or not repo:
         return _local_read_json(PORTFOLIO_ANALYSIS_FILE), ""
@@ -430,7 +430,7 @@ def _read_portfolio_analysis_history() -> tuple[list[dict], str]:
 
 
 def _write_portfolio_analysis_history(records: list[dict], sha: str = "") -> bool:
-    token = os.getenv("GITHUB_TOKEN", "")
+    token = os.getenv("GH_PAT", "") or os.getenv("GITHUB_TOKEN", "")
     repo  = os.getenv("GITHUB_REPO", "")
     if not token or not repo:
         return _local_write_json(PORTFOLIO_ANALYSIS_FILE, records)
@@ -565,7 +565,7 @@ def _load_weekly_archive() -> list:
     """GitHub'dan haftalık rapor arşivini oku."""
     try:
         import requests, base64, os, json
-        token = os.getenv("GITHUB_TOKEN", "")
+        token = os.getenv("GH_PAT", "") or os.getenv("GITHUB_TOKEN", "")
         repo  = os.getenv("GITHUB_REPO", "")
         if not token or not repo:
             if os.path.exists(WEEKLY_REPORT_FILE):
@@ -589,7 +589,7 @@ def _save_weekly_archive(data: list) -> bool:
     """Haftalık rapor arşivini GitHub'a yaz."""
     try:
         import requests, base64, os, json
-        token = os.getenv("GITHUB_TOKEN", "")
+        token = os.getenv("GH_PAT", "") or os.getenv("GITHUB_TOKEN", "")
         repo  = os.getenv("GITHUB_REPO", "")
 
         # Lokal fallback

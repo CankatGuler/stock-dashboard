@@ -34,7 +34,7 @@ def _load_targets_from_github() -> dict:
     """GitHub'dan price_targets.json oku."""
     try:
         import requests
-        token = os.getenv("GITHUB_TOKEN", "")
+        token = os.getenv("GH_PAT", "") or os.getenv("GITHUB_TOKEN", "")
         repo  = os.getenv("GITHUB_REPO", "")
         if not token or not repo:
             return {}
@@ -56,7 +56,7 @@ def _save_targets_to_github(data: dict) -> bool:
     """price_targets.json'ı GitHub'a yaz."""
     try:
         import requests, base64
-        token = os.getenv("GITHUB_TOKEN", "")
+        token = os.getenv("GH_PAT", "") or os.getenv("GITHUB_TOKEN", "")
         repo  = os.getenv("GITHUB_REPO", "")
         if not token or not repo:
             return False

@@ -49,12 +49,10 @@ jobs:
           ANTHROPIC_API_KEY:  ${{ secrets.ANTHROPIC_API_KEY }}
           NEWS_API_KEY:       ${{ secrets.NEWS_API_KEY }}
           FMP_API_KEY:        ${{ secrets.FMP_API_KEY }}
-          GITHUB_TOKEN:       ${{ secrets.GH_TOKEN }}
+          GH_PAT:             ${{ secrets.GH_TOKEN }}
           GITHUB_REPO:        ${{ secrets.GITHUB_REPO }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
-          GITHUB_TOKEN:       ${{ secrets.GH_TOKEN }}
-          GITHUB_REPO:        ${{ secrets.GITHUB_REPO }}
           GITHUB_EVENT_NAME:  ${{ github.event_name }}
         run: python morning_radar.py
 
@@ -82,7 +80,7 @@ jobs:
           NEWS_API_KEY:       ${{ secrets.NEWS_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
-          GITHUB_TOKEN:       ${{ secrets.GH_TOKEN }}
+          GH_PAT:             ${{ secrets.GH_TOKEN }}
           GITHUB_REPO:        ${{ secrets.GITHUB_REPO }}
         run: python watchlist_runner.py
 
@@ -110,7 +108,7 @@ jobs:
           NEWS_API_KEY:       ${{ secrets.NEWS_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
-          GITHUB_TOKEN:       ${{ secrets.GH_TOKEN }}
+          GH_PAT:             ${{ secrets.GH_TOKEN }}
           GITHUB_REPO:        ${{ secrets.GITHUB_REPO }}
         run: python watchlist_runner.py
 
@@ -136,10 +134,8 @@ jobs:
           ANTHROPIC_API_KEY:  ${{ secrets.ANTHROPIC_API_KEY }}
           NEWS_API_KEY:       ${{ secrets.NEWS_API_KEY }}
           FMP_API_KEY:        ${{ secrets.FMP_API_KEY }}
-          GITHUB_TOKEN:       ${{ secrets.GH_TOKEN }}
+          GH_PAT:             ${{ secrets.GH_TOKEN }}
           GITHUB_REPO:        ${{ secrets.GITHUB_REPO }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
-          GITHUB_TOKEN:       ${{ secrets.GH_TOKEN }}
-          GITHUB_REPO:        ${{ secrets.GITHUB_REPO }}
         run: python weekly_report.py
