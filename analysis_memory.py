@@ -19,7 +19,7 @@ import json
 import base64
 import os
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 import requests
 
