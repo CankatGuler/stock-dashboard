@@ -551,3 +551,152 @@ def build_comparison_context(
 
     lines.append("=" * 40)
     return "\n".join(lines)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# HAFTALIK RAPOR ARŞİVİ
+# ─────────────────────────────────────────────────────────────────────────────
+
+WEEKLY_REPORT_FILE = "weekly_report_archive.json"
+MAX_WEEKLY_REPORTS = 52   # 1 yıllık geçmiş
+
+
+def _load_weekly_archive() -> list:
+    """GitHub'dan haftalık rapor arşivini oku."""
+    try:
+        import requests, base64, os, json
+        token = os.getenv("GITHUB_TOKEN", "")
+        repo  = os.getenv("GITHUB_REPO", "")
+        if not token or not repo:
+            if os.path.exists(WEEKLY_REPORT_FILE):
+                with open(WEEKLY_REPORT_FILE) as f:
+                    return json.load(f)
+            return []
+        headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
+        url  = f"https://api.github.com/repos/{repo}/contents/{WEEKLY_REPORT_FILE}"
+        resp = requests.get(url, headers=headers, timeout=15)
+        if resp.status_code == 404:
+            return []
+        resp.raise_for_status()
+        content = base64.b64decode(resp.json()["content"]).decode("utf-8")
+        return json.loads(content)
+    except Exception as e:
+        logger.warning("Weekly archive load failed: %s", e)
+        return []
+
+
+def _save_weekly_archive(data: list) -> bool:
+    """Haftalık rapor arşivini GitHub'a yaz."""
+    try:
+        import requests, base64, os, json
+        token = os.getenv("GITHUB_TOKEN", "")
+        repo  = os.getenv("GITHUB_REPO", "")
+
+        # Lokal fallback
+        with open(WEEKLY_REPORT_FILE, "w") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+        if not token or not repo:
+            return True
+
+        headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
+        url     = f"https://api.github.com/repos/{repo}/contents/{WEEKLY_REPORT_FILE}"
+        content = json.dumps(data, ensure_ascii=False, indent=2)
+        encoded = base64.b64encode(content.encode()).decode()
+
+        sha = None
+        r = requests.get(url, headers=headers, timeout=10)
+        if r.status_code == 200:
+            sha = r.json().get("sha")
+
+        payload = {
+            "message": f"weekly report archive {datetime.now().strftime('%Y-%m-%d')}",
+            "content": encoded,
+        }
+        if sha:
+            payload["sha"] = sha
+
+        r2 = requests.put(url, headers=headers, json=payload, timeout=15)
+        r2.raise_for_status()
+        return True
+    except Exception as e:
+        logger.warning("Weekly archive save failed: %s", e)
+        return False
+
+
+def save_weekly_report(
+    report_type: str,            # "portfolio" | "surprise" | "macro"
+    results: list,               # Hisse analiz sonuçları listesi
+    macro_snapshot: dict = None, # Makro ortam snapshot
+    summary_text: str = "",      # Kısa özet metin
+) -> bool:
+    """
+    Haftalık raporu arşive kaydet.
+
+    Her kayıt:
+    {
+      "id":          "2026-03-16_portfolio",
+      "date":        "2026-03-16",
+      "week":        "2026-W11",
+      "type":        "portfolio",
+      "summary":     "...",
+      "result_count": 15,
+      "results":     [...],
+      "macro":       {...},
+      "saved_at":    "2026-03-16T17:00:00Z"
+    }
+    """
+    archive = _load_weekly_archive()
+    today   = datetime.now(timezone.utc)
+
+    record = {
+        "id":           f"{today.strftime('%Y-%m-%d')}_{report_type}",
+        "date":         today.strftime("%Y-%m-%d"),
+        "week":         today.strftime("%Y-W%W"),
+        "type":         report_type,
+        "summary":      summary_text,
+        "result_count": len(results),
+        "results":      results[:30],   # Max 30 hisse kaydet
+        "macro":        macro_snapshot or {},
+        "saved_at":     today.isoformat(),
+    }
+
+    # Aynı gün aynı tip varsa güncelle
+    existing_idx = next(
+        (i for i, r in enumerate(archive) if r.get("id") == record["id"]),
+        None
+    )
+    if existing_idx is not None:
+        archive[existing_idx] = record
+    else:
+        archive.append(record)
+
+    # Max 52 hafta tut
+    if len(archive) > MAX_WEEKLY_REPORTS:
+        archive = archive[-MAX_WEEKLY_REPORTS:]
+
+    ok = _save_weekly_archive(archive)
+    logger.info("Weekly report saved: %s (%d results)", record["id"], len(results))
+    return ok
+
+
+def get_weekly_reports(report_type: str = None, limit: int = 20) -> list:
+    """
+    Haftalık rapor arşivinden kayıtları getir.
+    report_type=None → tüm tipler
+    """
+    archive = _load_weekly_archive()
+    if report_type:
+        archive = [r for r in archive if r.get("type") == report_type]
+    # En yeni önce
+    archive.sort(key=lambda x: x.get("date", ""), reverse=True)
+    return archive[:limit]
+
+
+def get_weekly_report_by_id(report_id: str) -> dict | None:
+    """ID'ye göre tek rapor getir."""
+    archive = _load_weekly_archive()
+    for r in archive:
+        if r.get("id") == report_id:
+            return r
+    return None

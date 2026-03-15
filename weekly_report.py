@@ -242,6 +242,14 @@ def main():
                 if not send_message(msg):
                     logger.error("Portföy mesajı gönderilemedi")
             logger.info("Portföy raporu gönderildi: %d hisse", len(port_results))
+            # Arşive kaydet
+            try:
+                from analysis_memory import save_weekly_report
+                _top_scores = sorted(port_results, key=lambda x: x.get("nihai_guven_skoru", 0), reverse=True)
+                _summary = f"{len(port_results)} portföy hissesi analiz edildi. En yüksek: {_top_scores[0].get('hisse_sembolu','')} ({_top_scores[0].get('nihai_guven_skoru',0)})"
+                save_weekly_report("portfolio", port_results, summary_text=_summary)
+            except Exception as _e:
+                logger.warning("Portföy raporu arşivlenemedi: %s", _e)
         else:
             send_message(f"💼 <b>Portföy Raporu</b>\n\n📭 Veri alınamadı.")
     else:
@@ -266,6 +274,17 @@ def main():
             logger.error("Makro mesajı gönderilemedi")
         else:
             logger.info("Makro raporu gönderildi.")
+            # Arşive kaydet
+            try:
+                from analysis_memory import save_weekly_report
+                _macro_snap = {
+                    "regime": macro_regime.get("label", ""),
+                    "vix":    macro_data.get("VIX", {}).get("value", 0) if hasattr(macro_data.get("VIX", {}), "get") else 0,
+                }
+                save_weekly_report("macro", [], macro_snapshot=_macro_snap,
+                                   summary_text=f"Rejim: {macro_regime.get('label','')}")
+            except Exception as _e:
+                logger.warning("Makro raporu arşivlenemedi: %s", _e)
     except Exception as e:
         logger.error("Makro raporu hatası: %s", e)
         send_message(f"🌍 <b>Makro Özet</b>\n\n⚠️ Veriler alınamadı: {e}")
@@ -284,6 +303,14 @@ def main():
             if not send_message(msg):
                 logger.error("Sürpriz mesajı gönderilemedi")
         logger.info("Sürpriz raporu gönderildi: %d hisse", len(surprise_results))
+        # Arşive kaydet
+        try:
+            from analysis_memory import save_weekly_report
+            _top = sorted(surprise_results, key=lambda x: x.get("nihai_guven_skoru", 0), reverse=True)
+            _summary_s = f"{len(surprise_results)} sürpriz hisse bulundu. En iyi: {_top[0].get('hisse_sembolu','')} ({_top[0].get('nihai_guven_skoru',0)})"
+            save_weekly_report("surprise", surprise_results, summary_text=_summary_s)
+        except Exception as _e:
+            logger.warning("Sürpriz raporu arşivlenemedi: %s", _e)
     else:
         send_message(f"🔭 <b>Sürpriz Radar</b>\n\n📭 Bu hafta yeterli sürpriz adayı bulunamadı.")
 

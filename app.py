@@ -2628,6 +2628,137 @@ with tab_lookup:
             '</div>',
             unsafe_allow_html=True,
         )
+
+    # ── HAFTALIK RAPOR ARŞİVİ ────────────────────────────────────────────
+    st.markdown('<hr style="border-color:var(--color-border-tertiary);margin:1.5rem 0;">', unsafe_allow_html=True)
+    st.markdown(
+        '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+        'letter-spacing:0.1em;margin-bottom:0.8rem;">📋 HAFTALIK RAPOR ARŞİVİ</div>',
+        unsafe_allow_html=True,
+    )
+
+    from analysis_memory import get_weekly_reports, get_weekly_report_by_id
+    from weekly_report_html import generate_weekly_html
+
+    wr_col1, wr_col2 = st.columns([1, 2])
+    with wr_col1:
+        wr_type = st.selectbox(
+            "Rapor tipi:",
+            ["Tümü", "Portföy", "Sürpriz", "Makro"],
+            key="wr_type_filter",
+            label_visibility="collapsed",
+        )
+    with wr_col2:
+        st.caption("Her Pazar akşamı otomatik arşivlenir · PDF için raporu aç → Yazdır → PDF kaydet")
+
+    _type_map = {"Tümü": None, "Portföy": "portfolio", "Sürpriz": "surprise", "Makro": "macro"}
+    _wr_list  = get_weekly_reports(report_type=_type_map[wr_type], limit=20)
+
+    if not _wr_list:
+        st.info("Henüz arşivlenmiş rapor yok. İlk haftalık rapor Pazar akşamı geldiğinde otomatik kaydedilecek.")
+    else:
+        _type_emoji = {"portfolio": "💼", "surprise": "🔭", "macro": "🌍"}
+        _type_label = {"portfolio": "Portföy", "surprise": "Sürpriz", "macro": "Makro"}
+
+        for _wr in _wr_list:
+            _wr_id     = _wr.get("id", "")
+            _wr_date   = _wr.get("date", "")
+            _wr_type   = _wr.get("type", "")
+            _wr_week   = _wr.get("week", "")
+            _wr_cnt    = _wr.get("result_count", 0)
+            _wr_summ   = _wr.get("summary", "")
+            _wr_emoji  = _type_emoji.get(_wr_type, "📊")
+            _wr_tlabel = _type_label.get(_wr_type, "Rapor")
+
+            with st.expander(
+                f"{_wr_emoji}  {_wr_tlabel}  ·  {_wr_date}  ·  {_wr_week}  ·  {_wr_cnt} hisse",
+                expanded=False,
+            ):
+                if _wr_summ:
+                    st.markdown(
+                        f'<div style="font-size:0.78rem;color:var(--color-text-secondary);'
+                        f'line-height:1.6;margin-bottom:0.8rem;">{_wr_summ}</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                _wr_results = _wr.get("results", [])
+                if _wr_results:
+                    # Hisse kartları — mini grid
+                    import math
+                    _cols_per_row = 3
+                    for _ri in range(0, len(_wr_results), _cols_per_row):
+                        _chunk = _wr_results[_ri:_ri + _cols_per_row]
+                        _rcols = st.columns(len(_chunk))
+                        for _col, _r in zip(_rcols, _chunk):
+                            _tk  = _r.get("hisse_sembolu") or _r.get("ticker", "—")
+                            _sc  = int(_r.get("nihai_guven_skoru", 0))
+                            _tav = _r.get("tavsiye", "Tut")
+                            _oz  = _r.get("analiz_ozeti", "")[:80]
+                            _kat = _r.get("kategori", "")
+                            _sc_color = "#00c48c" if _sc >= 75 else ("#ffb300" if _sc >= 55 else "#e74c3c")
+                            _tav_color = {"Ağırlık Artır": "#00c48c", "Tut": "#ffb300", "Azalt": "#e74c3c"}.get(_tav, "#8a9ab0")
+                            _col.markdown(
+                                f'<div style="background:var(--color-background-secondary);'
+                                f'border:0.5px solid var(--color-border-tertiary);'
+                                f'border-top:3px solid {_sc_color};'
+                                f'border-radius:var(--border-radius-md);padding:0.7rem;">'
+                                f'<div style="display:flex;justify-content:space-between;align-items:flex-start;">'
+                                f'<div>'
+                                f'<div style="font-size:14px;font-weight:600;">{_tk}</div>'
+                                f'<div style="font-size:10px;color:var(--color-text-tertiary);">{_kat}</div>'
+                                f'</div>'
+                                f'<div style="text-align:right;">'
+                                f'<div style="font-size:20px;font-weight:700;color:{_sc_color};">{_sc}</div>'
+                                f'<div style="font-size:10px;padding:1px 6px;background:{_tav_color}22;'
+                                f'color:{_tav_color};border-radius:10px;">{_tav}</div>'
+                                f'</div>'
+                                f'</div>'
+                                f'<div style="font-size:11px;color:var(--color-text-secondary);'
+                                f'margin-top:6px;line-height:1.5;">{_oz}{"..." if len(_r.get("analiz_ozeti","")) > 80 else ""}</div>'
+                                f'</div>',
+                                unsafe_allow_html=True,
+                            )
+
+                    # Skor grafiği (Plotly sparkline)
+                    try:
+                        import plotly.graph_objects as go
+                        _sorted_r = sorted(_wr_results, key=lambda x: x.get("nihai_guven_skoru", 0), reverse=True)[:15]
+                        _tickers_g = [r.get("hisse_sembolu") or r.get("ticker","") for r in _sorted_r]
+                        _scores_g  = [r.get("nihai_guven_skoru", 0) for r in _sorted_r]
+                        _colors_g  = ["#00c48c" if s >= 75 else "#ffb300" if s >= 55 else "#e74c3c" for s in _scores_g]
+
+                        fig = go.Figure(go.Bar(
+                            x=_tickers_g,
+                            y=_scores_g,
+                            marker_color=_colors_g,
+                            text=[str(s) for s in _scores_g],
+                            textposition="outside",
+                        ))
+                        fig.update_layout(
+                            height=280,
+                            margin=dict(l=0, r=0, t=20, b=0),
+                            paper_bgcolor="rgba(0,0,0,0)",
+                            plot_bgcolor="rgba(0,0,0,0)",
+                            yaxis=dict(range=[0, 110], showgrid=False, visible=False),
+                            xaxis=dict(tickfont=dict(size=10)),
+                            showlegend=False,
+                        )
+                        st.plotly_chart(fig, use_container_width=True, key=f"wr_chart_{_wr_id}")
+                    except Exception:
+                        pass
+
+                # ── PDF Download butonu ───────────────────────────────────
+                st.markdown('<div style="margin-top:0.8rem;"></div>', unsafe_allow_html=True)
+                _html_content = generate_weekly_html(_wr)
+                st.download_button(
+                    label="📄 HTML Raporu İndir (PDF için tarayıcıdan Yazdır)",
+                    data=_html_content.encode("utf-8"),
+                    file_name=f"rapor_{_wr_id}.html",
+                    mime="text/html",
+                    key=f"dl_{_wr_id}",
+                    use_container_width=True,
+                )
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 with tab_watchlist:
