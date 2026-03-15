@@ -209,11 +209,16 @@ def format_macro_telegram(macro_data: dict, regime: dict, date_str: str) -> str:
 def main():
     logger.info("Haftalık rapor başlatılıyor...")
 
-    required = ["ANTHROPIC_API_KEY", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"]
+    required = [
+        "ANTHROPIC_API_KEY", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID",
+        "GITHUB_TOKEN", "GITHUB_REPO",
+    ]
     missing  = [k for k in required if not os.getenv(k)]
     if missing:
         logger.error("Eksik env değişkenleri: %s", missing)
         sys.exit(1)
+
+    logger.info("GitHub repo: %s", os.getenv("GITHUB_REPO", ""))
 
     from weekly_scanner    import run_surprise_scan, run_portfolio_scan
     from portfolio_manager import load_portfolio
@@ -249,7 +254,7 @@ def main():
                 _summary = f"{len(port_results)} portföy hissesi analiz edildi. En yüksek: {_top_scores[0].get('hisse_sembolu','')} ({_top_scores[0].get('nihai_guven_skoru',0)})"
                 save_weekly_report("portfolio", port_results, summary_text=_summary)
             except Exception as _e:
-                logger.warning("Portföy raporu arşivlenemedi: %s", _e)
+                logger.error("Portföy raporu arsivlenemedi: %s", _e, exc_info=True)
         else:
             send_message(f"💼 <b>Portföy Raporu</b>\n\n📭 Veri alınamadı.")
     else:
@@ -284,7 +289,7 @@ def main():
                 save_weekly_report("macro", [], macro_snapshot=_macro_snap,
                                    summary_text=f"Rejim: {macro_regime.get('label','')}")
             except Exception as _e:
-                logger.warning("Makro raporu arşivlenemedi: %s", _e)
+                logger.error("Makro raporu arsivlenemedi: %s", _e, exc_info=True)
     except Exception as e:
         logger.error("Makro raporu hatası: %s", e)
         send_message(f"🌍 <b>Makro Özet</b>\n\n⚠️ Veriler alınamadı: {e}")
@@ -310,7 +315,7 @@ def main():
             _summary_s = f"{len(surprise_results)} sürpriz hisse bulundu. En iyi: {_top[0].get('hisse_sembolu','')} ({_top[0].get('nihai_guven_skoru',0)})"
             save_weekly_report("surprise", surprise_results, summary_text=_summary_s)
         except Exception as _e:
-            logger.warning("Sürpriz raporu arşivlenemedi: %s", _e)
+            logger.error("Surpriz raporu arsivlenemedi: %s", _e, exc_info=True)
     else:
         send_message(f"🔭 <b>Sürpriz Radar</b>\n\n📭 Bu hafta yeterli sürpriz adayı bulunamadı.")
 
