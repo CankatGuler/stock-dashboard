@@ -216,7 +216,7 @@ def main():
         sys.exit(1)
 
     from weekly_scanner    import run_surprise_scan, run_portfolio_scan
-    from portfolio_manager import PortfolioManager
+    from portfolio_manager import load_portfolio
     from telegram_notifier import send_message
 
     date_str = datetime.now(timezone.utc).strftime("%d.%m.%Y")
@@ -228,8 +228,7 @@ def main():
     # ── RAPOR 1: Portföy ──────────────────────────────────────────────────
     logger.info("Portföy raporu hazırlanıyor...")
     try:
-        pm       = PortfolioManager()
-        port     = pm.load_portfolio()
+        port         = load_portfolio()
         port_tickers = [p["ticker"] for p in port if p.get("ticker")]
     except Exception as e:
         logger.warning("Portföy yüklenemedi: %s", e)
