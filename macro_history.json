@@ -72,5 +72,79 @@
         "note": "Normal curve (+0.68%) — ekonomi sağlıklı"
       }
     }
+  },
+  {
+    "date": "2026-03-16",
+    "timestamp": "2026-03-16T11:30:13",
+    "regime": "RISK_OFF",
+    "label": "Riskten Kaç",
+    "indicators": {
+      "VIX": {
+        "value": 25.5,
+        "change_pct": -6.28,
+        "signal": "amber",
+        "note": "Yüksek belirsizlik — dikkatli ol"
+      },
+      "TNX": {
+        "value": 4.28,
+        "change_pct": 0.28,
+        "signal": "amber",
+        "note": "Orta faiz — değerleme baskısı var"
+      },
+      "IRX": {
+        "value": 3.6,
+        "change_pct": -0.06,
+        "signal": "neutral",
+        "note": ""
+      },
+      "DXY": {
+        "value": 100.02,
+        "change_pct": -0.22,
+        "signal": "amber",
+        "note": "Güçlü dolar — ihracat gelirleri olumsuz etkilenir"
+      },
+      "GOLD": {
+        "value": 5019.2,
+        "change_pct": -0.07,
+        "signal": "green",
+        "note": "Altın düşüyor — risk iştahı iyileşiyor"
+      },
+      "OIL": {
+        "value": 97.03,
+        "change_pct": -2.22,
+        "signal": "red",
+        "note": "Yüksek petrol — enflasyon baskısı, Fed sıkılaşır"
+      },
+      "COPPER": {
+        "value": 5.76,
+        "change_pct": 0.39,
+        "signal": "amber",
+        "note": "Bakır yatay — büyüme belirsiz"
+      },
+      "SPX": {
+        "value": 6632.19,
+        "change_pct": -0.61,
+        "signal": "neutral",
+        "note": "Yatay piyasa — yön bekleniyor"
+      },
+      "NDX": {
+        "value": 22105.36,
+        "change_pct": -0.93,
+        "signal": "neutral",
+        "note": ""
+      },
+      "TLT": {
+        "value": 86.54,
+        "change_pct": -0.01,
+        "signal": "neutral",
+        "note": ""
+      },
+      "YIELD_CURVE": {
+        "value": 0.68,
+        "change_pct": 0,
+        "signal": "green",
+        "note": "Normal curve (+0.68%) — ekonomi sağlıklı"
+      }
+    }
   }
 ]
