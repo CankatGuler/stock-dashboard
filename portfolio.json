@@ -1,146 +1,122 @@
-[
-  {
-    "ticker": "AMD",
-    "shares": 1.336499016,
-    "avg_cost": 219.97,
-    "sector": "Semiconductor",
-    "notes": "Örnek pozisyon",
-    "added": "2026-03-11 18:58",
-    "updated": "2026-03-11 18:58"
-  },
-  {
-    "ticker": "OKLO",
-    "shares": 4.466186592,
-    "avg_cost": 83.4,
-    "sector": "Nükleer",
-    "notes": "",
-    "added": "2026-03-11 18:58",
-    "updated": "2026-03-11 18:58"
-  },
-  {
-    "ticker": "IREN",
-    "shares": 11.19340589,
-    "avg_cost": 42.87,
-    "sector": "Technology",
-    "notes": "",
-    "added": "2026-03-11 18:58",
-    "updated": "2026-03-11 18:58"
-  },
-  {
-    "ticker": "CCJ",
-    "shares": 3.224847089,
-    "avg_cost": 101.66,
-    "sector": "Nükleer",
-    "notes": "",
-    "added": "2026-03-11 18:58",
-    "updated": "2026-03-11 18:58"
-  },
-  {
-    "ticker": "PPA",
-    "shares": 4.3775054,
-    "avg_cost": 152.06,
-    "sector": "Savunma ETF",
-    "notes": "",
-    "added": "2026-03-11 18:58",
-    "updated": "2026-03-11 18:58"
-  },
-  {
-    "ticker": "VRT",
-    "shares": 2.557124956,
-    "avg_cost": 189.24,
-    "sector": "Diğer",
-    "notes": "",
-    "added": "2026-03-11 18:58",
-    "updated": "2026-03-11 18:58"
-  },
-  {
-    "ticker": "CRWD",
-    "shares": 0.937182506,
-    "avg_cost": 475.89,
-    "sector": "Yazılım",
-    "notes": "",
-    "added": "2026-03-11 18:58",
-    "updated": "2026-03-11 18:58"
-  },
-  {
-    "ticker": "AVGO",
-    "shares": 1.990169739,
-    "avg_cost": 340.17,
-    "sector": "Diğer",
-    "notes": "",
-    "added": "2026-03-11 18:58",
-    "updated": "2026-03-11 18:58"
-  },
-  {
-    "ticker": "ZETA",
-    "shares": 18.311,
-    "avg_cost": 20.32,
-    "sector": "Yazılım",
-    "notes": "",
-    "added": "2026-03-11 18:58",
-    "updated": "2026-03-11 18:58"
-  },
-  {
-    "ticker": "AMZN",
-    "shares": 2.69452208,
-    "avg_cost": 231.92,
-    "sector": "Diğer",
-    "notes": "",
-    "added": "2026-03-11 18:58",
-    "updated": "2026-03-11 18:58"
-  },
-  {
-    "ticker": "QCOM",
-    "shares": 1.667998294,
-    "avg_cost": 178.17,
-    "sector": "Diğer",
-    "notes": "",
-    "added": "2026-03-11 18:58",
-    "updated": "2026-03-11 18:58"
-  },
-  {
-    "ticker": "ONDS",
-    "shares": 0.0009635000000010052,
-    "avg_cost": 11.6,
-    "sector": "Diğer",
-    "notes": "",
-    "added": "2026-03-11 18:58",
-    "updated": "2026-03-14 08:32"
-  },
-  {
-    "ticker": "SOFI",
-    "shares": 29.07947067,
-    "avg_cost": 24.07,
-    "sector": "Diğer",
-    "notes": "",
-    "added": "2026-03-11 18:58",
-    "updated": "2026-03-11 18:58"
-  },
-  {
-    "ticker": "NBIS",
-    "shares": 4.233719841,
-    "avg_cost": 94.47,
-    "sector": "Diğer",
-    "notes": "",
-    "added": "2026-03-11 18:58",
-    "updated": "2026-03-11 18:58"
-  },
-  {
-    "ticker": "RKLB",
-    "shares": 4.335641186,
-    "avg_cost": 69.4,
-    "sector": "Diğer",
-    "notes": "",
-    "added": "2026-03-11 18:58",
-    "updated": "2026-03-11 18:58"
-  },
-  {
-    "ticker": "SCHD",
-    "shares": 8.121120522,
-    "avg_cost": 30.77,
-    "sector": "Diğer",
-    "notes": "ETF",
-    "added": "2026-03-14 08:30",
-    "updated": "2026-03-14 08:31"
-  }
-]
+{
+  "positions": [
+    {
+      "ticker": "AMD",
+      "shares": 1.3365,
+      "avg_cost": 219.97,
+      "sector": "Diğer",
+      "notes": "",
+      "added": "2026-03-16 09:10",
+      "updated": "2026-03-16 09:10"
+    },
+    {
+      "ticker": "IREN",
+      "shares": 11.1934,
+      "avg_cost": 42.87,
+      "sector": "Diğer",
+      "notes": "",
+      "added": "2026-03-16 09:10",
+      "updated": "2026-03-16 09:10"
+    },
+    {
+      "ticker": "CCJ",
+      "shares": 3.2248,
+      "avg_cost": 101.66,
+      "sector": "Diğer",
+      "notes": "",
+      "added": "2026-03-16 09:10",
+      "updated": "2026-03-16 09:10"
+    },
+    {
+      "ticker": "PPA",
+      "shares": 4.3775,
+      "avg_cost": 152.06,
+      "sector": "Diğer",
+      "notes": "",
+      "added": "2026-03-16 09:10",
+      "updated": "2026-03-16 09:10"
+    },
+    {
+      "ticker": "VRT",
+      "shares": 2.5571,
+      "avg_cost": 189.24,
+      "sector": "Diğer",
+      "notes": "",
+      "added": "2026-03-16 09:10",
+      "updated": "2026-03-16 09:10"
+    },
+    {
+      "ticker": "CRWD",
+      "shares": 0.9372,
+      "avg_cost": 475.89,
+      "sector": "Diğer",
+      "notes": "",
+      "added": "2026-03-16 09:10",
+      "updated": "2026-03-16 09:10"
+    },
+    {
+      "ticker": "AVGO",
+      "shares": 1.9902,
+      "avg_cost": 340.17,
+      "sector": "Diğer",
+      "notes": "",
+      "added": "2026-03-16 09:10",
+      "updated": "2026-03-16 09:10"
+    },
+    {
+      "ticker": "ZETA",
+      "shares": 18.311,
+      "avg_cost": 20.32,
+      "sector": "Diğer",
+      "notes": "",
+      "added": "2026-03-16 09:10",
+      "updated": "2026-03-16 09:10"
+    },
+    {
+      "ticker": "AMZN",
+      "shares": 3.6591,
+      "avg_cost": 225.44,
+      "sector": "Diğer",
+      "notes": "",
+      "added": "2026-03-16 09:10",
+      "updated": "2026-03-16 09:10"
+    },
+    {
+      "ticker": "SOFI",
+      "shares": 16.1599,
+      "avg_cost": 24.07,
+      "sector": "Diğer",
+      "notes": "",
+      "added": "2026-03-16 09:10",
+      "updated": "2026-03-16 09:10"
+    },
+    {
+      "ticker": "NBIS",
+      "shares": 4.2337,
+      "avg_cost": 94.47,
+      "sector": "Diğer",
+      "notes": "",
+      "added": "2026-03-16 09:10",
+      "updated": "2026-03-16 09:10"
+    },
+    {
+      "ticker": "RKLB",
+      "shares": 4.3356,
+      "avg_cost": 69.4,
+      "sector": "Diğer",
+      "notes": "",
+      "added": "2026-03-16 09:10",
+      "updated": "2026-03-16 09:10"
+    },
+    {
+      "ticker": "SCHD",
+      "shares": 8.1256,
+      "avg_cost": 30.76,
+      "sector": "Diğer",
+      "notes": "",
+      "added": "2026-03-16 09:10",
+      "updated": "2026-03-16 09:10"
+    }
+  ],
+  "cash": 0.0
+}
