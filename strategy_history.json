@@ -1,1 +1,151 @@
-[]
+[
+  {
+    "id": "2026-03-16_001",
+    "date": "2026-03-16",
+    "generated_at": "2026-03-16T21:50:40.686242+00:00",
+    "portfolio_value": 5910.99,
+    "cash": 932.61,
+    "summary": "Portföy %100 tek sektörde yoğunlaşmış, kritik konsantrasyon riski var. FOMC 2 gün sonra, VIX yüksek (23.5), piyasa genişliği zayıf. Mevcut pozisyonlar",
+    "strategy": {
+      "ozet": "Portföy %100 tek sektörde yoğunlaşmış, kritik konsantrasyon riski var. FOMC 2 gün sonra, VIX yüksek (23.5), piyasa genişliği zayıf. Mevcut pozisyonlar K/Z sıfırda, henüz kayıp yok ama savunmacı hamle şart. $1,932 kullanılabilir nakit ile seçici alım yapılabilir.",
+      "piyasa_degerlendirmesi": "VIX 23.5 yüksek belirsizlik, FOMC 2 gün sonra faiz kararı. Dolar zayıf (DXY 99.8) ihracatçılara pozitif. Petrol yüksek ($94) enflasyon baskısı yaratıyor. Fear&Greed nötr (50), piyasa genişliği zayıf — sadece büyük hisseler taşıyor. Yield curve normal, resesyon sinyali yok.",
+      "celiskiler": [
+        {
+          "hisse": "VRT",
+          "celisik_sinyaller": "Portföy skoru 78 tut diyor, analist upside sadece %4",
+          "cozum": "Düşük upside nedeniyle pozisyon küçült, nakdi yüksek potansiyele kaydır"
+        },
+        {
+          "hisse": "CRWD",
+          "celisik_sinyaller": "Portföy skoru yok ama analist upside %12 düşük",
+          "cozum": "Mevcut pozisyon küçük (0.94 adet), tut ama artırma"
+        },
+        {
+          "hisse": "IREN",
+          "celisik_sinyaller": "Analist upside %92 çok yüksek ama short %14 ve volatil",
+          "cozum": "Spekülatif pozisyon, FOMC sonrası değerlendir, şimdilik tut"
+        }
+      ],
+      "aksiyonlar": {
+        "sat_azalt": [
+          {
+            "ticker": "VRT",
+            "islem": "Azalt",
+            "miktar_pct": 50,
+            "gercekle": "FOMC sonrası",
+            "konu_fiyat": 0,
+            "neden": "Analist hedefine sadece %4 upside, nakdi daha iyi fırsatlara kaydır"
+          },
+          {
+            "ticker": "PPA",
+            "islem": "Azalt",
+            "miktar_pct": 30,
+            "gercekle": "Hemen",
+            "konu_fiyat": 0,
+            "neden": "ETF analist verisi yok, portföyde %11 ağırlık fazla, çeşitlendirme için azalt"
+          }
+        ],
+        "al_arttir": [
+          {
+            "ticker": "AMD",
+            "islem": "Arttır",
+            "nakit_pct": 25,
+            "hedef_fiyat": 290,
+            "stop_loss": 175,
+            "kaynak": "watchlist",
+            "neden": "Analist upside %50, AI talebi güçlü, mevcut pozisyon küçük (1.34 adet)"
+          },
+          {
+            "ticker": "AVGO",
+            "islem": "Arttır",
+            "nakit_pct": 20,
+            "hedef_fiyat": 468,
+            "stop_loss": 280,
+            "kaynak": "watchlist",
+            "neden": "Strong Buy rating, %45 upside, AI/yarı iletken liderliği"
+          },
+          {
+            "ticker": "SOFI",
+            "islem": "Arttır",
+            "nakit_pct": 15,
+            "hedef_fiyat": 26.5,
+            "stop_loss": 14,
+            "kaynak": "watchlist",
+            "neden": "Fintech büyümesi güçlü, %49 upside, mevcut maliyet uygun"
+          }
+        ],
+        "bekle_izle": [
+          {
+            "ticker": "IREN",
+            "kosul": "FOMC sonrası VIX 20 altına düşerse",
+            "islem": "Arttır",
+            "nakit_pct": 10,
+            "neden": "%92 upside var ama short %14, volatilite düşünce ekle"
+          },
+          {
+            "ticker": "NBIX",
+            "kosul": "$85-90 bandına çekilirse",
+            "islem": "Al",
+            "nakit_pct": 10,
+            "neden": "Sürpriz raporu 82 puan, defensif biotech, düşük beta"
+          },
+          {
+            "ticker": "EXEL",
+            "kosul": "$30 altına gelirse",
+            "islem": "Al",
+            "nakit_pct": 10,
+            "neden": "Sürpriz raporu 82 puan, ucuz onkoloji hissesi"
+          }
+        ],
+        "nakit_rezerv_pct": 20,
+        "nakit_rezerv_neden": "FOMC belirsizliği ve VIX yüksekliği nedeniyle fırsat nakdi tut"
+      },
+      "kisa_vade": {
+        "sure": "1-3 ay",
+        "senaryo_baz": "FOMC güvercin geçer, VIX 18'e düşer, tech rallisi devam eder",
+        "senaryo_risk": "Şahin Fed, VIX 28+, growth hisselerinde %10-15 düzeltme",
+        "aksiyonlar": [
+          "FOMC öncesi yeni pozisyon açma, mevcut nakdi koru",
+          "VRT ve PPA azaltımı ile $140 nakit yarat",
+          "FOMC sonrası AMD ve AVGO artır",
+          "Stop loss'ları disiplinle uygula"
+        ]
+      },
+      "orta_vade": {
+        "sure": "3-12 ay",
+        "senaryo_baz": "Fed faiz indirimi başlar, AI harcamaları artar, tech outperform eder",
+        "senaryo_risk": "Resesyon endişeleri artar, tech değerlemeler baskı altına girer",
+        "aksiyonlar": [
+          "AMZN ve AVGO core pozisyon olarak koru",
+          "AMD'yi %8-10 portföy ağırlığına çıkar",
+          "SCHD temettü ETF'ini savunmacı anchor olarak tut",
+          "Biotech sürpriz listesinden 1-2 hisse ekle (NBIX, EXEL)"
+        ]
+      },
+      "uzun_vade": {
+        "sure": "1-3 yıl",
+        "hedef_portfoy": "Tech %40, Healthcare %20, Temettü ETF %15, Fintech %15, Nakit %10",
+        "aksiyonlar": [
+          "Sektör çeşitlendirmesi öncelik — tek sektör %100 riskini %50'ye düşür",
+          "SCHD ağırlığını %15'e çıkar (temettü büyümesi)",
+          "Healthcare/biotech eklentisi ile defensif karakter güçlendir",
+          "Spekülatif pozisyonları (IREN, RKLB) toplam %10 ile sınırla"
+        ]
+      },
+      "risk_uyarilari": [
+        "KRİTİK: %100 tek sektör konsantrasyonu — acil çeşitlendirme şart",
+        "FOMC 2 gün sonra — faiz sürprizi tech'i vurabilir",
+        "VIX 23.5 yüksek — ani satış dalgası riski var",
+        "IREN short oranı %14, NBIS %20 — sıkışma veya düşüş riski",
+        "ZETA short %13 — volatilite bekle"
+      ],
+      "guc_sinyalleri": [
+        "AVGO Strong Buy konsensüs, %45 upside, AI lideri",
+        "AMD %50 analist upside, AI chip talebi güçlü",
+        "Yield curve normal — resesyon sinyali yok",
+        "Zayıf dolar uluslararası gelirlere pozitif (AMZN, AVGO)",
+        "Portföyde henüz kayıp yok, manevra alanı mevcut"
+      ]
+    }
+  }
+]
