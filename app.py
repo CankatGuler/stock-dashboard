@@ -2061,6 +2061,107 @@ Türkçe, net ve somut yaz. Spesifik rakamlara dayan."""
                     if _ar.get("tickers"):
                         st.caption("Pozisyonlar: " + ", ".join(_ar["tickers"]))
 
+    # ── STRATEJİ ARŞİVİ ──────────────────────────────────────────────────
+    st.markdown('<hr style="border-color:var(--color-border-tertiary);margin:1.5rem 0;">', unsafe_allow_html=True)
+    st.markdown(
+        '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+        'letter-spacing:0.1em;margin-bottom:0.8rem;">🧭 STRATEJİ ARŞİVİ</div>',
+        unsafe_allow_html=True,
+    )
+
+    from analysis_memory     import get_strategy_history
+    from strategy_engine     import generate_strategy_html
+    from weekly_report_html  import generate_weekly_html  # PDF export için
+
+    _strat_history = get_strategy_history(limit=10)
+
+    if not _strat_history:
+        st.info("Henüz arşivlenmiş strateji yok. Strateji sekmesinden 'Strateji Üret' butonuna bas.")
+    else:
+        for _sh in _strat_history:
+            _sh_id   = _sh.get("id", "")
+            _sh_date = _sh.get("date", "")
+            _sh_time = _sh.get("generated_at", "")[:16].replace("T", " ")
+            _sh_pval = _sh.get("portfolio_value", 0)
+            _sh_cash = _sh.get("cash", 0)
+            _sh_summ = _sh.get("summary", "")[:100]
+            _sh_strat = _sh.get("strategy", {})
+
+            # Aksiyon özeti — kaç sat, kaç al, kaç bekle
+            _aks      = _sh_strat.get("aksiyonlar", {})
+            _n_sat    = len(_aks.get("sat_azalt", []))
+            _n_al     = len(_aks.get("al_arttir", []))
+            _n_bekle  = len(_aks.get("bekle_izle", []))
+
+            with st.expander(
+                f"🧭  {_sh_date}  ·  {_sh_time}  ·  "
+                f"Portföy ${_sh_pval:,.0f}  ·  "
+                f"🔴{_n_sat} Sat  🟢{_n_al} Al  🟡{_n_bekle} Bekle",
+                expanded=False,
+            ):
+                # Özet
+                if _sh_summ:
+                    st.markdown(
+                        f'<div style="font-size:0.78rem;color:var(--color-text-secondary);'
+                        f'background:var(--color-background-secondary);'
+                        f'border-left:3px solid #4fc3f7;border-radius:0 8px 8px 0;'
+                        f'padding:0.6rem 1rem;margin-bottom:0.8rem;">'
+                        f'{_sh_summ}</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                # Aksiyon kartları — kompakt 3 sütun
+                if _aks:
+                    _sc1, _sc2, _sc3 = st.columns(3)
+                    with _sc1:
+                        st.markdown('<div style="font-size:0.65rem;color:#e74c3c;font-weight:600;margin-bottom:4px;">📉 SAT / AZALT</div>', unsafe_allow_html=True)
+                        for _it in _aks.get("sat_azalt", []):
+                            st.markdown(
+                                f'<div style="font-size:0.72rem;padding:4px 0;'
+                                f'border-bottom:0.5px solid var(--color-border-tertiary);">'
+                                f'<b>{_it.get("ticker","")}</b> '
+                                f'<span style="color:#e74c3c;">%{_it.get("miktar_pct",0)} azalt</span><br>'
+                                f'<span style="color:var(--color-text-tertiary);font-size:0.65rem;">'
+                                f'{_it.get("neden","")[:60]}</span></div>',
+                                unsafe_allow_html=True,
+                            )
+                    with _sc2:
+                        st.markdown('<div style="font-size:0.65rem;color:#00c48c;font-weight:600;margin-bottom:4px;">📈 AL / ARTIR</div>', unsafe_allow_html=True)
+                        for _it in _aks.get("al_arttir", []):
+                            st.markdown(
+                                f'<div style="font-size:0.72rem;padding:4px 0;'
+                                f'border-bottom:0.5px solid var(--color-border-tertiary);">'
+                                f'<b>{_it.get("ticker","")}</b> '
+                                f'<span style="color:#00c48c;">%{_it.get("nakit_pct",0)} nakit</span><br>'
+                                f'<span style="color:var(--color-text-tertiary);font-size:0.65rem;">'
+                                f'{_it.get("neden","")[:60]}</span></div>',
+                                unsafe_allow_html=True,
+                            )
+                    with _sc3:
+                        st.markdown('<div style="font-size:0.65rem;color:#ffb300;font-weight:600;margin-bottom:4px;">⏳ BEKLE / KOŞULLU</div>', unsafe_allow_html=True)
+                        for _it in _aks.get("bekle_izle", []):
+                            st.markdown(
+                                f'<div style="font-size:0.72rem;padding:4px 0;'
+                                f'border-bottom:0.5px solid var(--color-border-tertiary);">'
+                                f'<b>{_it.get("ticker","")}</b> '
+                                f'<span style="color:#ffb300;">{_it.get("islem","")}</span><br>'
+                                f'<span style="color:var(--color-text-tertiary);font-size:0.65rem;">'
+                                f'{_it.get("kosul","")[:60]}</span></div>',
+                                unsafe_allow_html=True,
+                            )
+
+                # PDF download
+                _fake_result = {"success": True, "strategy": _sh_strat, "generated_at": _sh.get("generated_at", "")}
+                _sh_html     = generate_strategy_html(_fake_result, _sh_pval, _sh_cash)
+                st.download_button(
+                    label="📄 HTML İndir (PDF için Yazdır)",
+                    data=_sh_html.encode("utf-8"),
+                    file_name=f"strateji_{_sh_id}.html",
+                    mime="text/html",
+                    key=f"dl_strat_{_sh_id}",
+                    use_container_width=True,
+                )
+
     # ── HAFTALIK RAPOR ARŞİVİ ────────────────────────────────────────────
     st.markdown('<hr style="border-color:var(--color-border-tertiary);margin:1.5rem 0;">', unsafe_allow_html=True)
     st.markdown(
@@ -4214,9 +4315,16 @@ with tab_strategy:
                 st.session_state["strategy_data"]   = _strat_data
 
                 if _result["success"]:
-                    # Kaydet
-                    save_strategy(_result, _port_val_now, _cash_now)
-                    st.success("✅ Strateji üretildi ve kaydedildi!")
+                    # Çalışan GitHub mekanizmasıyla arşivle
+                    from analysis_memory import save_strategy_to_archive
+                    _strat_obj = _result.get("strategy", {})
+                    save_strategy_to_archive(
+                        strategy=_strat_obj,
+                        portfolio_value=_port_val_now,
+                        cash=_cash_now,
+                        summary=_strat_obj.get("ozet", "")[:150],
+                    )
+                    st.success("✅ Strateji üretildi ve arşivlendi!")
                     from datetime import datetime as _dt_strat
                     st.session_state["strategy_generated_at"] = _dt_strat.now().strftime("%Y-%m-%d %H:%M")
                 else:

@@ -700,3 +700,128 @@ def get_weekly_report_by_id(report_id: str) -> dict | None:
         if r.get("id") == report_id:
             return r
     return None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STRATEJİ ARŞİVİ
+# ─────────────────────────────────────────────────────────────────────────────
+
+STRATEGY_HISTORY_FILE = "strategy_history.json"
+MAX_STRATEGIES = 20  # Son 20 strateji
+
+
+def _load_strategy_archive() -> list:
+    """GitHub'dan strateji arşivini oku — weekly archive ile aynı pattern."""
+    try:
+        import requests, base64, os, json
+        token = os.getenv("GH_PAT", "") or os.getenv("GITHUB_TOKEN", "")
+        repo  = os.getenv("GITHUB_REPO", "")
+        if not token or not repo:
+            if os.path.exists(STRATEGY_HISTORY_FILE):
+                with open(STRATEGY_HISTORY_FILE) as f:
+                    return json.load(f)
+            return []
+        headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
+        url     = f"https://api.github.com/repos/{repo}/contents/{STRATEGY_HISTORY_FILE}"
+        resp    = requests.get(url, headers=headers, timeout=15)
+        if resp.status_code == 404:
+            return []
+        resp.raise_for_status()
+        content = base64.b64decode(resp.json()["content"]).decode("utf-8")
+        return json.loads(content)
+    except Exception as e:
+        logger.warning("Strategy archive load failed: %s", e)
+        return []
+
+
+def _save_strategy_archive(data: list) -> bool:
+    """Strateji arşivini GitHub'a yaz."""
+    try:
+        import requests, base64, os, json
+        token = os.getenv("GH_PAT", "") or os.getenv("GITHUB_TOKEN", "")
+        repo  = os.getenv("GITHUB_REPO", "")
+
+        # Lokal fallback
+        with open(STRATEGY_HISTORY_FILE, "w") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+        if not token or not repo:
+            return True
+
+        headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
+        url     = f"https://api.github.com/repos/{repo}/contents/{STRATEGY_HISTORY_FILE}"
+        encoded = base64.b64encode(
+            json.dumps(data, ensure_ascii=False, indent=2).encode()
+        ).decode()
+
+        sha = None
+        r   = requests.get(url, headers=headers, timeout=10)
+        if r.status_code == 200:
+            sha = r.json().get("sha")
+
+        payload = {
+            "message": f"strategy archive {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+            "content": encoded,
+        }
+        if sha:
+            payload["sha"] = sha
+
+        r2 = requests.put(url, headers=headers, json=payload, timeout=15)
+        r2.raise_for_status()
+        logger.info("Strategy archive saved to GitHub.")
+        return True
+    except Exception as e:
+        logger.warning("Strategy archive save failed: %s", e)
+        return False
+
+
+def save_strategy_to_archive(
+    strategy: dict,
+    portfolio_value: float,
+    cash: float,
+    summary: str = "",
+) -> bool:
+    """
+    Üretilen stratejiyi arşive kaydet.
+    Her kayıt:
+    {
+      "id":              "2026-03-17_001",
+      "date":            "2026-03-17",
+      "generated_at":    "2026-03-17T19:45:00Z",
+      "portfolio_value": 5911.0,
+      "cash":            933.0,
+      "summary":         "FOMC öncesi temkinli duruş...",
+      "strategy":        { ...Claude çıktısı... }
+    }
+    """
+    archive = _load_strategy_archive()
+    now     = datetime.now(timezone.utc)
+
+    # Aynı gün birden fazla strateji olabilir — ID'ye sıra no ekle
+    today_s   = now.strftime("%Y-%m-%d")
+    today_cnt = sum(1 for r in archive if r.get("date", "") == today_s)
+
+    record = {
+        "id":              f"{today_s}_{today_cnt+1:03d}",
+        "date":            today_s,
+        "generated_at":    now.isoformat(),
+        "portfolio_value": round(portfolio_value, 2),
+        "cash":            round(cash, 2),
+        "summary":         summary or strategy.get("ozet", "")[:150],
+        "strategy":        strategy,
+    }
+
+    archive.append(record)
+    if len(archive) > MAX_STRATEGIES:
+        archive = archive[-MAX_STRATEGIES:]
+
+    ok = _save_strategy_archive(archive)
+    logger.info("Strategy saved: %s", record["id"])
+    return ok
+
+
+def get_strategy_history(limit: int = 10) -> list:
+    """Strateji arşivini en yeni önce döndür."""
+    archive = _load_strategy_archive()
+    archive.sort(key=lambda x: x.get("generated_at", ""), reverse=True)
+    return archive[:limit]
