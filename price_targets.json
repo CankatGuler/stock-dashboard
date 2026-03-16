@@ -10,6 +10,17 @@
       "rec": "Buy",
       "rec_mean": 1.58,
       "upside": 49.8
+    },
+    {
+      "date": "2026-03-16",
+      "price": 193.39,
+      "mean": 290.27,
+      "high": 365.0,
+      "low": 220.0,
+      "n_analysts": 45,
+      "rec": "Buy",
+      "rec_mean": 1.58,
+      "upside": 50.1
     }
   ],
   "OKLO": [
@@ -36,6 +47,17 @@
       "rec": "Buy",
       "rec_mean": 1.57,
       "upside": 92.4
+    },
+    {
+      "date": "2026-03-16",
+      "price": 41.58,
+      "mean": 80.0,
+      "high": 125.0,
+      "low": 39.0,
+      "n_analysts": 13,
+      "rec": "Buy",
+      "rec_mean": 1.57,
+      "upside": 92.4
     }
   ],
   "CCJ": [
@@ -49,11 +71,33 @@
       "rec": "Buy",
       "rec_mean": 1.68,
       "upside": 16.1
+    },
+    {
+      "date": "2026-03-16",
+      "price": 107.92,
+      "mean": 125.57,
+      "high": 159.84,
+      "low": 82.43,
+      "n_analysts": 9,
+      "rec": "Buy",
+      "rec_mean": 1.68,
+      "upside": 16.4
     }
   ],
   "VRT": [
     {
       "date": "2026-03-15",
+      "price": 258.88,
+      "mean": 267.83,
+      "high": 320.0,
+      "low": 155.0,
+      "n_analysts": 23,
+      "rec": "Strong Buy",
+      "rec_mean": 1.48,
+      "upside": 3.5
+    },
+    {
+      "date": "2026-03-16",
       "price": 258.88,
       "mean": 267.83,
       "high": 320.0,
@@ -75,11 +119,33 @@
       "rec": "Buy",
       "rec_mean": 1.75,
       "upside": 11.6
+    },
+    {
+      "date": "2026-03-16",
+      "price": 441.78,
+      "mean": 493.08,
+      "high": 706.0,
+      "low": 368.0,
+      "n_analysts": 48,
+      "rec": "Buy",
+      "rec_mean": 1.75,
+      "upside": 11.6
     }
   ],
   "AVGO": [
     {
       "date": "2026-03-15",
+      "price": 322.16,
+      "mean": 467.8,
+      "high": 630.0,
+      "low": 360.0,
+      "n_analysts": 44,
+      "rec": "Strong Buy",
+      "rec_mean": 1.22,
+      "upside": 45.2
+    },
+    {
+      "date": "2026-03-16",
       "price": 322.16,
       "mean": 467.8,
       "high": 630.0,
@@ -101,11 +167,33 @@
       "rec": "Buy",
       "rec_mean": 1.57,
       "upside": 63.0
+    },
+    {
+      "date": "2026-03-16",
+      "price": 17.84,
+      "mean": 29.08,
+      "high": 44.0,
+      "low": 23.0,
+      "n_analysts": 12,
+      "rec": "Buy",
+      "rec_mean": 1.57,
+      "upside": 63.0
     }
   ],
   "AMZN": [
     {
       "date": "2026-03-15",
+      "price": 207.67,
+      "mean": 280.55,
+      "high": 360.0,
+      "low": 175.0,
+      "n_analysts": 62,
+      "rec": "Strong Buy",
+      "rec_mean": 1.34,
+      "upside": 35.1
+    },
+    {
+      "date": "2026-03-16",
       "price": 207.67,
       "mean": 280.55,
       "high": 360.0,
@@ -153,11 +241,33 @@
       "rec": "None",
       "rec_mean": 3.0,
       "upside": 49.2
+    },
+    {
+      "date": "2026-03-16",
+      "price": 17.76,
+      "mean": 26.5,
+      "high": 38.0,
+      "low": 12.0,
+      "n_analysts": 19,
+      "rec": "None",
+      "rec_mean": 3.0,
+      "upside": 49.2
     }
   ],
   "NBIS": [
     {
       "date": "2026-03-15",
+      "price": 112.95,
+      "mean": 154.73,
+      "high": 291.0,
+      "low": 70.0,
+      "n_analysts": 11,
+      "rec": "Buy",
+      "rec_mean": 1.75,
+      "upside": 37.0
+    },
+    {
+      "date": "2026-03-16",
       "price": 112.95,
       "mean": 154.73,
       "high": 291.0,
@@ -179,11 +289,33 @@
       "rec": "Buy",
       "rec_mean": 1.8,
       "upside": 31.4
+    },
+    {
+      "date": "2026-03-16",
+      "price": 68.41,
+      "mean": 89.88,
+      "high": 120.0,
+      "low": 68.0,
+      "n_analysts": 12,
+      "rec": "Buy",
+      "rec_mean": 1.8,
+      "upside": 31.4
     }
   ],
   "ALL": [
     {
       "date": "2026-03-15",
+      "price": 206.17,
+      "mean": 240.52,
+      "high": 281.0,
+      "low": 176.0,
+      "n_analysts": 21,
+      "rec": "Buy",
+      "rec_mean": 2.12,
+      "upside": 16.7
+    },
+    {
+      "date": "2026-03-16",
       "price": 206.17,
       "mean": 240.52,
       "high": 281.0,
@@ -205,6 +337,17 @@
       "rec": "Buy",
       "rec_mean": 1.62,
       "upside": 20.2
+    },
+    {
+      "date": "2026-03-16",
+      "price": 341.53,
+      "mean": 410.62,
+      "high": 470.0,
+      "low": 275.0,
+      "n_analysts": 32,
+      "rec": "Buy",
+      "rec_mean": 1.62,
+      "upside": 20.2
     }
   ],
   "ASML": [
@@ -218,11 +361,33 @@
       "rec": "Buy",
       "rec_mean": 1.52,
       "upside": 7.6
+    },
+    {
+      "date": "2026-03-16",
+      "price": 1345.69,
+      "mean": 1455.66,
+      "high": 1862.39,
+      "low": 888.42,
+      "n_analysts": 15,
+      "rec": "Buy",
+      "rec_mean": 1.52,
+      "upside": 8.2
     }
   ],
   "AXON": [
     {
       "date": "2026-03-15",
+      "price": 496.18,
+      "mean": 735.01,
+      "high": 950.0,
+      "low": 521.24,
+      "n_analysts": 18,
+      "rec": "Buy",
+      "rec_mean": 1.6,
+      "upside": 48.1
+    },
+    {
+      "date": "2026-03-16",
       "price": 496.18,
       "mean": 735.01,
       "high": 950.0,
@@ -244,11 +409,33 @@
       "rec": "Buy",
       "rec_mean": 1.58,
       "upside": 36.7
+    },
+    {
+      "date": "2026-03-16",
+      "price": 4241.26,
+      "mean": 5796.51,
+      "high": 7746.0,
+      "low": 4495.0,
+      "n_analysts": 35,
+      "rec": "Buy",
+      "rec_mean": 1.58,
+      "upside": 36.7
     }
   ],
   "CAT": [
     {
       "date": "2026-03-15",
+      "price": 693.99,
+      "mean": 736.21,
+      "high": 877.52,
+      "low": 425.0,
+      "n_analysts": 26,
+      "rec": "Buy",
+      "rec_mean": 2.14,
+      "upside": 6.1
+    },
+    {
+      "date": "2026-03-16",
       "price": 693.99,
       "mean": 736.21,
       "high": 877.52,
@@ -270,11 +457,33 @@
       "rec": "Buy",
       "rec_mean": 2.06,
       "upside": -4.1
+    },
+    {
+      "date": "2026-03-16",
+      "price": 337.38,
+      "mean": 323.59,
+      "high": 425.0,
+      "low": 125.0,
+      "n_analysts": 17,
+      "rec": "Buy",
+      "rec_mean": 2.06,
+      "upside": -4.1
     }
   ],
   "COST": [
     {
       "date": "2026-03-15",
+      "price": 1008.43,
+      "mean": 1067.09,
+      "high": 1315.0,
+      "low": 650.0,
+      "n_analysts": 32,
+      "rec": "Buy",
+      "rec_mean": 1.95,
+      "upside": 5.8
+    },
+    {
+      "date": "2026-03-16",
       "price": 1008.43,
       "mean": 1067.09,
       "high": 1315.0,
@@ -296,11 +505,33 @@
       "rec": "Buy",
       "rec_mean": 1.65,
       "upside": 12.2
+    },
+    {
+      "date": "2026-03-16",
+      "price": 46.25,
+      "mean": 51.88,
+      "high": 67.0,
+      "low": 41.0,
+      "n_analysts": 26,
+      "rec": "Buy",
+      "rec_mean": 1.65,
+      "upside": 12.2
     }
   ],
   "EQIX": [
     {
       "date": "2026-03-15",
+      "price": 969.9,
+      "mean": 1027.15,
+      "high": 1200.0,
+      "low": 870.0,
+      "n_analysts": 27,
+      "rec": "Buy",
+      "rec_mean": 1.61,
+      "upside": 5.9
+    },
+    {
+      "date": "2026-03-16",
       "price": 969.9,
       "mean": 1027.15,
       "high": 1200.0,
@@ -322,11 +553,33 @@
       "rec": "Strong Buy",
       "rec_mean": 1.47,
       "upside": 21.1
+    },
+    {
+      "date": "2026-03-16",
+      "price": 299.69,
+      "mean": 362.83,
+      "high": 425.0,
+      "low": 290.0,
+      "n_analysts": 18,
+      "rec": "Strong Buy",
+      "rec_mean": 1.42,
+      "upside": 21.1
     }
   ],
   "HII": [
     {
       "date": "2026-03-15",
+      "price": 415.71,
+      "mean": 403.0,
+      "high": 465.0,
+      "low": 292.0,
+      "n_analysts": 10,
+      "rec": "Buy",
+      "rec_mean": 2.36,
+      "upside": -3.1
+    },
+    {
+      "date": "2026-03-16",
       "price": 415.71,
       "mean": 403.0,
       "high": 465.0,
@@ -348,6 +601,17 @@
       "rec": "Buy",
       "rec_mean": 2.27,
       "upside": 17.5
+    },
+    {
+      "date": "2026-03-16",
+      "price": 92.54,
+      "mean": 107.59,
+      "high": 135.0,
+      "low": 71.0,
+      "n_analysts": 22,
+      "rec": "Buy",
+      "rec_mean": 2.35,
+      "upside": 16.3
     }
   ],
   "ISRG": [
@@ -361,11 +625,33 @@
       "rec": "Buy",
       "rec_mean": 1.92,
       "upside": 29.2
+    },
+    {
+      "date": "2026-03-16",
+      "price": 472.16,
+      "mean": 607.17,
+      "high": 750.0,
+      "low": 378.0,
+      "n_analysts": 31,
+      "rec": "Buy",
+      "rec_mean": 1.92,
+      "upside": 28.6
     }
   ],
   "KTOS": [
     {
       "date": "2026-03-15",
+      "price": 87.53,
+      "mean": 117.95,
+      "high": 150.0,
+      "low": 85.0,
+      "n_analysts": 20,
+      "rec": "Buy",
+      "rec_mean": 1.65,
+      "upside": 34.8
+    },
+    {
+      "date": "2026-03-16",
       "price": 87.53,
       "mean": 117.95,
       "high": 150.0,
@@ -387,6 +673,17 @@
       "rec": "Buy",
       "rec_mean": 1.68,
       "upside": 23.5
+    },
+    {
+      "date": "2026-03-16",
+      "price": 985.08,
+      "mean": 1216.93,
+      "high": 1500.0,
+      "low": 870.0,
+      "n_analysts": 29,
+      "rec": "Buy",
+      "rec_mean": 1.68,
+      "upside": 23.5
     }
   ],
   "LULU": [
@@ -400,11 +697,33 @@
       "rec": "Hold",
       "rec_mean": 2.82,
       "upside": 31.1
+    },
+    {
+      "date": "2026-03-16",
+      "price": 157.78,
+      "mean": 207.55,
+      "high": 295.0,
+      "low": 170.0,
+      "n_analysts": 24,
+      "rec": "Hold",
+      "rec_mean": 2.81,
+      "upside": 31.5
     }
   ],
   "MA": [
     {
       "date": "2026-03-15",
+      "price": 497.99,
+      "mean": 662.59,
+      "high": 739.0,
+      "low": 550.0,
+      "n_analysts": 34,
+      "rec": "Strong Buy",
+      "rec_mean": 1.38,
+      "upside": 33.1
+    },
+    {
+      "date": "2026-03-16",
       "price": 497.99,
       "mean": 662.59,
       "high": 739.0,
@@ -426,11 +745,33 @@
       "rec": "Buy",
       "rec_mean": 1.56,
       "upside": -0.2
+    },
+    {
+      "date": "2026-03-16",
+      "price": 426.13,
+      "mean": 426.59,
+      "high": 650.0,
+      "low": 196.0,
+      "n_analysts": 39,
+      "rec": "Buy",
+      "rec_mean": 1.56,
+      "upside": 0.1
     }
   ],
   "NEE": [
     {
       "date": "2026-03-15",
+      "price": 92.78,
+      "mean": 93.78,
+      "high": 111.0,
+      "low": 55.0,
+      "n_analysts": 22,
+      "rec": "Buy",
+      "rec_mean": 1.92,
+      "upside": 1.1
+    },
+    {
+      "date": "2026-03-16",
       "price": 92.78,
       "mean": 93.78,
       "high": 111.0,
@@ -452,11 +793,33 @@
       "rec": "Buy",
       "rec_mean": 1.63,
       "upside": 24.4
+    },
+    {
+      "date": "2026-03-16",
+      "price": 167.01,
+      "mean": 207.75,
+      "high": 265.0,
+      "low": 114.0,
+      "n_analysts": 49,
+      "rec": "Buy",
+      "rec_mean": 1.63,
+      "upside": 24.4
     }
   ],
   "PWR": [
     {
       "date": "2026-03-15",
+      "price": 559.02,
+      "mean": 579.74,
+      "high": 685.0,
+      "low": 380.0,
+      "n_analysts": 26,
+      "rec": "Buy",
+      "rec_mean": 1.8,
+      "upside": 3.7
+    },
+    {
+      "date": "2026-03-16",
       "price": 559.02,
       "mean": 579.74,
       "high": 685.0,
@@ -478,6 +841,17 @@
       "rec": "Buy",
       "rec_mean": 1.71,
       "upside": 30.2
+    },
+    {
+      "date": "2026-03-16",
+      "price": 122.96,
+      "mean": 160.15,
+      "high": 200.0,
+      "low": 110.0,
+      "n_analysts": 46,
+      "rec": "Buy",
+      "rec_mean": 1.71,
+      "upside": 30.2
     }
   ],
   "SPGI": [
@@ -491,11 +865,33 @@
       "rec": "Strong Buy",
       "rec_mean": 1.29,
       "upside": 27.3
+    },
+    {
+      "date": "2026-03-16",
+      "price": 422.49,
+      "mean": 537.9,
+      "high": 625.0,
+      "low": 480.0,
+      "n_analysts": 21,
+      "rec": "Strong Buy",
+      "rec_mean": 1.29,
+      "upside": 27.3
     }
   ],
   "V": [
     {
       "date": "2026-03-15",
+      "price": 307.14,
+      "mean": 400.2,
+      "high": 450.0,
+      "low": 323.0,
+      "n_analysts": 35,
+      "rec": "Strong Buy",
+      "rec_mean": 1.34,
+      "upside": 30.3
+    },
+    {
+      "date": "2026-03-16",
       "price": 307.14,
       "mean": 400.2,
       "high": 450.0,
