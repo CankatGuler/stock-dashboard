@@ -2061,6 +2061,189 @@ Türkçe, net ve somut yaz. Spesifik rakamlara dayan."""
                     if _ar.get("tickers"):
                         st.caption("Pozisyonlar: " + ", ".join(_ar["tickers"]))
 
+    # ── HAFTALIK RAPOR ARŞİVİ ────────────────────────────────────────────
+    st.markdown('<hr style="border-color:var(--color-border-tertiary);margin:1.5rem 0;">', unsafe_allow_html=True)
+    st.markdown(
+        '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+        'letter-spacing:0.1em;margin-bottom:0.8rem;">📋 HAFTALIK RAPOR ARŞİVİ</div>',
+        unsafe_allow_html=True,
+    )
+
+    from analysis_memory import get_weekly_reports, get_weekly_report_by_id, save_weekly_report
+    from weekly_report_html import generate_weekly_html
+
+    # ── Manuel Rapor Oluştur ──────────────────────────────────────────────
+    wr_btn_c1, wr_btn_c2, wr_btn_c3 = st.columns([1.5, 1.5, 1])
+    with wr_btn_c1:
+        wr_run_port = st.button("💼 Portföy Raporunu Arşivle", key="wr_run_portfolio", use_container_width=True)
+    with wr_btn_c2:
+        wr_run_surp = st.button("🔭 Sürpriz Raporunu Arşivle", key="wr_run_surprise", use_container_width=True)
+    with wr_btn_c3:
+        wr_type = st.selectbox(
+            "Filtre:",
+            ["Tümü", "Portföy", "Sürpriz", "Makro"],
+            key="wr_type_filter",
+            label_visibility="collapsed",
+        )
+
+    # Portföy raporu oluştur ve arşivle
+    if wr_run_port:
+        _port_tickers = [p["ticker"] for p in load_portfolio() if p.get("ticker")]
+        if not _port_tickers:
+            st.warning("Portföyde hisse yok.")
+        else:
+            with st.spinner(f"{len(_port_tickers)} hisse analiz ediliyor ve arşivleniyor..."):
+                try:
+                    from weekly_scanner import run_portfolio_scan
+                    _port_results = run_portfolio_scan(_port_tickers)
+                    if _port_results:
+                        _top = sorted(_port_results, key=lambda x: x.get("nihai_guven_skoru", 0), reverse=True)
+                        _summary = f"{len(_port_results)} portföy hissesi analiz edildi. En yüksek: {_top[0].get('hisse_sembolu','')} ({_top[0].get('nihai_guven_skoru',0)})"
+                        save_weekly_report("portfolio", _port_results, summary_text=_summary)
+                        st.success(f"✅ {len(_port_results)} hisse arşivlendi!")
+                        st.session_state["wr_cache"] = None  # Cache sıfırla
+                        st.rerun()
+                    else:
+                        st.error("Analiz sonucu boş geldi.")
+                except Exception as _e:
+                    st.error(f"Hata: {_e}")
+
+    # Sürpriz raporu oluştur ve arşivle
+    if wr_run_surp:
+        with st.spinner("Sürpriz taraması çalışıyor ve arşivleniyor..."):
+            try:
+                from weekly_scanner import run_surprise_scan
+                _surp_results = run_surprise_scan(top_n_stage1=50, top_n_final=20)
+                if _surp_results:
+                    _top_s = sorted(_surp_results, key=lambda x: x.get("nihai_guven_skoru", 0), reverse=True)
+                    _summary_s = f"{len(_surp_results)} sürpriz hisse bulundu. En iyi: {_top_s[0].get('hisse_sembolu','')} ({_top_s[0].get('nihai_guven_skoru',0)})"
+                    save_weekly_report("surprise", _surp_results, summary_text=_summary_s)
+                    st.success(f"✅ {len(_surp_results)} hisse arşivlendi!")
+                    st.session_state["wr_cache"] = None
+                    st.rerun()
+                else:
+                    st.error("Tarama sonucu boş geldi.")
+            except Exception as _e:
+                st.error(f"Hata: {_e}")
+
+    st.caption("Manuel arşiv: istediğin zaman çalıştır · PDF için raporu aç → Yazdır → PDF kaydet")
+
+    _type_map = {"Tümü": None, "Portföy": "portfolio", "Sürpriz": "surprise", "Makro": "macro"}
+
+    # Cache ile yükle
+    if st.session_state.get("wr_cache") is None:
+        st.session_state["wr_cache"] = get_weekly_reports(limit=20)
+    _wr_list = [r for r in st.session_state.get("wr_cache", [])
+                if _type_map[wr_type] is None or r.get("type") == _type_map[wr_type]]
+
+    if not _wr_list:
+        st.info("Henüz arşivlenmiş rapor yok. Yukarıdaki butonlarla oluşturabilirsin.")
+    else:
+        _type_emoji = {"portfolio": "💼", "surprise": "🔭", "macro": "🌍"}
+        _type_label = {"portfolio": "Portföy", "surprise": "Sürpriz", "macro": "Makro"}
+
+        for _wr in _wr_list:
+            _wr_id     = _wr.get("id", "")
+            _wr_date   = _wr.get("date", "")
+            _wr_type   = _wr.get("type", "")
+            _wr_week   = _wr.get("week", "")
+            _wr_cnt    = _wr.get("result_count", 0)
+            _wr_summ   = _wr.get("summary", "")
+            _wr_emoji  = _type_emoji.get(_wr_type, "📊")
+            _wr_tlabel = _type_label.get(_wr_type, "Rapor")
+
+            with st.expander(
+                f"{_wr_emoji}  {_wr_tlabel}  ·  {_wr_date}  ·  {_wr_week}  ·  {_wr_cnt} hisse",
+                expanded=False,
+            ):
+                if _wr_summ:
+                    st.markdown(
+                        f'<div style="font-size:0.78rem;color:var(--color-text-secondary);'
+                        f'line-height:1.6;margin-bottom:0.8rem;">{_wr_summ}</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                _wr_results = _wr.get("results", [])
+                if _wr_results:
+                    # Hisse kartları — mini grid
+                    import math
+                    _cols_per_row = 3
+                    for _ri in range(0, len(_wr_results), _cols_per_row):
+                        _chunk = _wr_results[_ri:_ri + _cols_per_row]
+                        _rcols = st.columns(len(_chunk))
+                        for _col, _r in zip(_rcols, _chunk):
+                            _tk  = _r.get("hisse_sembolu") or _r.get("ticker", "—")
+                            _sc  = int(_r.get("nihai_guven_skoru", 0))
+                            _tav = _r.get("tavsiye", "Tut")
+                            _oz  = _r.get("analiz_ozeti", "")[:80]
+                            _kat = _r.get("kategori", "")
+                            _sc_color = "#00c48c" if _sc >= 75 else ("#ffb300" if _sc >= 55 else "#e74c3c")
+                            _tav_color = {"Ağırlık Artır": "#00c48c", "Tut": "#ffb300", "Azalt": "#e74c3c"}.get(_tav, "#8a9ab0")
+                            _col.markdown(
+                                f'<div style="background:var(--color-background-secondary);'
+                                f'border:0.5px solid var(--color-border-tertiary);'
+                                f'border-top:3px solid {_sc_color};'
+                                f'border-radius:var(--border-radius-md);padding:0.7rem;">'
+                                f'<div style="display:flex;justify-content:space-between;align-items:flex-start;">'
+                                f'<div>'
+                                f'<div style="font-size:14px;font-weight:600;">{_tk}</div>'
+                                f'<div style="font-size:10px;color:var(--color-text-tertiary);">{_kat}</div>'
+                                f'</div>'
+                                f'<div style="text-align:right;">'
+                                f'<div style="font-size:20px;font-weight:700;color:{_sc_color};">{_sc}</div>'
+                                f'<div style="font-size:10px;padding:1px 6px;background:{_tav_color}22;'
+                                f'color:{_tav_color};border-radius:10px;">{_tav}</div>'
+                                f'</div>'
+                                f'</div>'
+                                f'<div style="font-size:11px;color:var(--color-text-secondary);'
+                                f'margin-top:6px;line-height:1.5;">{_oz}{"..." if len(_r.get("analiz_ozeti","")) > 80 else ""}</div>'
+                                f'</div>',
+                                unsafe_allow_html=True,
+                            )
+
+                    # Skor grafiği (Plotly sparkline)
+                    try:
+                        import plotly.graph_objects as go
+                        _sorted_r = sorted(_wr_results, key=lambda x: x.get("nihai_guven_skoru", 0), reverse=True)[:15]
+                        _tickers_g = [r.get("hisse_sembolu") or r.get("ticker","") for r in _sorted_r]
+                        _scores_g  = [r.get("nihai_guven_skoru", 0) for r in _sorted_r]
+                        _colors_g  = ["#00c48c" if s >= 75 else "#ffb300" if s >= 55 else "#e74c3c" for s in _scores_g]
+
+                        fig = go.Figure(go.Bar(
+                            x=_tickers_g,
+                            y=_scores_g,
+                            marker_color=_colors_g,
+                            text=[str(s) for s in _scores_g],
+                            textposition="outside",
+                        ))
+                        fig.update_layout(
+                            height=280,
+                            margin=dict(l=0, r=0, t=20, b=0),
+                            paper_bgcolor="rgba(0,0,0,0)",
+                            plot_bgcolor="rgba(0,0,0,0)",
+                            yaxis=dict(range=[0, 110], showgrid=False, visible=False),
+                            xaxis=dict(tickfont=dict(size=10)),
+                            showlegend=False,
+                        )
+                        st.plotly_chart(fig, use_container_width=True, key=f"wr_chart_{_wr_id}")
+                    except Exception:
+                        pass
+
+                # ── PDF Download butonu ───────────────────────────────────
+                st.markdown('<div style="margin-top:0.8rem;"></div>', unsafe_allow_html=True)
+                _html_content = generate_weekly_html(_wr)
+                st.download_button(
+                    label="📄 HTML Raporu İndir (PDF için tarayıcıdan Yazdır)",
+                    data=_html_content.encode("utf-8"),
+                    file_name=f"rapor_{_wr_id}.html",
+                    mime="text/html",
+                    key=f"dl_{_wr_id}",
+                    use_container_width=True,
+                )
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 3 — FIRSAT RADARI
@@ -2642,188 +2825,6 @@ with tab_lookup:
             '</div>',
             unsafe_allow_html=True,
         )
-
-    # ── HAFTALIK RAPOR ARŞİVİ ────────────────────────────────────────────
-    st.markdown('<hr style="border-color:var(--color-border-tertiary);margin:1.5rem 0;">', unsafe_allow_html=True)
-    st.markdown(
-        '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
-        'letter-spacing:0.1em;margin-bottom:0.8rem;">📋 HAFTALIK RAPOR ARŞİVİ</div>',
-        unsafe_allow_html=True,
-    )
-
-    from analysis_memory import get_weekly_reports, get_weekly_report_by_id, save_weekly_report
-    from weekly_report_html import generate_weekly_html
-
-    # ── Manuel Rapor Oluştur ──────────────────────────────────────────────
-    wr_btn_c1, wr_btn_c2, wr_btn_c3 = st.columns([1.5, 1.5, 1])
-    with wr_btn_c1:
-        wr_run_port = st.button("💼 Portföy Raporunu Arşivle", key="wr_run_portfolio", use_container_width=True)
-    with wr_btn_c2:
-        wr_run_surp = st.button("🔭 Sürpriz Raporunu Arşivle", key="wr_run_surprise", use_container_width=True)
-    with wr_btn_c3:
-        wr_type = st.selectbox(
-            "Filtre:",
-            ["Tümü", "Portföy", "Sürpriz", "Makro"],
-            key="wr_type_filter",
-            label_visibility="collapsed",
-        )
-
-    # Portföy raporu oluştur ve arşivle
-    if wr_run_port:
-        _port_tickers = [p["ticker"] for p in load_portfolio() if p.get("ticker")]
-        if not _port_tickers:
-            st.warning("Portföyde hisse yok.")
-        else:
-            with st.spinner(f"{len(_port_tickers)} hisse analiz ediliyor ve arşivleniyor..."):
-                try:
-                    from weekly_scanner import run_portfolio_scan
-                    _port_results = run_portfolio_scan(_port_tickers)
-                    if _port_results:
-                        _top = sorted(_port_results, key=lambda x: x.get("nihai_guven_skoru", 0), reverse=True)
-                        _summary = f"{len(_port_results)} portföy hissesi analiz edildi. En yüksek: {_top[0].get('hisse_sembolu','')} ({_top[0].get('nihai_guven_skoru',0)})"
-                        save_weekly_report("portfolio", _port_results, summary_text=_summary)
-                        st.success(f"✅ {len(_port_results)} hisse arşivlendi!")
-                        st.session_state["wr_cache"] = None  # Cache sıfırla
-                        st.rerun()
-                    else:
-                        st.error("Analiz sonucu boş geldi.")
-                except Exception as _e:
-                    st.error(f"Hata: {_e}")
-
-    # Sürpriz raporu oluştur ve arşivle
-    if wr_run_surp:
-        with st.spinner("Sürpriz taraması çalışıyor ve arşivleniyor..."):
-            try:
-                from weekly_scanner import run_surprise_scan
-                _surp_results = run_surprise_scan(top_n_stage1=50, top_n_final=20)
-                if _surp_results:
-                    _top_s = sorted(_surp_results, key=lambda x: x.get("nihai_guven_skoru", 0), reverse=True)
-                    _summary_s = f"{len(_surp_results)} sürpriz hisse bulundu. En iyi: {_top_s[0].get('hisse_sembolu','')} ({_top_s[0].get('nihai_guven_skoru',0)})"
-                    save_weekly_report("surprise", _surp_results, summary_text=_summary_s)
-                    st.success(f"✅ {len(_surp_results)} hisse arşivlendi!")
-                    st.session_state["wr_cache"] = None
-                    st.rerun()
-                else:
-                    st.error("Tarama sonucu boş geldi.")
-            except Exception as _e:
-                st.error(f"Hata: {_e}")
-
-    st.caption("Manuel arşiv: istediğin zaman çalıştır · PDF için raporu aç → Yazdır → PDF kaydet")
-
-    _type_map = {"Tümü": None, "Portföy": "portfolio", "Sürpriz": "surprise", "Makro": "macro"}
-
-    # Cache ile yükle
-    if st.session_state.get("wr_cache") is None:
-        st.session_state["wr_cache"] = get_weekly_reports(limit=20)
-    _wr_list = [r for r in st.session_state.get("wr_cache", [])
-                if _type_map[wr_type] is None or r.get("type") == _type_map[wr_type]]
-
-    if not _wr_list:
-        st.info("Henüz arşivlenmiş rapor yok. Yukarıdaki butonlarla oluşturabilirsin.")
-    else:
-        _type_emoji = {"portfolio": "💼", "surprise": "🔭", "macro": "🌍"}
-        _type_label = {"portfolio": "Portföy", "surprise": "Sürpriz", "macro": "Makro"}
-
-        for _wr in _wr_list:
-            _wr_id     = _wr.get("id", "")
-            _wr_date   = _wr.get("date", "")
-            _wr_type   = _wr.get("type", "")
-            _wr_week   = _wr.get("week", "")
-            _wr_cnt    = _wr.get("result_count", 0)
-            _wr_summ   = _wr.get("summary", "")
-            _wr_emoji  = _type_emoji.get(_wr_type, "📊")
-            _wr_tlabel = _type_label.get(_wr_type, "Rapor")
-
-            with st.expander(
-                f"{_wr_emoji}  {_wr_tlabel}  ·  {_wr_date}  ·  {_wr_week}  ·  {_wr_cnt} hisse",
-                expanded=False,
-            ):
-                if _wr_summ:
-                    st.markdown(
-                        f'<div style="font-size:0.78rem;color:var(--color-text-secondary);'
-                        f'line-height:1.6;margin-bottom:0.8rem;">{_wr_summ}</div>',
-                        unsafe_allow_html=True,
-                    )
-
-                _wr_results = _wr.get("results", [])
-                if _wr_results:
-                    # Hisse kartları — mini grid
-                    import math
-                    _cols_per_row = 3
-                    for _ri in range(0, len(_wr_results), _cols_per_row):
-                        _chunk = _wr_results[_ri:_ri + _cols_per_row]
-                        _rcols = st.columns(len(_chunk))
-                        for _col, _r in zip(_rcols, _chunk):
-                            _tk  = _r.get("hisse_sembolu") or _r.get("ticker", "—")
-                            _sc  = int(_r.get("nihai_guven_skoru", 0))
-                            _tav = _r.get("tavsiye", "Tut")
-                            _oz  = _r.get("analiz_ozeti", "")[:80]
-                            _kat = _r.get("kategori", "")
-                            _sc_color = "#00c48c" if _sc >= 75 else ("#ffb300" if _sc >= 55 else "#e74c3c")
-                            _tav_color = {"Ağırlık Artır": "#00c48c", "Tut": "#ffb300", "Azalt": "#e74c3c"}.get(_tav, "#8a9ab0")
-                            _col.markdown(
-                                f'<div style="background:var(--color-background-secondary);'
-                                f'border:0.5px solid var(--color-border-tertiary);'
-                                f'border-top:3px solid {_sc_color};'
-                                f'border-radius:var(--border-radius-md);padding:0.7rem;">'
-                                f'<div style="display:flex;justify-content:space-between;align-items:flex-start;">'
-                                f'<div>'
-                                f'<div style="font-size:14px;font-weight:600;">{_tk}</div>'
-                                f'<div style="font-size:10px;color:var(--color-text-tertiary);">{_kat}</div>'
-                                f'</div>'
-                                f'<div style="text-align:right;">'
-                                f'<div style="font-size:20px;font-weight:700;color:{_sc_color};">{_sc}</div>'
-                                f'<div style="font-size:10px;padding:1px 6px;background:{_tav_color}22;'
-                                f'color:{_tav_color};border-radius:10px;">{_tav}</div>'
-                                f'</div>'
-                                f'</div>'
-                                f'<div style="font-size:11px;color:var(--color-text-secondary);'
-                                f'margin-top:6px;line-height:1.5;">{_oz}{"..." if len(_r.get("analiz_ozeti","")) > 80 else ""}</div>'
-                                f'</div>',
-                                unsafe_allow_html=True,
-                            )
-
-                    # Skor grafiği (Plotly sparkline)
-                    try:
-                        import plotly.graph_objects as go
-                        _sorted_r = sorted(_wr_results, key=lambda x: x.get("nihai_guven_skoru", 0), reverse=True)[:15]
-                        _tickers_g = [r.get("hisse_sembolu") or r.get("ticker","") for r in _sorted_r]
-                        _scores_g  = [r.get("nihai_guven_skoru", 0) for r in _sorted_r]
-                        _colors_g  = ["#00c48c" if s >= 75 else "#ffb300" if s >= 55 else "#e74c3c" for s in _scores_g]
-
-                        fig = go.Figure(go.Bar(
-                            x=_tickers_g,
-                            y=_scores_g,
-                            marker_color=_colors_g,
-                            text=[str(s) for s in _scores_g],
-                            textposition="outside",
-                        ))
-                        fig.update_layout(
-                            height=280,
-                            margin=dict(l=0, r=0, t=20, b=0),
-                            paper_bgcolor="rgba(0,0,0,0)",
-                            plot_bgcolor="rgba(0,0,0,0)",
-                            yaxis=dict(range=[0, 110], showgrid=False, visible=False),
-                            xaxis=dict(tickfont=dict(size=10)),
-                            showlegend=False,
-                        )
-                        st.plotly_chart(fig, use_container_width=True, key=f"wr_chart_{_wr_id}")
-                    except Exception:
-                        pass
-
-                # ── PDF Download butonu ───────────────────────────────────
-                st.markdown('<div style="margin-top:0.8rem;"></div>', unsafe_allow_html=True)
-                _html_content = generate_weekly_html(_wr)
-                st.download_button(
-                    label="📄 HTML Raporu İndir (PDF için tarayıcıdan Yazdır)",
-                    data=_html_content.encode("utf-8"),
-                    file_name=f"rapor_{_wr_id}.html",
-                    mime="text/html",
-                    key=f"dl_{_wr_id}",
-                    use_container_width=True,
-                )
-
-# ─────────────────────────────────────────────────────────────────────────────
 
 with tab_watchlist:
     import yfinance as _yf_wlt

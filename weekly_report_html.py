@@ -55,6 +55,23 @@ def generate_weekly_html(report: dict) -> str:
         sc       = _score_color(score)
         badge    = _rec_badge(tavsiye)
 
+        # Ek veriler
+        price    = r.get("price", 0)
+        rev_gr   = r.get("revenue_growth") or r.get("rev_gr", 0)
+        beta_val = r.get("beta", 0)
+        sector   = r.get("sector", "")
+        ins_bon  = r.get("insider_bonus", 0)
+        momentum = r.get("momentum_score", 0)
+        fund_sc  = r.get("fund_score") or r.get("fundamental_score", 0)
+
+        price_str  = f"${price:.2f}" if price else ""
+        rev_str    = f"%{rev_gr*100:.0f} büyüme" if rev_gr else ""
+        beta_str   = f"Beta {beta_val:.1f}" if beta_val else ""
+        ins_str    = f"👔 Insider +{ins_bon:.0f}" if ins_bon and ins_bon > 0 else ""
+
+        meta_parts = [x for x in [price_str, sector, rev_str, beta_str] if x]
+        meta_line  = "  ·  ".join(meta_parts)
+
         cards_html += f"""
         <div class="card">
           <div class="card-header">
@@ -63,17 +80,20 @@ def generate_weekly_html(report: dict) -> str:
               <div>
                 <div class="ticker">{ticker}</div>
                 <div class="kategori">{kategori}</div>
+                {"<div class='meta-line'>" + meta_line + "</div>" if meta_line else ""}
               </div>
             </div>
             <div style="text-align:right;">
               <div class="score" style="color:{sc};">{score}</div>
               <div class="score-label">/ 100</div>
               {badge}
+              {"<div class=\'insider-badge\'>" + ins_str + "</div>" if ins_str else ""}
             </div>
           </div>
           <div class="ozet">{ozet}</div>
           {"<div class='risk-row'><span class='risk-label'>🌍 Makro Risk:</span> " + macro_r + "</div>" if macro_r else ""}
           {"<div class='risk-row'><span class='risk-label'>🏢 Şirket Riski:</span> " + firm_r + "</div>" if firm_r else ""}
+          {"<div class=\'score-bar-wrap\'><div class=\'score-bar-fill\' style=\'width:" + str(score) + "%\' ></div></div>" if score else ""}
         </div>
         """
 
@@ -278,6 +298,31 @@ def generate_weekly_html(report: dict) -> str:
       color: #aaa;
       text-align: center;
     }}
+
+    .meta-line {
+      font-size: 10px;
+      color: #aaa;
+      margin-top: 2px;
+    }
+    .insider-badge {
+      font-size: 10px;
+      color: #00a86b;
+      font-weight: 600;
+      margin-top: 3px;
+    }
+    .score-bar-wrap {
+      height: 3px;
+      background: #f0f0f0;
+      border-radius: 2px;
+      margin-top: 8px;
+      overflow: hidden;
+    }
+    .score-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #00a86b, #f5a623, #e74c3c);
+      background-size: 300px 100%;
+      border-radius: 2px;
+    }
 
     /* ── Print ── */
     @media print {{
