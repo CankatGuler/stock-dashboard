@@ -3944,7 +3944,7 @@ with tab_strategy:
     )
 
     # ── Katman 1: Anlık Durum Panosu ─────────────────────────────────────
-    _port_now     = load_portfolio()
+    _port_now     = [p for p in load_portfolio() if float(p.get("shares", 0)) > 0]
     _cash_now     = get_cash()
     _port_val_now = sum(
         p.get("shares", 0) * p.get("current_price", p.get("avg_cost", 0))
@@ -4123,6 +4123,7 @@ with tab_strategy:
                     # Kaydet
                     save_strategy(_result, _port_val_now, _cash_now)
                     st.success("✅ Strateji üretildi ve kaydedildi!")
+                    st.session_state["strategy_generated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
                 else:
                     st.error(f"Strateji üretilemedi: {_result.get('error', '?')}")
 
@@ -4339,10 +4340,54 @@ with tab_strategy:
                         unsafe_allow_html=True,
                     )
 
-        # Oluşturulma zamanı
-        st.markdown(
-            f'<div style="font-size:0.65rem;color:var(--color-text-tertiary);'
-            f'margin-top:1rem;text-align:right;">'
-            f'Oluşturulma: {_sr.get("generated_at","")[:16]}</div>',
-            unsafe_allow_html=True,
-        )
+        # Yapılacaklar Özeti
+        _aks_sum = _s.get("aksiyonlar", {})
+        _todos   = []
+        for _item in _aks_sum.get("sat_azalt", []):
+            _todos.append(f"🔴 **{_item.get('ticker','')}** — %{_item.get('miktar_pct',0)} azalt · {_item.get('gercekle','Hemen')}")
+        for _item in _aks_sum.get("al_arttir", []):
+            _todos.append(f"🟢 **{_item.get('ticker','')}** — Nakit %{_item.get('nakit_pct',0)} ile al · Hedef ${_item.get('hedef_fiyat',0):.0f}")
+        for _item in _aks_sum.get("bekle_izle", []):
+            _todos.append(f"🟡 **{_item.get('ticker','')}** — {_item.get('kosul','')} olursa {_item.get('islem','al')}")
+        if _aks_sum.get("nakit_rezerv_pct", 0):
+            _todos.append(f"💵 Nakdin %{_aks_sum['nakit_rezerv_pct']}'ini rezervde tut")
+        for _act in _s.get("kisa_vade", {}).get("aksiyonlar", []):
+            _todos.append(f"📅 {_act}")
+
+        if _todos:
+            st.markdown('<hr style="border-color:var(--color-border-tertiary);margin:1rem 0;">', unsafe_allow_html=True)
+            st.markdown(
+                '<div style="font-size:0.65rem;color:#4fc3f7;text-transform:uppercase;'
+                'letter-spacing:0.1em;margin-bottom:0.8rem;">YAPILACAKLAR OZETI</div>',
+                unsafe_allow_html=True,
+            )
+            for _i, _todo in enumerate(_todos, 1):
+                st.markdown(
+                    f'<div style="font-size:0.78rem;padding:5px 0;'
+                    f'border-bottom:0.5px solid var(--color-border-tertiary);">'
+                    f'{_i}. {_todo}</div>',
+                    unsafe_allow_html=True,
+                )
+
+        # PDF Download + Oluşturulma zamanı
+        st.markdown('<div style="margin-top:1rem;"></div>', unsafe_allow_html=True)
+        _dl_col, _ts_col = st.columns([1, 1])
+        with _dl_col:
+            from strategy_engine import generate_strategy_html
+            _html_export = generate_strategy_html(_sr, _port_val_now, _cash_now)
+            _export_date = _sr.get("generated_at", "")[:10]
+            st.download_button(
+                label="📄 HTML İndir (PDF için Yazdır)",
+                data=_html_export.encode("utf-8"),
+                file_name=f"strateji_{_export_date}.html",
+                mime="text/html",
+                key="dl_strategy",
+                use_container_width=True,
+            )
+        with _ts_col:
+            st.markdown(
+                f'<div style="font-size:0.65rem;color:var(--color-text-tertiary);'
+                f'text-align:right;padding-top:0.6rem;">'
+                f'Oluşturulma: {_sr.get("generated_at","")[:16]}</div>',
+                unsafe_allow_html=True,
+            )

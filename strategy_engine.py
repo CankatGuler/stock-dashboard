@@ -389,3 +389,213 @@ def save_strategy(strategy_result: dict, portfolio_value: float, cash: float) ->
     except Exception as e:
         logger.warning("Strategy save failed: %s", e)
         return False
+
+
+# ─── HTML / PDF Export ───────────────────────────────────────────────────────
+
+def generate_strategy_html(strategy_result: dict, portfolio_value: float, cash: float) -> str:
+    """
+    Strateji sonucunu yazdırılabilir HTML'e dönüştür.
+    Tarayıcıdan Ctrl+P → PDF olarak kaydet.
+    """
+    from datetime import datetime
+    s          = strategy_result.get("strategy", {})
+    gen_at     = strategy_result.get("generated_at", "")[:16]
+    aks        = s.get("aksiyonlar", {})
+    now_str    = datetime.now().strftime("%d.%m.%Y %H:%M")
+
+    def _badge(text, color):
+        return f'<span style="background:{color}22;color:{color};border:1px solid {color}44;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;">{text}</span>'
+
+    # Çelişkiler
+    celiski_html = ""
+    for c in s.get("celiskiler", []):
+        celiski_html += f"""
+        <div class="conflict-card">
+          <b>{c.get('hisse','')}</b> — {c.get('celisik_sinyaller','')}
+          <div class="resolution">→ {c.get('cozum','')}</div>
+        </div>"""
+
+    # Aksiyon kartları
+    def _action_cards(items, color, label_key, pct_key, extra_fn=None):
+        html = ""
+        for item in items:
+            ticker = item.get("ticker", "")
+            pct    = item.get(pct_key, 0)
+            neden  = item.get("neden", "")
+            extra  = extra_fn(item) if extra_fn else ""
+            html += f"""
+            <div class="action-card" style="border-left:3px solid {color};">
+              <div style="display:flex;justify-content:space-between;">
+                <b style="font-size:15px;">{ticker}</b>
+                <span style="color:{color};font-weight:600;">%{pct} {label_key}</span>
+              </div>
+              {extra}
+              <div class="reason">{neden}</div>
+            </div>"""
+        return html
+
+    sat_html = _action_cards(
+        aks.get("sat_azalt", []), "#e74c3c", "azalt", "miktar_pct",
+        lambda i: f'<div class="sub">{i.get("gercekle","Hemen")}</div>'
+    )
+    al_html = _action_cards(
+        aks.get("al_arttir", []), "#00a86b", "nakit", "nakit_pct",
+        lambda i: (f'<div class="sub">Hedef: ${i.get("hedef_fiyat",0):.0f} · Stop: ${i.get("stop_loss",0):.0f}</div>'
+                   if i.get("hedef_fiyat") else "")
+    )
+    bekle_html = ""
+    for item in aks.get("bekle_izle", []):
+        bekle_html += f"""
+        <div class="action-card" style="border-left:3px solid #f5a623;">
+          <b>{item.get('ticker','')}</b> — <span style="color:#f5a623;">{item.get('islem','')}</span>
+          <div class="condition">📌 {item.get('kosul','')}</div>
+          <div class="reason">{item.get('neden','')}</div>
+        </div>"""
+
+    # Vade planları
+    def _vade_html(key, label, color):
+        v = s.get(key, {})
+        if not v:
+            return ""
+        acts = "".join(f"<li>{a}</li>" for a in v.get("aksiyonlar", []))
+        baz  = v.get("senaryo_baz") or v.get("hedef_portfoy", "")
+        risk = v.get("senaryo_risk", "")
+        return f"""
+        <div class="vade-section">
+          <div class="vade-title" style="color:{color};">{label}</div>
+          <div class="vade-grid">
+            <div><div class="vade-label">Ana Senaryo</div><div class="vade-text">{baz}</div></div>
+            {"<div><div class='vade-label risk-label'>Risk Senaryosu</div><div class='vade-text'>{}</div></div>".format(risk) if risk else ""}
+          </div>
+          <ul class="act-list">{acts}</ul>
+        </div>"""
+
+    # Yapılacaklar özeti
+    def _todo_summary():
+        todos = []
+        for item in aks.get("sat_azalt", []):
+            todos.append(f"🔴 {item.get('ticker','')} — %{item.get('miktar_pct',0)} azalt ({item.get('gercekle','Hemen')})")
+        for item in aks.get("al_arttir", []):
+            todos.append(f"🟢 {item.get('ticker','')} — Nakit %{item.get('nakit_pct',0)} ile al (Hedef: ${item.get('hedef_fiyat',0):.0f})")
+        for item in aks.get("bekle_izle", []):
+            todos.append(f"🟡 {item.get('ticker','')} — {item.get('kosul','')} olursa {item.get('islem','al')}")
+        if aks.get("nakit_rezerv_pct", 0):
+            todos.append(f"💵 Nakdin %{aks['nakit_rezerv_pct']}'ini rezervde tut — {aks.get('nakit_rezerv_neden','')}")
+        for act in s.get("kisa_vade", {}).get("aksiyonlar", []):
+            todos.append(f"📅 Kısa vade: {act}")
+        return "".join(f'<li class="todo-item">{t}</li>' for t in todos)
+
+    # Risk & Güç
+    risk_html = "".join(f"<li>{r}</li>" for r in s.get("risk_uyarilari", []))
+    guc_html  = "".join(f"<li>{g}</li>" for g in s.get("guc_sinyalleri", []))
+
+    return f"""<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>Strateji Raporu — {now_str}</title>
+<style>
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+         font-size: 13px; color: #1a1a2e; background: #fff; padding: 24px; max-width: 960px; margin: 0 auto; }}
+  .header {{ border-bottom: 3px solid #1a6ba0; padding-bottom: 14px; margin-bottom: 18px; display:flex; justify-content:space-between; }}
+  .title {{ font-size: 20px; font-weight: 700; color: #1a6ba0; }}
+  .meta  {{ font-size: 11px; color: #888; margin-top: 4px; }}
+  .kpi-row {{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:18px; }}
+  .kpi {{ background:#f8f9fa; border-radius:8px; padding:10px; text-align:center; }}
+  .kpi-n {{ font-size:18px; font-weight:700; }}
+  .kpi-l {{ font-size:10px; color:#888; margin-top:2px; }}
+  .section-title {{ font-size:11px; font-weight:600; color:#888; text-transform:uppercase;
+                    letter-spacing:.08em; margin:16px 0 8px; padding-bottom:4px; border-bottom:1px solid #eee; }}
+  .ozet {{ background:#f0f7ff; border-left:4px solid #1a6ba0; border-radius:0 8px 8px 0;
+           padding:12px 16px; font-size:13px; line-height:1.7; margin-bottom:16px; }}
+  .conflict-card {{ border-left:3px solid #f5a623; padding:8px 12px; margin-bottom:8px; background:#fffbf0; border-radius:0 6px 6px 0; }}
+  .resolution {{ color:#00a86b; font-size:12px; margin-top:4px; }}
+  .actions-grid {{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:16px; }}
+  .action-col-title {{ font-size:11px; font-weight:600; text-transform:uppercase; margin-bottom:8px; }}
+  .action-card {{ border-radius:0 8px 8px 0; padding:10px 12px; margin-bottom:8px; background:#fafafa; }}
+  .sub {{ font-size:11px; color:#888; margin:3px 0; }}
+  .condition {{ font-size:11px; color:#f5a623; margin:3px 0; }}
+  .reason {{ font-size:11px; color:#555; margin-top:4px; line-height:1.5; }}
+  .nakit-box {{ background:#f0fff4; border:1px solid #00a86b44; border-radius:8px;
+               padding:10px 14px; font-size:13px; margin-bottom:16px; }}
+  .vade-section {{ border:1px solid #eee; border-radius:8px; padding:14px; margin-bottom:12px; }}
+  .vade-title {{ font-size:14px; font-weight:600; margin-bottom:10px; }}
+  .vade-grid {{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:10px; }}
+  .vade-label {{ font-size:10px; font-weight:600; color:#888; text-transform:uppercase; margin-bottom:4px; }}
+  .risk-label {{ color:#e74c3c !important; }}
+  .vade-text {{ font-size:12px; line-height:1.6; }}
+  .act-list {{ padding-left:18px; }}
+  .act-list li {{ font-size:12px; margin:4px 0; line-height:1.5; }}
+  .rg-grid {{ display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px; }}
+  .rg-grid ul {{ padding-left:18px; }}
+  .rg-grid li {{ font-size:12px; margin:4px 0; }}
+  .todo-section {{ background:#1a1a2e; color:#fff; border-radius:10px; padding:16px 20px; margin:20px 0; }}
+  .todo-title {{ font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.08em; color:#4fc3f7; margin-bottom:12px; }}
+  .todo-item {{ font-size:12px; margin:6px 0; line-height:1.6; }}
+  .footer {{ margin-top:24px; padding-top:12px; border-top:1px solid #eee; font-size:10px; color:#aaa; text-align:center; }}
+  @media print {{ body {{ padding:12px; }} @page {{ margin:1cm; size:A4; }} }}
+</style>
+</head>
+<body>
+<div class="header">
+  <div>
+    <div class="title">🧭 Strateji Raporu</div>
+    <div class="meta">📅 {now_str} · Portföy: ${portfolio_value:,.0f} · Nakit: ${cash:,.0f}</div>
+  </div>
+  <div style="text-align:right;font-size:11px;color:#888;">
+    AI Destekli Hisse Analiz Dashboard<br>
+    <span style="color:#1a6ba0;font-weight:600;">Stock Dashboard</span>
+  </div>
+</div>
+
+<div class="ozet">{s.get('ozet','')}</div>
+
+<div class="section-title">⚡ Tespit Edilen Çelişkiler</div>
+{celiski_html if celiski_html else '<p style="color:#888;font-size:12px;">Çelişki tespit edilmedi.</p>'}
+
+<div class="section-title">🎯 Aksiyon Planı</div>
+<div class="actions-grid">
+  <div>
+    <div class="action-col-title" style="color:#e74c3c;">📉 Sat / Azalt</div>
+    {sat_html or '<p style="color:#888;font-size:12px;">Aksiyon yok</p>'}
+  </div>
+  <div>
+    <div class="action-col-title" style="color:#00a86b;">📈 Al / Artır</div>
+    {al_html or '<p style="color:#888;font-size:12px;">Aksiyon yok</p>'}
+  </div>
+  <div>
+    <div class="action-col-title" style="color:#f5a623;">⏳ Koşullu / Bekle</div>
+    {bekle_html or '<p style="color:#888;font-size:12px;">Aksiyon yok</p>'}
+  </div>
+</div>
+
+{f'<div class="nakit-box">💵 <b>Nakit Rezerv: %{aks.get("nakit_rezerv_pct",0)}</b> — {aks.get("nakit_rezerv_neden","")}</div>' if aks.get("nakit_rezerv_pct") else ''}
+
+<div class="section-title">📅 Vade Planları</div>
+{_vade_html("kisa_vade", "📅 Kısa Vade (1-3 Ay)", "#4fc3f7")}
+{_vade_html("orta_vade", "📆 Orta Vade (3-12 Ay)", "#ce93d8")}
+{_vade_html("uzun_vade", "🗓️ Uzun Vade (1-3 Yıl)", "#f5a623")}
+
+<div class="rg-grid">
+  <div>
+    <div class="section-title" style="color:#e74c3c;">⚠️ Risk Uyarıları</div>
+    <ul>{risk_html}</ul>
+  </div>
+  <div>
+    <div class="section-title" style="color:#00a86b;">💪 Güç Sinyalleri</div>
+    <ul>{guc_html}</ul>
+  </div>
+</div>
+
+<div class="todo-section">
+  <div class="todo-title">✅ Yapılacaklar Özeti — Kısa'dan Uzun Vadeye</div>
+  <ol class="act-list">{_todo_summary()}</ol>
+</div>
+
+<div class="footer">
+  Bu rapor yapay zeka destekli analiz sistemi tarafından oluşturulmuştur. Yatırım tavsiyesi değildir. · {now_str}
+</div>
+</body>
+</html>"""
