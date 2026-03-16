@@ -2155,6 +2155,7 @@ Türkçe, net ve somut yaz. Spesifik rakamlara dayan."""
                 # PDF download + Sil butonu
                 _fake_result = {"success": True, "strategy": _sh_strat, "generated_at": _sh.get("generated_at", "")}
                 _sh_html     = generate_strategy_html(_fake_result, _sh_pval, _sh_cash)
+
                 _dl_col, _del_col = st.columns([3, 1])
                 with _dl_col:
                     st.download_button(
@@ -2166,24 +2167,27 @@ Türkçe, net ve somut yaz. Spesifik rakamlara dayan."""
                         use_container_width=True,
                     )
                 with _del_col:
-                    _del_key = f"del_confirm_{_shi}"
-                    if st.session_state.get(_del_key):
-                        # Onay modu
-                        _conf_c1, _conf_c2 = st.columns(2)
-                        with _conf_c1:
-                            if st.button("✅ Evet, Sil", key=f"del_yes_{_shi}", use_container_width=True):
-                                from analysis_memory import delete_strategy_from_archive
-                                delete_strategy_from_archive(_sh_id)
-                                st.session_state[_del_key] = False
-                                st.session_state["strat_archive_cache"] = None
-                                st.rerun()
-                        with _conf_c2:
-                            if st.button("❌ İptal", key=f"del_no_{_shi}", use_container_width=True):
-                                st.session_state[_del_key] = False
-                                st.rerun()
-                    else:
-                        if st.button("🗑 Sil", key=f"del_btn_{_shi}", use_container_width=True):
-                            st.session_state[_del_key] = True
+                    if st.button("🗑 Sil", key=f"del_btn_{_shi}", use_container_width=True):
+                        st.session_state[f"del_confirm_{_shi}"] = True
+
+                # Onay — expander içinde, kolonların dışında
+                if st.session_state.get(f"del_confirm_{_shi}"):
+                    st.warning(f"**{_sh_id}** kaydını silmek istediğine emin misin?")
+                    _yes, _no, _ = st.columns([1, 1, 3])
+                    with _yes:
+                        if st.button("✅ Evet Sil", key=f"del_yes_{_shi}", use_container_width=True):
+                            from analysis_memory import delete_strategy_from_archive
+                            ok_del = delete_strategy_from_archive(_sh_id)
+                            st.session_state[f"del_confirm_{_shi}"] = False
+                            st.session_state["strat_archive_cache"] = None
+                            if ok_del:
+                                st.success("Silindi!")
+                            else:
+                                st.error("Silinemedi — ID bulunamadı.")
+                            st.rerun()
+                    with _no:
+                        if st.button("❌ İptal", key=f"del_no_{_shi}", use_container_width=True):
+                            st.session_state[f"del_confirm_{_shi}"] = False
                             st.rerun()
 
     # ── HAFTALIK RAPOR ARŞİVİ ────────────────────────────────────────────
