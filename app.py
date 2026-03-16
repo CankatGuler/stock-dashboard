@@ -453,6 +453,8 @@ if "tgt_data" not in st.session_state:
     st.session_state["tgt_data"] = None
 if "wr_cache" not in st.session_state:
     st.session_state["wr_cache"] = None
+if "strat_archive_cache" not in st.session_state:
+    st.session_state["strat_archive_cache"] = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2150,17 +2152,39 @@ Türkçe, net ve somut yaz. Spesifik rakamlara dayan."""
                                 unsafe_allow_html=True,
                             )
 
-                # PDF download
+                # PDF download + Sil butonu
                 _fake_result = {"success": True, "strategy": _sh_strat, "generated_at": _sh.get("generated_at", "")}
                 _sh_html     = generate_strategy_html(_fake_result, _sh_pval, _sh_cash)
-                st.download_button(
-                    label="📄 HTML İndir (PDF için Yazdır)",
-                    data=_sh_html.encode("utf-8"),
-                    file_name=f"strateji_{_sh_id}.html",
-                    mime="text/html",
-                    key=f"mem_dl_strat_{_shi}",
-                    use_container_width=True,
-                )
+                _dl_col, _del_col = st.columns([3, 1])
+                with _dl_col:
+                    st.download_button(
+                        label="📄 HTML İndir (PDF için Yazdır)",
+                        data=_sh_html.encode("utf-8"),
+                        file_name=f"strateji_{_sh_id}.html",
+                        mime="text/html",
+                        key=f"mem_dl_strat_{_shi}",
+                        use_container_width=True,
+                    )
+                with _del_col:
+                    _del_key = f"del_confirm_{_shi}"
+                    if st.session_state.get(_del_key):
+                        # Onay modu
+                        _conf_c1, _conf_c2 = st.columns(2)
+                        with _conf_c1:
+                            if st.button("✅ Evet, Sil", key=f"del_yes_{_shi}", use_container_width=True):
+                                from analysis_memory import delete_strategy_from_archive
+                                delete_strategy_from_archive(_sh_id)
+                                st.session_state[_del_key] = False
+                                st.session_state["strat_archive_cache"] = None
+                                st.rerun()
+                        with _conf_c2:
+                            if st.button("❌ İptal", key=f"del_no_{_shi}", use_container_width=True):
+                                st.session_state[_del_key] = False
+                                st.rerun()
+                    else:
+                        if st.button("🗑 Sil", key=f"del_btn_{_shi}", use_container_width=True):
+                            st.session_state[_del_key] = True
+                            st.rerun()
 
     # ── HAFTALIK RAPOR ARŞİVİ ────────────────────────────────────────────
     st.markdown('<hr style="border-color:var(--color-border-tertiary);margin:1.5rem 0;">', unsafe_allow_html=True)

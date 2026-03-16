@@ -825,3 +825,15 @@ def get_strategy_history(limit: int = 10) -> list:
     archive = _load_strategy_archive()
     archive.sort(key=lambda x: x.get("generated_at", ""), reverse=True)
     return archive[:limit]
+
+
+def delete_strategy_from_archive(strategy_id: str) -> bool:
+    """Verilen ID'ye sahip stratejiyi arşivden sil ve GitHub'a kaydet."""
+    archive = _load_strategy_archive()
+    new_archive = [r for r in archive if r.get("id") != strategy_id]
+    if len(new_archive) == len(archive):
+        logger.warning("Silinecek strateji bulunamadı: %s", strategy_id)
+        return False
+    ok = _save_strategy_archive(new_archive)
+    logger.info("Strateji silindi: %s", strategy_id)
+    return ok
