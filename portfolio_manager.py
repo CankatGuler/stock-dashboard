@@ -150,9 +150,12 @@ def _local_write(positions: list[dict]) -> bool:
 # ---------------------------------------------------------------------------
 
 def load_portfolio() -> list[dict]:
-    """Load portfolio from GitHub (with local fallback)."""
+    """Load portfolio from GitHub (with local fallback).
+    Shares <= 0 olan pozisyonlar otomatik olarak filtrelenir —
+    satılmış hisseler hiçbir zaman döndürülmez.
+    """
     positions, _ = _github_read()
-    return positions
+    return [p for p in positions if float(p.get("shares", 0)) > 0]
 
 
 def save_portfolio(positions: list[dict]) -> bool:

@@ -4149,9 +4149,11 @@ with tab_strategy:
                 from analysis_memory     import get_weekly_reports, get_top_tickers
 
                 _watchlist_tickers = load_watchlist()
+                # shares > 0 filtresi — satılmış pozisyonlar dahil olmasın
                 _port_enriched = [
                     {**p, "current_price": p.get("current_price", p.get("avg_cost", 0))}
                     for p in _port_now
+                    if float(p.get("shares", 0)) > 0
                 ]
 
                 # Hisse skorları (hafızadan)
@@ -4207,7 +4209,8 @@ with tab_strategy:
                     # Kaydet
                     save_strategy(_result, _port_val_now, _cash_now)
                     st.success("✅ Strateji üretildi ve kaydedildi!")
-                    st.session_state["strategy_generated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+                    from datetime import datetime as _dt_strat
+                    st.session_state["strategy_generated_at"] = _dt_strat.now().strftime("%Y-%m-%d %H:%M")
                 else:
                     st.error(f"Strateji üretilemedi: {_result.get('error', '?')}")
 
