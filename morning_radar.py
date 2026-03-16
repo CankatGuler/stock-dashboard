@@ -35,6 +35,45 @@ def main():
     from telegram_notifier import send_message, format_radar_summary
     from breakout_scanner  import run_breakout_scan, format_breakout_message
 
+    # ── 0. Finansal Takvim Bildirimi ──────────────────────────────────────
+    # Bugün ve yarın önemli ekonomik veri/event varsa Telegram'a bildir.
+    # Pazartesi ise ayrıca haftalık önizleme de gönderilir.
+    logger.info("Finansal takvim kontrol ediliyor...")
+    try:
+        from financial_calendar import (
+            get_todays_and_tomorrows_events,
+            format_calendar_telegram,
+            format_weekly_preview_telegram,
+        )
+        from portfolio_manager import load_portfolio
+        from breakout_scanner  import load_watchlist
+
+        # Portföy + watchlist hisselerini topla
+        _cal_tickers = list(dict.fromkeys(
+            [p["ticker"] for p in load_portfolio() if float(p.get("shares", 0)) > 0]
+            + load_watchlist()
+        ))
+
+        # Bugün / yarın olayları
+        _cal_events = get_todays_and_tomorrows_events(tickers=_cal_tickers)
+        _cal_msg    = format_calendar_telegram(_cal_events, portfolio_tickers=_cal_tickers)
+        if _cal_msg:
+            ok_cal = send_message(_cal_msg)
+            logger.info("Takvim bildirimi gönderildi: %s", ok_cal)
+        else:
+            logger.info("Takvim: Bugün/yarın kritik olay yok.")
+
+        # Pazartesi ise haftalık önizleme gönder
+        from datetime import datetime
+        if datetime.now().weekday() == 0:  # 0 = Pazartesi
+            _weekly_msg = format_weekly_preview_telegram(tickers=_cal_tickers)
+            if _weekly_msg:
+                ok_wk = send_message(_weekly_msg)
+                logger.info("Haftalık takvim önizlemesi gönderildi: %s", ok_wk)
+
+    except Exception as e:
+        logger.warning("Finansal takvim bildirimi başarısız: %s", e)
+
     # ── 1. 52H Kırılma Alarmı ─────────────────────────────────────────────
     logger.info("52H kırılma taraması başlıyor...")
     breakouts = run_breakout_scan()

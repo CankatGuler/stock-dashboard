@@ -4000,6 +4000,89 @@ with tab_strategy:
 
     st.markdown('<div style="margin-top:1rem;"></div>', unsafe_allow_html=True)
 
+    # ── Katman 1b: Finansal Takvim Widget ────────────────────────────────
+    try:
+        from financial_calendar import get_upcoming_events
+
+        _cal_port_tickers = [p["ticker"] for p in _port_now]
+        try:
+            from breakout_scanner import load_watchlist as _lw_cal
+            _cal_port_tickers += _lw_cal()
+        except Exception:
+            pass
+        _cal_port_tickers = list(dict.fromkeys(_cal_port_tickers))
+
+        _cal_14 = get_upcoming_events(tickers=_cal_port_tickers, days_ahead=14, min_stars=1)
+
+        if _cal_14:
+            with st.expander(
+                f"📅 Bu Hafta Finansal Takvim — {len(_cal_14)} olay",
+                expanded=True,
+            ):
+                _star_colors = {3: "#e74c3c", 2: "#ffb300", 1: "#4fc3f7"}
+                _star_emojis = {3: "🔴", 2: "🟡", 1: "🔵"}
+                _cat_labels  = {
+                    "fed": "🏛 FED",
+                    "macro": "📊 MAKRO",
+                    "earnings": "💼 EARNINGS",
+                }
+
+                # Olayları gün gruplarına ayır
+                from itertools import groupby
+                _grouped = {}
+                for _ev in _cal_14:
+                    _grouped.setdefault(_ev["date"], []).append(_ev)
+
+                for _gdate, _gevents in sorted(_grouped.items()):
+                    _gday = datetime.strptime(_gdate, "%Y-%m-%d")
+                    _today_dt = datetime.now().date()
+                    _diff = (_gday.date() - _today_dt).days
+                    _day_label = (
+                        "BUGÜN" if _diff == 0
+                        else "YARIN" if _diff == 1
+                        else _gday.strftime("%d %b, %A")
+                    )
+                    _has_critical = any(e.get("stars", 1) == 3 for e in _gevents)
+                    _day_color = "#e74c3c" if _has_critical else "#ffb300" if _diff <= 2 else "#5a6a7a"
+
+                    st.markdown(
+                        f'<div style="font-size:0.65rem;font-weight:600;color:{_day_color};'
+                        f'text-transform:uppercase;letter-spacing:0.08em;'
+                        f'margin:0.6rem 0 0.3rem;border-left:3px solid {_day_color};'
+                        f'padding-left:0.5rem;">{_day_label} — {_gdate}</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                    for _ev in _gevents:
+                        _sc   = _star_colors.get(_ev.get("stars", 1), "#5a6a7a")
+                        _sem  = _star_emojis.get(_ev.get("stars", 1), "🔵")
+                        _cat  = _cat_labels.get(_ev.get("category", "macro"), "📊")
+                        _tkr  = f" ({_ev['ticker']})" if _ev.get("ticker") else ""
+                        _desc = _ev.get("description", "")[:120]
+                        _watch= _ev.get("watch", "")[:100]
+
+                        st.markdown(
+                            f'<div style="background:var(--color-background-secondary);'
+                            f'border-left:3px solid {_sc};'
+                            f'border-radius:0 8px 8px 0;'
+                            f'padding:0.5rem 0.8rem;margin-bottom:0.4rem;">'
+                            f'<div style="display:flex;justify-content:space-between;'
+                            f'align-items:center;">'
+                            f'<span style="font-size:0.78rem;font-weight:600;">'
+                            f'{_sem} {_cat}: {_ev["event"]}{_tkr}</span>'
+                            f'<span style="font-size:0.65rem;color:{_sc};font-weight:500;">'
+                            f'{"⭐"*_ev.get("stars",1)}</span>'
+                            f'</div>'
+                            f'<div style="font-size:0.72rem;color:var(--color-text-secondary);'
+                            f'margin-top:3px;line-height:1.5;">{_desc}</div>'
+                            + (f'<div style="font-size:0.68rem;color:#ffb300;margin-top:3px;">'
+                               f'👁 {_watch}</div>' if _watch else '')
+                            + f'</div>',
+                            unsafe_allow_html=True,
+                        )
+    except Exception as _cal_e:
+        logger.warning("Takvim widget hatası: %s", _cal_e)
+
     # ── Katman 2: Profil Ayarları ─────────────────────────────────────────
     with st.expander("⚙️ Yatırımcı Profili — Strateji Parametreleri", expanded=False):
         _pr_c1, _pr_c2, _pr_c3 = st.columns(3)
