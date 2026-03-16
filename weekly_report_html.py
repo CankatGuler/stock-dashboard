@@ -87,13 +87,13 @@ def generate_weekly_html(report: dict) -> str:
               <div class="score" style="color:{sc};">{score}</div>
               <div class="score-label">/ 100</div>
               {badge}
-              {"<div class=\'insider-badge\'>" + ins_str + "</div>" if ins_str else ""}
+              {('<div class="insider-badge">' + ins_str + '</div>') if ins_str else ''}
             </div>
           </div>
           <div class="ozet">{ozet}</div>
           {"<div class='risk-row'><span class='risk-label'>🌍 Makro Risk:</span> " + macro_r + "</div>" if macro_r else ""}
           {"<div class='risk-row'><span class='risk-label'>🏢 Şirket Riski:</span> " + firm_r + "</div>" if firm_r else ""}
-          {"<div class=\'score-bar-wrap\'><div class=\'score-bar-fill\' style=\'width:" + str(score) + "%\' ></div></div>" if score else ""}
+          {f'<div class="score-bar-wrap"><div class="score-bar-fill" style="width:{score}%"></div></div>' if score else ''}
         </div>
         """
 
@@ -299,30 +299,30 @@ def generate_weekly_html(report: dict) -> str:
       text-align: center;
     }}
 
-    .meta-line {
+    .meta-line {{
       font-size: 10px;
       color: #aaa;
       margin-top: 2px;
-    }
-    .insider-badge {
+    }}
+    .insider-badge {{
       font-size: 10px;
       color: #00a86b;
       font-weight: 600;
       margin-top: 3px;
-    }
-    .score-bar-wrap {
+    }}
+    .score-bar-wrap {{
       height: 3px;
       background: #f0f0f0;
       border-radius: 2px;
       margin-top: 8px;
       overflow: hidden;
-    }
-    .score-bar-fill {
+    }}
+    .score-bar-fill {{
       height: 100%;
       background: linear-gradient(90deg, #00a86b, #f5a623, #e74c3c);
       background-size: 300px 100%;
       border-radius: 2px;
-    }
+    }}
 
     /* ── Print ── */
     @media print {{
