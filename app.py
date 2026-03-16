@@ -2078,7 +2078,7 @@ Türkçe, net ve somut yaz. Spesifik rakamlara dayan."""
     if not _strat_history:
         st.info("Henüz arşivlenmiş strateji yok. Strateji sekmesinden 'Strateji Üret' butonuna bas.")
     else:
-        for _sh in _strat_history:
+        for _shi, _sh in enumerate(_strat_history):
             _sh_id   = _sh.get("id", "")
             _sh_date = _sh.get("date", "")
             _sh_time = _sh.get("generated_at", "")[:16].replace("T", " ")
@@ -2158,7 +2158,7 @@ Türkçe, net ve somut yaz. Spesifik rakamlara dayan."""
                     data=_sh_html.encode("utf-8"),
                     file_name=f"strateji_{_sh_id}.html",
                     mime="text/html",
-                    key=f"mem_dl_strat_{_sh_id}_{hash(_sh_id) % 9999}",
+                    key=f"mem_dl_strat_{_shi}",
                     use_container_width=True,
                 )
 
