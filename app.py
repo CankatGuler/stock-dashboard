@@ -3934,7 +3934,7 @@ with tab_targets:
 
 with tab_strategy:
     from strategy_data   import collect_all_strategy_data
-    from strategy_engine import generate_strategy, save_strategy
+    from strategy_engine import generate_strategy, save_strategy, generate_strategy_html
 
     st.markdown(
         '<div style="font-size:0.7rem;color:#5a6a7a;text-transform:uppercase;'
@@ -4373,7 +4373,6 @@ with tab_strategy:
         st.markdown('<div style="margin-top:1rem;"></div>', unsafe_allow_html=True)
         _dl_col, _ts_col = st.columns([1, 1])
         with _dl_col:
-            from strategy_engine import generate_strategy_html
             _html_export = generate_strategy_html(_sr, _port_val_now, _cash_now)
             _export_date = _sr.get("generated_at", "")[:10]
             st.download_button(
