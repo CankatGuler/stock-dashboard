@@ -42,7 +42,11 @@ TEMEL KURALLAR:
 7. FOMC ve earnings tarihlerine dikkat et. Yaklaşan toplantı/açıklama varsa
    o hisse için "earnings sonrasına bekle" veya "FOMC öncesi pozisyon küçült" de.
 
-8. Yanıtını kesinlikle JSON formatında ver, başka hiçbir şey yazma:
+8. Yanıtını kesinlikle JSON formatında ver, başka hiçbir şey yazma.
+   KRİTİK: Her string alanı maksimum 150 karakter olsun. Uzun açıklama yazma.
+   Aksiyonlar için "neden" alanı tek kısa cümle. Senaryolar 2-3 cümle.
+   JSON mutlaka tam ve geçerli olmalı — yarıda kesilmiş JSON kabul edilmez.
+   Yanıt:
 {
   "ozet": "Tek paragraf genel durum özeti",
   "piyasa_degerlendirmesi": "Makro + sentiment + teknik genel bakış",
@@ -270,7 +274,7 @@ def generate_strategy(
 
         message = client.messages.create(
             model="claude-opus-4-5",
-            max_tokens=4000,  # Strateji detaylı olmalı
+            max_tokens=8000,  # Strateji detaylı olmalı — JSON kesilmesin
             system=STRATEGY_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": full_prompt}],
         )
@@ -282,7 +286,24 @@ def generate_strategy(
         raw = re.sub(r"^```[a-zA-Z]*\n?", "", raw)
         raw = re.sub(r"\n?```$", "", raw).strip()
 
-        strategy = json.loads(raw)
+        # JSON kesilmişse sonuna kapanış ekleyerek kurtarmayı dene
+        try:
+            strategy = json.loads(raw)
+        except json.JSONDecodeError:
+            # Kesik JSON'u kurtarmaya çalış — eksik parantezleri tamamla
+            fixed = raw
+            # Açık string varsa kapat
+            open_brackets = fixed.count('{') - fixed.count('}')
+            open_arrays   = fixed.count('[') - fixed.count(']')
+            if open_arrays > 0:
+                fixed += ']' * open_arrays
+            if open_brackets > 0:
+                fixed += '}' * open_brackets
+            try:
+                strategy = json.loads(fixed)
+                logger.warning("JSON kurtarıldı (eksik %d parantez tamamlandı)", open_brackets)
+            except json.JSONDecodeError as e2:
+                raise json.JSONDecodeError(str(e2), raw, e2.pos)
 
         return {
             "success":      True,
