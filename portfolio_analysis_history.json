@@ -27,5 +27,31 @@
     "total_value": 6452.26025929125,
     "position_count": 16,
     "extra": {}
+  },
+  {
+    "date": "2026-03-16",
+    "timestamp": "2026-03-16T09:31:31",
+    "type": "risk",
+    "analysis": "# 📈 KURUMSAL PORTFÖY ANALİZ RAPORU\n\n**Analiz Tarihi:** Haziran 2025  \n**Portföy Büyüklüğü:** $5,946 (13 pozisyon)  \n**Toplam P&L:** +$35 (+0.6%)\n\n---\n\n## 🔴 RİSK DEĞERLENDİRMESİ\n\n| Risk Kategorisi | Puan | Açıklama |\n|---|---|---|\n| **Sektörel Yoğunlaşma** | 8/10 | Teknoloji %28 ile tehlikeli seviyede. AVGO, CRWD, ZETA, AMD aynı sektörde ve HEPSİ ZARARDA (-$149 toplam). Tek bir Fed faiz kararı hepsini vurur. |\n| **Korelasyon Riski** | 7/10 | AI/Yarı iletken teması aşırı yoğun: AVGO, AMD, VRT, NBIS, IREN hepsi AI hikayesine bağlı. Nvidia kötü sonuç açıklasa 5 hisse birden düşer. |\n| **Sistematik/Makro Risk** | 6/10 | Growth ağırlıklı portföy, faiz hassasiyeti yüksek. SOFI, ZETA, RKLB gibi kârsız/düşük kârlı şirketler resesyon senaryosunda sert düşer. |\n| **Likidite Riski** | 3/10 | Tüm hisseler likit, bu konuda sorun yok. |\n| **Döviz/Jeopolitik Risk** | 5/10 | %100 USD exposure. CCJ (Kanada-Kazakistan uranyum), IREN (Bitcoin mining) jeopolitik hassas. |\n\n**Genel Risk Skoru: 6.5/10** — 🟠 **YÜKSEK**\n\n> ⚠️ **Kritik Bulgu:** Portföyün %28'i tek sektörde ve o sektörün tamamı zararda. Bu klasik bir \"falling knife\" tuzağı işareti.\n\n---\n\n## 📊 SEKTÖREL ANALİZ\n\n### 🚨 Tehlikeli Yoğunlaşmalar\n\n```\nTEKNOLOJİ BLOĞU (%28 - $1,640)\n├── AVGO: -$36 (-5.3%) 🔴\n├── CRWD: -$32 (-7.2%) 🔴\n├── ZETA: -$45 (-12.2%) 🔴\n└── AMD: -$36 (-12.1%) 🔴\n    TOPLAM ZARAR: -$149\n```\n\n```\nAI/DATA CENTER TEMATİK KORELASYON\n├── AVGO (AI çipleri)\n├── AMD (AI GPU)\n├── VRT (Data center soğutma) ✅ +$178\n├── NBIS (AI altyapı) ✅ +$78\n└── IREN (Bitcoin/AI mining) 🔴 -$14\n    → 5 hisse aynı hikayeye bağlı = %40 portföy\n```\n\n```\nSPEKÜLATİF/KARARSIZ ŞİRKETLER\n├── SOFI: -$102 (-26.2%) 🔴 En büyük zarar\n├── ZETA: -$45 (-12.2%) 🔴\n├── RKLB: -$4 (-1.4%) 🔴\n└── IREN: -$14 (-3.0%) 🔴\n    → Kârsız veya düşük kârlı, yüksek beta\n```\n\n### Neden Tehlikeli?\n\n| Senaryo | Etkilenen Hisseler | Potansiyel Kayıp |\n|---------|-------------------|------------------|\n| Fed faiz artırırsa | SOFI, ZETA, RKLB, tüm tech | ~%15-20 |\n| AI hype sönerse",
+    "macro_regime": "",
+    "scenario": "",
+    "tickers": [
+      "AMZN",
+      "PPA",
+      "VRT",
+      "AVGO",
+      "NBIS",
+      "IREN",
+      "CRWD",
+      "CCJ",
+      "ZETA",
+      "RKLB",
+      "SOFI",
+      "AMD",
+      "SCHD"
+    ],
+    "total_value": 5946.0184953200005,
+    "position_count": 13,
+    "extra": {}
   }
 ]
