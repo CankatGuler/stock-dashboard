@@ -4081,7 +4081,7 @@ with tab_strategy:
                             unsafe_allow_html=True,
                         )
     except Exception as _cal_e:
-        logger.warning("Takvim widget hatası: %s", _cal_e)
+        st.caption(f"Takvim yüklenemedi: {_cal_e}")
 
     # ── Katman 2: Profil Ayarları ─────────────────────────────────────────
     with st.expander("⚙️ Yatırımcı Profili — Strateji Parametreleri", expanded=False):
