@@ -4156,9 +4156,17 @@ with tab_strategy:
                     if float(p.get("shares", 0)) > 0
                 ]
 
-                # Hisse skorları (hafızadan)
-                _top_tickers = get_top_tickers(limit=30)
-                _scores = {t["ticker"]: t.get("avg_score", 0) for t in _top_tickers}
+                # Hisse skorları (hafızadan) — SADECE aktif portföy + watchlist
+                # Eski analizlerde görünen satılmış hisseler buraya girmemeli
+                _active_tickers = set(
+                    [p["ticker"] for p in _port_enriched] + _watchlist_tickers
+                )
+                _top_tickers = get_top_tickers(limit=50)
+                _scores = {
+                    t["ticker"]: t.get("avg_score", 0)
+                    for t in _top_tickers
+                    if t["ticker"] in _active_tickers
+                }
 
                 # Analist hedefleri
                 _all_targets = get_all_targets_summary(_watchlist_tickers + [p["ticker"] for p in _port_now])

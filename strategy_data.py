@@ -543,7 +543,23 @@ def build_strategy_prompt(data: dict) -> str:
         lines.append("  Önümüzdeki 45 günde portföyde earnings yok.")
 
     # ── Hisse Skorları & Analist Hedefleri ───────────────────────────────
-    lines.append("\n=== HİSSE ANALİZ SKORLARI ===")
+    # Önce portföydeki aktif hisseleri açıkça listele
+    active_positions = p.get("positions", [])
+    if active_positions:
+        lines.append("\n=== AKTİF PORTFÖY HİSSELERİ (BUNLAR PORTFÖYDE VAR) ===")
+        lines.append("NOT: Aşağıdaki hisseler DIŞINDA hiçbir hisse bu kişinin portföyünde YOK.")
+        for pos in active_positions:
+            ticker = pos.get("ticker", "")
+            shares = pos.get("shares", 0)
+            avg_c  = pos.get("avg_cost", 0)
+            cur_p  = pos.get("current_price", avg_c)
+            pnl    = (cur_p - avg_c) / avg_c * 100 if avg_c > 0 else 0
+            lines.append(
+                f"  {ticker}: {shares:.2f} adet | Maliyet ${avg_c:.2f} | "
+                f"Güncel ${cur_p:.2f} | K/Z %{pnl:.1f}"
+            )
+
+    lines.append("\n=== HİSSE ANALİZ SKORLARI (portföy + watchlist) ===")
     if hs:
         for ticker, score in sorted(hs.items(), key=lambda x: x[1], reverse=True):
             tgt_data = ah.get(ticker, {})
@@ -560,6 +576,9 @@ def build_strategy_prompt(data: dict) -> str:
     lines.append("\n=== GÖREV ===")
     lines.append(
         "Yukarıdaki tüm veriyi değerlendirerek bu yatırımcı için kapsamlı strateji üret. "
+        "KRİTİK KURAL: Sat/Azalt önerilerinde YALNIZCA 'AKTİF PORTFÖY HİSSELERİ' "
+        "bölümünde listelenen hisseleri kullan — o listede olmayan hiçbir hisseyi "
+        "portföyde varmış gibi işleme. "
         "Çelişkileri tespit et ve açıkla. Kısa vade (1-3 ay), orta vade (3-12 ay) ve "
         "uzun vade (1-3 yıl) için ayrı ayrı öneri sun. Her öneride somut aksiyon belirt. "
         "Yanıtını Türkçe ver."
