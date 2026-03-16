@@ -2158,7 +2158,7 @@ Türkçe, net ve somut yaz. Spesifik rakamlara dayan."""
                     data=_sh_html.encode("utf-8"),
                     file_name=f"strateji_{_sh_id}.html",
                     mime="text/html",
-                    key=f"dl_strat_{_sh_id}",
+                    key=f"mem_dl_strat_{_sh_id}_{hash(_sh_id) % 9999}",
                     use_container_width=True,
                 )
 
