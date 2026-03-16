@@ -2177,7 +2177,12 @@ Türkçe, net ve somut yaz. Spesifik rakamlara dayan."""
                     with _yes:
                         if st.button("✅ Evet Sil", key=f"del_yes_{_shi}", use_container_width=True):
                             from analysis_memory import delete_strategy_from_archive
-                            ok_del = delete_strategy_from_archive(_sh_id)
+                            # Önce ID ile dene, yoksa index ile sil
+                            _del_key_val = _sh_id if _sh_id else str(_shi)
+                            ok_del = delete_strategy_from_archive(_del_key_val)
+                            if not ok_del:
+                                # Fallback: generated_at ile dene
+                                ok_del = delete_strategy_from_archive(_sh.get("generated_at", "")[:16])
                             st.session_state[f"del_confirm_{_shi}"] = False
                             st.session_state["strat_archive_cache"] = None
                             if ok_del:

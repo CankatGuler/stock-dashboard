@@ -827,13 +827,40 @@ def get_strategy_history(limit: int = 10) -> list:
     return archive[:limit]
 
 
-def delete_strategy_from_archive(strategy_id: str) -> bool:
-    """Verilen ID'ye sahip stratejiyi arşivden sil ve GitHub'a kaydet."""
+def delete_strategy_from_archive(strategy_key: str) -> bool:
+    """
+    Verilen anahtar ile stratejiyi arşivden sil.
+    Önce 'id' alanıyla, bulamazsa 'generated_at' ile eşleştirir.
+    """
     archive = _load_strategy_archive()
-    new_archive = [r for r in archive if r.get("id") != strategy_id]
-    if len(new_archive) == len(archive):
-        logger.warning("Silinecek strateji bulunamadı: %s", strategy_id)
+    if not archive:
+        logger.warning("Arşiv boş veya okunamadı.")
         return False
-    ok = _save_strategy_archive(new_archive)
-    logger.info("Strateji silindi: %s", strategy_id)
-    return ok
+
+    # ID ile eşleştir
+    new_archive = [r for r in archive if r.get("id") != strategy_key]
+    if len(new_archive) < len(archive):
+        ok = _save_strategy_archive(new_archive)
+        logger.info("Strateji silindi (id): %s", strategy_key)
+        return ok
+
+    # generated_at ile eşleştir (ID boşsa)
+    new_archive = [r for r in archive if not r.get("generated_at", "").startswith(strategy_key[:16])]
+    if len(new_archive) < len(archive):
+        ok = _save_strategy_archive(new_archive)
+        logger.info("Strateji silindi (generated_at): %s", strategy_key)
+        return ok
+
+    # Index ile eşleştir (son çare — sayısal index string olarak)
+    try:
+        idx = int(strategy_key)
+        if 0 <= idx < len(archive):
+            archive.pop(idx)
+            ok = _save_strategy_archive(archive)
+            logger.info("Strateji silindi (index): %d", idx)
+            return ok
+    except (ValueError, TypeError):
+        pass
+
+    logger.warning("Silinecek strateji bulunamadı: %s", strategy_key)
+    return False
