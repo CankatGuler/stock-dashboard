@@ -2,27 +2,23 @@ name: Radar Bildirimleri (NYSE Saatine Göre)
 
 on:
   schedule:
-    # ── Günlük radar — açılış öncesi ───────────────────────────────────────
-    # Yaz (EDT, UTC-4): ABD 08:00 = UTC 12:00 = TR 15:00
-    # Kış (EST, UTC-5): ABD 08:00 = UTC 13:00 = TR 16:00
-    - cron: "0 12 * * 1-5"
+    # ── Sabah radarı (09:00 TR hedef → 06:00 UTC) ──────────────────────────
+    # GitHub 3 saate kadar geciktirebilir → en geç 12:00 TR'de gelir
+    - cron: "0 6 * * 1-5"
+
+    # ── Öğleden sonra radarı (16:00 TR hedef → 13:00 UTC) ──────────────────
+    # Yaz/kış farkı yok — tek cron yeterli
     - cron: "0 13 * * 1-5"
 
-    # ── Günlük radar — kapanış öncesi ──────────────────────────────────────
-    # Yaz: ABD 15:00 = UTC 19:00 = TR 22:00
-    # Kış: ABD 15:00 = UTC 20:00 = TR 23:00
-    - cron: "0 19 * * 1-5"
-    - cron: "0 20 * * 1-5"
-
-    # ── Watchlist Faz 1 — Erken uyarı (11:00 TR = 08:00 UTC) ─────────────
+    # ── Watchlist Faz 1: Erken uyarı (11:00 TR hedef → 08:00 UTC) ──────────
     - cron: "0 8 * * 1-5"
 
-    # ── Watchlist Faz 2 — Tam analiz (23:30 TR = 20:30 UTC) ──────────────
-    - cron: "30 20 * * 1-5"
+    # ── Watchlist Faz 2: Tam analiz (20:00 TR hedef → 17:00 UTC) ───────────
+    # Eski ayar: 23:30 TR → geç geliyordu. Yeni: 20:00 TR hedef
+    - cron: "0 17 * * 1-5"
 
-    # ── Haftalık S&P 500 raporu — Pazar ────────────────────────────────────
-    # UTC 17:00 = TR 20:00
-    - cron: "0 17 * * 0"
+    # ── Haftalık rapor: Pazar (16:00 TR hedef → 13:00 UTC) ─────────────────
+    - cron: "0 13 * * 0"
 
   workflow_dispatch:
 
@@ -30,7 +26,10 @@ jobs:
   # ── Günlük Radar ─────────────────────────────────────────────────────────
   radar:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || (github.event.schedule != '0 17 * * 0')
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.schedule == '0 6 * * 1-5' ||
+      github.event.schedule == '0 13 * * 1-5'
 
     steps:
       - name: Kodu çek
@@ -56,10 +55,12 @@ jobs:
           GITHUB_EVENT_NAME:  ${{ github.event_name }}
         run: python morning_radar.py
 
-  # ── Watchlist Faz 1: Erken Uyarı (11:00 TR) ─────────────────────────────
+  # ── Watchlist Faz 1: Erken Uyarı ────────────────────────────────────────
   watchlist-phase1:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 8 * * 1-5'
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.schedule == '0 8 * * 1-5'
 
     steps:
       - name: Kodu çek
@@ -84,10 +85,12 @@ jobs:
           GITHUB_REPO:        ${{ secrets.GITHUB_REPO }}
         run: python watchlist_runner.py
 
-  # ── Watchlist Faz 2: Tam Analiz (23:30 TR) ───────────────────────────────
+  # ── Watchlist Faz 2: Tam Analiz ──────────────────────────────────────────
   watchlist-phase2:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '30 20 * * 1-5'
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.schedule == '0 17 * * 1-5'
 
     steps:
       - name: Kodu çek
@@ -112,10 +115,12 @@ jobs:
           GITHUB_REPO:        ${{ secrets.GITHUB_REPO }}
         run: python watchlist_runner.py
 
-  # ── Haftalık S&P 500 Raporu ───────────────────────────────────────────────
+  # ── Haftalık Rapor (Pazar) ────────────────────────────────────────────────
   weekly-report:
     runs-on: ubuntu-latest
-    if: github.event.schedule == '0 17 * * 0' || github.event_name == 'workflow_dispatch'
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.schedule == '0 13 * * 0'
 
     steps:
       - name: Kodu çek
