@@ -216,8 +216,8 @@ def run_watchlist_analysis(
             # Haber çek
             news_articles = []
             try:
-                from news_fetcher import fetch_news
-                news_articles = fetch_news([ticker], days=2)
+                from news_fetcher import fetch_news_for_ticker
+                news_articles = fetch_news_for_ticker(ticker, days=2)
             except Exception:
                 pass
 
@@ -248,7 +248,7 @@ def run_watchlist_analysis(
         logger.info("%d hisse Claude analizine alınıyor...", len(triggered))
         try:
             from data_fetcher import enrich_ticker
-            from news_fetcher import fetch_news, format_news_for_prompt
+            from news_fetcher import fetch_news_for_ticker, format_news_for_prompt
             from claude_analyzer import analyse_stock
 
             for t in triggered:
@@ -258,7 +258,7 @@ def run_watchlist_analysis(
                     if not stock.get("price"):
                         continue
 
-                    articles  = fetch_news([ticker], days=3)
+                    articles  = fetch_news_for_ticker(ticker, days=3)
                     news_text = format_news_for_prompt(articles)
                     analysis  = analyse_stock(stock, news_text)
 
@@ -420,8 +420,8 @@ def run_phase1_scan(extra_tickers: list[str] = None) -> dict:
 
             # T4 — Sinyal haberi (son 18 saat — dün kapanışından bu yana)
             try:
-                from news_fetcher import fetch_news
-                articles = fetch_news([ticker], days=1)
+                from news_fetcher import fetch_news_for_ticker_for_ticker
+                articles = fetch_news_for_ticker(ticker, days=1)
                 signal_news = [a for a in articles if a.get("is_signal")]
                 if signal_news:
                     triggered.append("T4")

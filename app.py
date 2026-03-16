@@ -451,6 +451,8 @@ if "wl_phase1_result" not in st.session_state:
     st.session_state["wl_phase1_result"] = None
 if "tgt_data" not in st.session_state:
     st.session_state["tgt_data"] = None
+if "wr_cache" not in st.session_state:
+    st.session_state["wr_cache"] = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2649,25 +2651,75 @@ with tab_lookup:
         unsafe_allow_html=True,
     )
 
-    from analysis_memory import get_weekly_reports, get_weekly_report_by_id
+    from analysis_memory import get_weekly_reports, get_weekly_report_by_id, save_weekly_report
     from weekly_report_html import generate_weekly_html
 
-    wr_col1, wr_col2 = st.columns([1, 2])
-    with wr_col1:
+    # ── Manuel Rapor Oluştur ──────────────────────────────────────────────
+    wr_btn_c1, wr_btn_c2, wr_btn_c3 = st.columns([1.5, 1.5, 1])
+    with wr_btn_c1:
+        wr_run_port = st.button("💼 Portföy Raporunu Arşivle", key="wr_run_portfolio", use_container_width=True)
+    with wr_btn_c2:
+        wr_run_surp = st.button("🔭 Sürpriz Raporunu Arşivle", key="wr_run_surprise", use_container_width=True)
+    with wr_btn_c3:
         wr_type = st.selectbox(
-            "Rapor tipi:",
+            "Filtre:",
             ["Tümü", "Portföy", "Sürpriz", "Makro"],
             key="wr_type_filter",
             label_visibility="collapsed",
         )
-    with wr_col2:
-        st.caption("Her Pazar akşamı otomatik arşivlenir · PDF için raporu aç → Yazdır → PDF kaydet")
+
+    # Portföy raporu oluştur ve arşivle
+    if wr_run_port:
+        _port_tickers = [p["ticker"] for p in load_portfolio() if p.get("ticker")]
+        if not _port_tickers:
+            st.warning("Portföyde hisse yok.")
+        else:
+            with st.spinner(f"{len(_port_tickers)} hisse analiz ediliyor ve arşivleniyor..."):
+                try:
+                    from weekly_scanner import run_portfolio_scan
+                    _port_results = run_portfolio_scan(_port_tickers)
+                    if _port_results:
+                        _top = sorted(_port_results, key=lambda x: x.get("nihai_guven_skoru", 0), reverse=True)
+                        _summary = f"{len(_port_results)} portföy hissesi analiz edildi. En yüksek: {_top[0].get('hisse_sembolu','')} ({_top[0].get('nihai_guven_skoru',0)})"
+                        save_weekly_report("portfolio", _port_results, summary_text=_summary)
+                        st.success(f"✅ {len(_port_results)} hisse arşivlendi!")
+                        st.session_state["wr_cache"] = None  # Cache sıfırla
+                        st.rerun()
+                    else:
+                        st.error("Analiz sonucu boş geldi.")
+                except Exception as _e:
+                    st.error(f"Hata: {_e}")
+
+    # Sürpriz raporu oluştur ve arşivle
+    if wr_run_surp:
+        with st.spinner("Sürpriz taraması çalışıyor ve arşivleniyor..."):
+            try:
+                from weekly_scanner import run_surprise_scan
+                _surp_results = run_surprise_scan(top_n_stage1=50, top_n_final=20)
+                if _surp_results:
+                    _top_s = sorted(_surp_results, key=lambda x: x.get("nihai_guven_skoru", 0), reverse=True)
+                    _summary_s = f"{len(_surp_results)} sürpriz hisse bulundu. En iyi: {_top_s[0].get('hisse_sembolu','')} ({_top_s[0].get('nihai_guven_skoru',0)})"
+                    save_weekly_report("surprise", _surp_results, summary_text=_summary_s)
+                    st.success(f"✅ {len(_surp_results)} hisse arşivlendi!")
+                    st.session_state["wr_cache"] = None
+                    st.rerun()
+                else:
+                    st.error("Tarama sonucu boş geldi.")
+            except Exception as _e:
+                st.error(f"Hata: {_e}")
+
+    st.caption("Manuel arşiv: istediğin zaman çalıştır · PDF için raporu aç → Yazdır → PDF kaydet")
 
     _type_map = {"Tümü": None, "Portföy": "portfolio", "Sürpriz": "surprise", "Makro": "macro"}
-    _wr_list  = get_weekly_reports(report_type=_type_map[wr_type], limit=20)
+
+    # Cache ile yükle
+    if st.session_state.get("wr_cache") is None:
+        st.session_state["wr_cache"] = get_weekly_reports(limit=20)
+    _wr_list = [r for r in st.session_state.get("wr_cache", [])
+                if _type_map[wr_type] is None or r.get("type") == _type_map[wr_type]]
 
     if not _wr_list:
-        st.info("Henüz arşivlenmiş rapor yok. İlk haftalık rapor Pazar akşamı geldiğinde otomatik kaydedilecek.")
+        st.info("Henüz arşivlenmiş rapor yok. Yukarıdaki butonlarla oluşturabilirsin.")
     else:
         _type_emoji = {"portfolio": "💼", "surprise": "🔭", "macro": "🌍"}
         _type_label = {"portfolio": "Portföy", "surprise": "Sürpriz", "macro": "Makro"}
