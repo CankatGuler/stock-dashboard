@@ -4003,6 +4003,7 @@ with tab_strategy:
     # ── Katman 1b: Finansal Takvim Widget ────────────────────────────────
     try:
         from financial_calendar import get_upcoming_events
+        from datetime import datetime as _dt_cal
 
         _cal_port_tickers = [p["ticker"] for p in _port_now]
         try:
@@ -4034,8 +4035,8 @@ with tab_strategy:
                     _grouped.setdefault(_ev["date"], []).append(_ev)
 
                 for _gdate, _gevents in sorted(_grouped.items()):
-                    _gday = datetime.strptime(_gdate, "%Y-%m-%d")
-                    _today_dt = datetime.now().date()
+                    _gday = _dt_cal.strptime(_gdate, "%Y-%m-%d")
+                    _today_dt = _dt_cal.now().date()
                     _diff = (_gday.date() - _today_dt).days
                     _day_label = (
                         "BUGÜN" if _diff == 0
