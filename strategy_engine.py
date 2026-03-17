@@ -31,13 +31,11 @@ TEMEL KURALLAR:
 3. Çelişkileri tespit et ve çöz. Portföy analizi "azalt" ama analist "al" diyorsa
    bu çelişkiyi açıkla ve zaman ufkuna göre çöz.
 
-4. risk_senaryosu_aksiyonlari ZORUNLUDUR. Bu alan ASLA boş bırakılmaz.
-   Her strateji raporu için mutlaka şunları doldur:
-   - tetikleyici: "VIX 32 üzerine çıkarsa VEYA S&P %8 düşerse" gibi somut seviye
-   - acil_aksiyonlar: ilk 24-48 saatte yapılacaklar (en az 2 madde)
-   - savunma_aksiyonlar: nakit artırma, stop loss seviyeleri (en az 2 madde)
-   - firsat_aksiyonlar: hangi hisse hangi seviyede alınır (en az 2 madde)
-   - recovery_isaretleri: toparlanma ne zaman başlar, nasıl anlaşılır (en az 2 madde)
+4. Her vade planında (kisa_vade, orta_vade) "risk_aksiyonlar" alanı ZORUNLUDUR.
+   Bu alan ASLA boş bırakılmaz. Şu formatta doldur:
+   "Risk senaryosu gerçekleşirse: [hisse] [işlem] — örn: RKLB %100 kapat, nakdi %40a çıkar"
+   Her risk_aksiyonlar listesinde somut hisse isimleri ve yüzdeler olmalı.
+   Maksimum 150 karakter per madde.
 
 4. Portföy önce gelir. Yeni alımdan önce mevcut pozisyonların sağlığını değerlendir.
 
@@ -110,30 +108,25 @@ TEMEL KURALLAR:
   },
   "kisa_vade": {
     "sure": "1-3 ay",
-    "senaryo_baz": "Ana senaryo nedir",
-    "senaryo_risk": "Riskli senaryo nedir",
-    "aksiyonlar": ["Madde madde kısa vade aksiyonları"]
+    "senaryo_baz": "Ana senaryo nedir — tek cümle",
+    "senaryo_risk": "Risk senaryosu nedir — tek cümle (tetikleyici seviyeyle: VIX 32+ veya S&P -%8 gibi)",
+    "aksiyonlar": ["Ana senaryoda yapılacaklar — en az 3 madde"],
+    "risk_aksiyonlar": ["Risk senaryosu gerçekleşirse SOMUT adımlar — en az 3 madde, hisse isimleri ve yüzdelerle"]
   },
   "orta_vade": {
     "sure": "3-12 ay",
-    "senaryo_baz": "Ana senaryo nedir",
-    "senaryo_risk": "Riskli senaryo nedir",
-    "aksiyonlar": ["Madde madde orta vade aksiyonları"]
+    "senaryo_baz": "Ana senaryo nedir — tek cümle",
+    "senaryo_risk": "Risk senaryosu nedir — tek cümle",
+    "aksiyonlar": ["Ana senaryoda yapılacaklar — en az 3 madde"],
+    "risk_aksiyonlar": ["Risk senaryosu gerçekleşirse SOMUT adımlar — en az 2 madde"]
   },
   "uzun_vade": {
     "sure": "1-3 yıl",
     "hedef_portfoy": "İdeal portföy yapısı nasıl olmalı",
     "aksiyonlar": ["Madde madde uzun vade aksiyonları"]
   },
-  "risk_uyarilari": ["Kritik risk uyarıları listesi"],
-  "guc_sinyalleri": ["Pozitif güçlü sinyaller listesi"],
-  "risk_senaryosu_aksiyonlari": {
-    "tetikleyici": "Risk senaryosu ne zaman devreye girer (örn: VIX 35 üzerine çıkarsa)",
-    "acil_aksiyonlar": ["Hemen yapılacaklar — örn: RKLB pozisyonunu kapat"],
-    "savunma_aksiyonlar": ["Savunmaya geç — örn: nakdi %40'a çıkar"],
-    "firsat_aksiyonlar": ["Düşüşte alım fırsatları — örn: AVGO 250 altında al"],
-    "recovery_isaretleri": ["Toparlanma sinyalleri — örn: VIX 20 altına düşerse"]
-  }
+  "risk_uyarilari": ["Kritik risk uyarıları — kısa maddeler"],
+  "guc_sinyalleri": ["Pozitif güçlü sinyaller — kısa maddeler"]
 }"""
 
 

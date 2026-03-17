@@ -170,11 +170,13 @@ def get_fundamental_score(ticker: str) -> tuple[float, dict]:
     """
     yfinance tk.info ile zengin temel skor (0-100).
     Gelir büyümesi, FCF, ROE, brüt marj, beta hepsi dahil.
+    Tek bir info çağrısı — fast_info ayrı çağrı gerektirmez.
     """
     try:
         import yfinance as yf
-        info  = yf.Ticker(ticker).info
-        fi    = yf.Ticker(ticker).fast_info
+        tk    = yf.Ticker(ticker)
+        info  = tk.info
+        fi    = tk.fast_info  # Aynı objeden al, ikinci HTTP isteği yok
 
         score = 40.0
         meta  = {"ticker": ticker}
@@ -837,11 +839,20 @@ def run_radar(
         if progress_callback:
             progress_callback(ticker, idx + 1, len(total_universe))
         try:
+            import yfinance as yf
+            # Aşama 1: Çok hızlı fast_info ile market_cap kontrolü
+            # Market cap < 500M olan hisseleri hemen ele - API çağrısı tasarrufu
+            fi = yf.Ticker(ticker).fast_info
+            mc = float(getattr(fi, "market_cap", 0) or 0)
+            if mc > 0 and mc < 500e6:  # 500M altı hisseler çok spekülatif
+                continue
+            # Aşama 2: Tam fundamental skor
             fund_score, meta = get_fundamental_score(ticker)
             momentum_score   = get_momentum_score(ticker, meta)
-            # Hızlı ön eleme: temel skor 25'in altındaysa atla (fallback 40 ile çakışmasın)
-            if fund_score < 25:
-                continue
+            # Ön eleme: fallback skor (35.0) ile gerçek düşük skor arasındaki fark
+            # Gerçek veri geldiyse price > 0 olur
+            if meta.get("price", 0) == 0 and fund_score <= 35:
+                continue  # Veri gelemeyen hisseler
             articles = news_ticker_map.get(ticker, [])
             pre_scores.append((ticker, fund_score, momentum_score, meta, articles))
         except Exception as e:
@@ -849,7 +860,7 @@ def run_radar(
 
     # Ön skora göre sırala, en iyi max_tickers×2 adayı al
     pre_scores.sort(key=lambda x: x[1] * 0.6 + x[2] * 0.4, reverse=True)
-    candidates = pre_scores[:max_tickers * 2]
+    candidates = pre_scores[:max_tickers * 3]
     logger.info("Radar: %d aday belirlendi (evren: %d)", len(candidates), len(total_universe))
 
     results = []
@@ -977,7 +988,7 @@ def run_radar(
             "timestamp":         datetime.now().strftime("%H:%M"),
         })
 
-        time.sleep(0.3)
+        time.sleep(0.1)
 
     results.sort(key=lambda x: x["radar_score"], reverse=True)
     logger.info("Radar v3: %d opportunities above %.0f", len(results), min_radar_score)
