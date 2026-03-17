@@ -1,344 +1,352 @@
-# economic_data.py — Ekonomik Veri ve Sektör Rotasyonu
+# economic_data.py — Katman 2 Ekonomik Veri Modülü
 #
-# Katman 2 metrikleri:
-#   - FRED API: ISM, NFP, CPI, PCE, GDP gerçek değerleri
-#   - S&P 500 Forward P/E tarihsel karşılaştırma
-#   - Sektör rotasyon analizi (8 ETF)
-#   - Put/Call oranı proxy
-#
-# FRED API key gerektirmez — tamamen ücretsiz
+# FRED API (ücretsiz, key gerektirmez) + yfinance ile:
+#   ISM Manufacturing/Services, NFP, CPI, PCE, GDP
+#   S&P 500 Forward P/E + Shiller CAPE
+#   Sektör Rotasyonu (8 ETF göreceli güç)
 
 import logging
 import time
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
+from dataclasses import dataclass
+
+import requests
+import yfinance as yf
 
 logger = logging.getLogger(__name__)
 
-# ─── FRED API ────────────────────────────────────────────────────────────────
-
-FRED_BASE = "https://api.stlouisfed.org/fred/series/observations"
-
-FRED_SERIES = {
-    "CPIAUCSL":  {"name": "CPI (Başlık)",         "unit": "%",  "transform": "pct_change_yoy"},
-    "CPILFESL":  {"name": "Core CPI (Çekirdek)",  "unit": "%",  "transform": "pct_change_yoy"},
-    "PCEPI":     {"name": "PCE Enflasyon",         "unit": "%",  "transform": "pct_change_yoy"},
-    "PCEPILFE":  {"name": "Core PCE (Fed Hedefi)", "unit": "%",  "transform": "pct_change_yoy"},
-    "UNRATE":    {"name": "İşsizlik Oranı",        "unit": "%",  "transform": "level"},
-    "PAYEMS":    {"name": "NFP (Non-Farm Payroll)", "unit": "K", "transform": "mom_change"},
-    "GDP":       {"name": "GDP Büyümesi",           "unit": "%",  "transform": "pct_change_qoq"},
-    "ISMMN01":   {"name": "ISM Manufacturing",     "unit": "",   "transform": "level"},
-}
+FRED_BASE = "https://fred.stlouisfed.org/graph/fredgraph.csv"
 
 
-def fetch_fred_series(series_id: str, limit: int = 3) -> list[dict]:
-    """
-    FRED'den bir seri çek. API key gerektirmez.
-    Returns: [{"date": "2026-01-01", "value": 3.2}, ...]
-    """
+@dataclass
+class EconIndicator:
+    key:      str
+    label:    str
+    value:    float
+    prev:     float
+    date:     str
+    signal:   str
+    note:     str
+    unit:     str = ""
+
+
+def _fred_latest(series_id: str, periods: int = 3) -> list[tuple[str, float]]:
     try:
-        import requests
         resp = requests.get(
-            FRED_BASE,
-            params={
-                "series_id":      series_id,
-                "api_key":        "abcdefghijklmnopqrstuvwxyz123456",  # Demo key — çalışır
-                "file_type":      "json",
-                "sort_order":     "desc",
-                "limit":          limit,
-                "observation_end": datetime.now().strftime("%Y-%m-%d"),
-            },
-            timeout=10,
+            FRED_BASE, params={"id": series_id},
+            headers={"User-Agent": "Mozilla/5.0"}, timeout=15,
         )
-        if resp.status_code != 200:
-            return []
-        obs = resp.json().get("observations", [])
-        results = []
-        for o in obs:
-            try:
-                val = float(o["value"])
-                results.append({"date": o["date"], "value": val})
-            except (ValueError, KeyError):
-                pass
-        return results
+        resp.raise_for_status()
+        lines = resp.text.strip().split("\n")
+        data = []
+        for line in lines[1:]:
+            parts = line.split(",")
+            if len(parts) == 2:
+                try:
+                    data.append((parts[0].strip(), float(parts[1])))
+                except ValueError:
+                    pass
+        data.sort(key=lambda x: x[0], reverse=True)
+        return data[:periods]
     except Exception as e:
-        logger.debug("FRED %s failed: %s", series_id, e)
+        logger.warning("FRED %s failed: %s", series_id, e)
         return []
 
 
-def fetch_all_economic_data() -> dict:
-    """
-    Tüm ekonomik göstergeleri FRED'den çek ve yorumla.
-    Returns: {series_id: {name, value, prev_value, change, signal, note}}
-    """
-    results = {}
-
-    for series_id, meta in FRED_SERIES.items():
-        try:
-            obs = fetch_fred_series(series_id, limit=13)  # 13 ay/çeyrek
-            if len(obs) < 2:
-                continue
-
-            latest = obs[0]
-            prev   = obs[1]
-
-            current_val = latest["value"]
-            prev_val    = prev["value"]
-            current_date= latest["date"]
-
-            # Dönüşüm hesapla
-            transform = meta["transform"]
-            if transform == "pct_change_yoy" and len(obs) >= 13:
-                year_ago = obs[12]["value"]
-                display_val = round((current_val - year_ago) / year_ago * 100, 2) if year_ago else 0
-                change = round(display_val - ((prev_val - obs[12]["value"]) / obs[12]["value"] * 100), 2) if year_ago else 0
-            elif transform == "pct_change_qoq":
-                display_val = round((current_val - prev_val) / prev_val * 100 * 4, 2) if prev_val else 0  # Annualized
-                change = display_val - current_val
-            elif transform == "mom_change":
-                display_val = round((current_val - prev_val), 1)
-                change = display_val
-            else:
-                display_val = current_val
-                change = round(current_val - prev_val, 2)
-
-            # Sinyal ve yorum
-            signal, note = _interpret_economic(series_id, display_val, change)
-
-            results[series_id] = {
-                "name":        meta["name"],
-                "value":       display_val,
-                "raw_value":   current_val,
-                "prev_value":  prev_val,
-                "change":      change,
-                "date":        current_date,
-                "unit":        meta["unit"],
-                "signal":      signal,
-                "note":        note,
-            }
-            time.sleep(0.1)
-
-        except Exception as e:
-            logger.debug("Economic data %s failed: %s", series_id, e)
-
-    return results
+def fetch_ism_manufacturing() -> EconIndicator | None:
+    data = _fred_latest("NAPM", periods=3)
+    if not data:
+        return None
+    d, v = data[0]
+    p = data[1][1] if len(data) > 1 else v
+    if v >= 55:   sig, note = "green",  f"ISM İmalat {v:.1f} — Güçlü büyüme bölgesi"
+    elif v >= 50: sig, note = "amber",  f"ISM İmalat {v:.1f} — Büyüme ama zayıflıyor"
+    elif v >= 45: sig, note = "amber",  f"ISM İmalat {v:.1f} — Daralma bölgesi, dikkat"
+    else:         sig, note = "red",    f"ISM İmalat {v:.1f} — Belirgin daralma"
+    return EconIndicator("ISM_MFG","ISM Manufacturing PMI",v,p,d,sig,note)
 
 
-def _interpret_economic(series_id: str, value: float, change: float) -> tuple[str, str]:
-    """Her ekonomik gösterge için sinyal ve not üret."""
-
-    if series_id in ("CPIAUCSL", "CPILFESL"):
-        if value >= 4.0:
-            return "red", f"Enflasyon %{value:.1f} — çok yüksek, Fed sıkılaşmaya devam eder"
-        elif value >= 3.0:
-            return "amber", f"Enflasyon %{value:.1f} — Fed hedefinin üzerinde, dikkat"
-        elif value >= 2.0:
-            return "green", f"Enflasyon %{value:.1f} — Fed hedefine yakın, olumlu"
-        else:
-            return "green", f"Enflasyon %{value:.1f} — hedefin altında, faiz indirimi mümkün"
-
-    elif series_id in ("PCEPI", "PCEPILFE"):
-        if value >= 3.0:
-            return "red", f"PCE %{value:.1f} — Fed'in %2 hedefinin çok üzerinde"
-        elif value >= 2.5:
-            return "amber", f"PCE %{value:.1f} — hedefe yaklaşıyor ama henüz değil"
-        else:
-            return "green", f"PCE %{value:.1f} — Fed hedefine yakın veya altında"
-
-    elif series_id == "UNRATE":
-        if value >= 5.0:
-            return "red", f"İşsizlik %{value:.1f} — yüksek, ekonomi yavaşlıyor"
-        elif value >= 4.5:
-            return "amber", f"İşsizlik %{value:.1f} — orta, dikkat"
-        else:
-            return "green", f"İşsizlik %{value:.1f} — düşük, sağlıklı işgücü piyasası"
-
-    elif series_id == "PAYEMS":
-        if value >= 200:
-            return "green", f"NFP +{value:.0f}K — güçlü istihdam, ekonomi sağlıklı"
-        elif value >= 100:
-            return "amber", f"NFP +{value:.0f}K — orta istihdam artışı"
-        elif value >= 0:
-            return "amber", f"NFP +{value:.0f}K — zayıf istihdam, dikkat"
-        else:
-            return "red", f"NFP {value:.0f}K — negatif! İş kayıpları başladı"
-
-    elif series_id == "GDP":
-        if value >= 3.0:
-            return "green", f"GDP %{value:.1f} — güçlü büyüme"
-        elif value >= 1.5:
-            return "amber", f"GDP %{value:.1f} — ılımlı büyüme"
-        elif value >= 0:
-            return "amber", f"GDP %{value:.1f} — zayıf büyüme, resesyon riski var"
-        else:
-            return "red", f"GDP %{value:.1f} — negatif! Teknik resesyon riski"
-
-    elif series_id == "ISMMN01":
-        if value >= 55:
-            return "green", f"ISM {value:.1f} — güçlü imalat genişlemesi"
-        elif value >= 50:
-            return "amber", f"ISM {value:.1f} — imalat büyüyor ama yavaş"
-        elif value >= 45:
-            return "amber", f"ISM {value:.1f} — imalat DARALIYOR (50 altı)"
-        else:
-            return "red", f"ISM {value:.1f} — imalat ciddi şekilde daralıyor"
-
-    return "neutral", f"Değer: {value:.2f}"
+def fetch_ism_services() -> EconIndicator | None:
+    data = _fred_latest("NMFCI", periods=3) or _fred_latest("NMFSDI", periods=3)
+    if not data:
+        return None
+    d, v = data[0]
+    p = data[1][1] if len(data) > 1 else v
+    if v >= 55:   sig, note = "green", f"ISM Hizmetler {v:.1f} — Güçlü büyüme"
+    elif v >= 50: sig, note = "amber", f"ISM Hizmetler {v:.1f} — Büyüme yavaşlıyor"
+    else:         sig, note = "red",   f"ISM Hizmetler {v:.1f} — Daralma"
+    return EconIndicator("ISM_SVC","ISM Services PMI",v,p,d,sig,note)
 
 
-# ─── S&P 500 Değerleme ────────────────────────────────────────────────────────
+def fetch_cpi() -> dict:
+    result = {}
+    cpi = _fred_latest("CPIAUCSL", periods=13)
+    if cpi and len(cpi) >= 13:
+        d, v = cpi[0]; ya = cpi[12][1]
+        yoy = (v - ya) / ya * 100
+        if yoy >= 4.0:   sig, note = "red",   f"CPI %{yoy:.1f} YoY — Yüksek enflasyon"
+        elif yoy >= 2.5: sig, note = "amber", f"CPI %{yoy:.1f} YoY — Hedefin üzerinde"
+        else:             sig, note = "green", f"CPI %{yoy:.1f} YoY — Hedefe yakın"
+        result["CPI"] = EconIndicator("CPI","CPI (YoY)",round(yoy,2),0,d,sig,note,"%")
+
+    core = _fred_latest("CPILFESL", periods=13)
+    if core and len(core) >= 13:
+        d, v = core[0]; ya = core[12][1]
+        yoy = (v - ya) / ya * 100
+        if yoy >= 3.5:   sig, note = "red",   f"Çekirdek CPI %{yoy:.1f} — Yapışkan enflasyon"
+        elif yoy >= 2.5: sig, note = "amber", f"Çekirdek CPI %{yoy:.1f} — Yavaş düşüş"
+        else:             sig, note = "green", f"Çekirdek CPI %{yoy:.1f} — Kontrol altında"
+        result["CORE_CPI"] = EconIndicator("CORE_CPI","Çekirdek CPI (YoY)",round(yoy,2),0,d,sig,note,"%")
+
+    return result
+
+
+def fetch_pce() -> EconIndicator | None:
+    data = _fred_latest("PCEPILFE", periods=13)
+    if not data or len(data) < 13:
+        return None
+    d, v = data[0]; ya = data[12][1]
+    yoy = (v - ya) / ya * 100
+    if yoy >= 3.0:   sig, note = "red",   f"Çekirdek PCE %{yoy:.1f} — Faiz indirimi uzak"
+    elif yoy >= 2.3: sig, note = "amber", f"Çekirdek PCE %{yoy:.1f} — Hedefe yaklaşıyor"
+    else:             sig, note = "green", f"Çekirdek PCE %{yoy:.1f} — Fed hedefine ulaştı"
+    return EconIndicator("CORE_PCE","Çekirdek PCE (YoY)",round(yoy,2),0,d,sig,note,"%")
+
+
+def fetch_gdp_growth() -> EconIndicator | None:
+    data = _fred_latest("A191RL1Q225SBEA", periods=4)
+    if not data:
+        return None
+    d, v = data[0]; p = data[1][1] if len(data) > 1 else v
+    if v >= 3.0:   sig, note = "green", f"GDP %{v:.1f} — Güçlü büyüme"
+    elif v >= 1.5: sig, note = "amber", f"GDP %{v:.1f} — Yavaş büyüme"
+    elif v >= 0:   sig, note = "amber", f"GDP %{v:.1f} — Durgunluk sınırında"
+    else:          sig, note = "red",   f"GDP %{v:.1f} — Negatif büyüme! Resesyon riski"
+    return EconIndicator("GDP","GDP Büyümesi (QoQ)",round(v,2),round(p,2),d,sig,note,"%")
+
+
+def fetch_nfp() -> EconIndicator | None:
+    data = _fred_latest("PAYEMS", periods=3)
+    if not data or len(data) < 2:
+        return None
+    d, v = data[0]; p = data[1][1]
+    chg = v - p
+    if chg >= 250:  sig, note = "green", f"NFP +{chg:.0f}K — Çok güçlü istihdam"
+    elif chg >= 150: sig, note = "green", f"NFP +{chg:.0f}K — Güçlü istihdam"
+    elif chg >= 75: sig, note = "amber", f"NFP +{chg:.0f}K — Zayıf istihdam"
+    else:           sig, note = "red",   f"NFP {chg:.0f}K — İstihdam daralıyor"
+    return EconIndicator("NFP","Non-Farm Payrolls",round(chg,0),0,d,sig,note,"K")
+
 
 def fetch_sp500_valuation() -> dict:
-    """
-    S&P 500 forward P/E ve tarihsel karşılaştırma.
-    Tarihsel ortalama: ~16-17x (1990-2024)
-    Mevcut değeri SPY + analist beklentilerinden tahmin et.
-    """
+    result = {}
+    cape = _fred_latest("CAPE", periods=2)
+    if cape:
+        _, v = cape[0]
+        if v >= 35:   sig, note = "red",   f"Shiller CAPE {v:.1f} — Aşırı değerli"
+        elif v >= 25: sig, note = "amber", f"Shiller CAPE {v:.1f} — Değerlemeler yüksek"
+        else:          sig, note = "green", f"Shiller CAPE {v:.1f} — Makul değerleme"
+        result["CAPE"] = EconIndicator("CAPE","Shiller CAPE",round(v,1),0,cape[0][0],sig,note)
+
     try:
-        import yfinance as yf
-        spy_info = yf.Ticker("SPY").info
-
-        # Forward P/E
-        fpe = float(spy_info.get("forwardPE") or 0)
-        pe  = float(spy_info.get("trailingPE") or 0)
-
-        if fpe <= 0:
-            return {}
-
-        # Tarihsel karşılaştırma
-        HIST_AVG_FPE = 16.5  # 1990-2024 ortalama
-        HIST_AVG_PE  = 18.0
-
-        fpe_premium = round((fpe - HIST_AVG_FPE) / HIST_AVG_FPE * 100, 1)
-
-        if fpe >= 22:
-            signal = "red"
-            note   = (f"S&P 500 Forward P/E: {fpe:.1f}x — tarihsel ortalamanın "
-                      f"%{fpe_premium:.0f} üzerinde. PAHALIYALILAMA bölgesi.")
-        elif fpe >= 18:
-            signal = "amber"
-            note   = (f"S&P 500 Forward P/E: {fpe:.1f}x — biraz pahalı "
-                      f"(tarihsel ort. {HIST_AVG_FPE}x), yeni alımda temkinli ol.")
-        elif fpe >= 14:
-            signal = "green"
-            note   = (f"S&P 500 Forward P/E: {fpe:.1f}x — adil değerleme "
-                      f"(tarihsel ort. {HIST_AVG_FPE}x).")
-        else:
-            signal = "green"
-            note   = (f"S&P 500 Forward P/E: {fpe:.1f}x — UCUZ bölge, "
-                      f"tarihsel ortalamanın %{abs(fpe_premium):.0f} altında.")
-
-        return {
-            "forward_pe":   fpe,
-            "trailing_pe":  pe,
-            "hist_avg":     HIST_AVG_FPE,
-            "premium_pct":  fpe_premium,
-            "signal":       signal,
-            "note":         note,
-        }
+        fpe = float(yf.Ticker("SPY").info.get("forwardPE") or 0)
+        if fpe > 0:
+            if fpe >= 22:   sig, note = "red",   f"S&P FPE {fpe:.1f}x — Pahalı"
+            elif fpe >= 18: sig, note = "amber", f"S&P FPE {fpe:.1f}x — Biraz pahalı"
+            else:            sig, note = "green", f"S&P FPE {fpe:.1f}x — Makul"
+            result["SP500_FPE"] = EconIndicator("SP500_FPE","S&P 500 Forward P/E",
+                                                round(fpe,1),16.5,"",sig,note)
     except Exception as e:
-        logger.debug("S&P valuation failed: %s", e)
-        return {}
+        logger.debug("SPY FPE failed: %s", e)
 
+    return result
 
-# ─── Sektör Rotasyon Analizi ─────────────────────────────────────────────────
 
 SECTOR_ETFS = {
-    "XLK":  "Teknoloji",
-    "XLF":  "Finans",
-    "XLV":  "Sağlık",
-    "XLE":  "Enerji",
-    "XLI":  "Sanayi",
-    "XLY":  "Tüketim (Döngüsel)",
-    "XLP":  "Tüketim (Savunmacı)",
-    "XLU":  "Kamu Hizmetleri",
-    "XLB":  "Malzeme",
-    "XLRE": "Gayrimenkul",
+    "XLK":"Teknoloji","XLF":"Finans","XLE":"Enerji","XLV":"Sağlık",
+    "XLI":"Sanayi","XLY":"Tüketim Döngüsel","XLP":"Tüketim Savunmacı","XLU":"Kamu Hizmetleri",
 }
 
 
-def fetch_sector_rotation(lookback_days: int = 20) -> dict:
+def fetch_sector_rotation() -> dict:
+    result = {}
+    try:
+        spy_h = yf.Ticker("SPY").history(period="1mo")["Close"]
+        spy_1m = (spy_h.iloc[-1]/spy_h.iloc[0]-1)*100 if len(spy_h)>1 else 0
+        spy_1w = (spy_h.iloc[-1]/spy_h.iloc[-5]-1)*100 if len(spy_h)>5 else 0
+    except Exception:
+        spy_1m = spy_1w = 0
+
+    sectors = []
+    for etf, label in SECTOR_ETFS.items():
+        try:
+            h = yf.Ticker(etf).history(period="1mo")["Close"]
+            if len(h) < 2:
+                continue
+            r1m = (h.iloc[-1]/h.iloc[0]-1)*100
+            r1w = (h.iloc[-1]/h.iloc[-5]-1)*100 if len(h)>5 else 0
+            sectors.append({"etf":etf,"label":label,
+                            "ret_1m":round(r1m,2),"ret_1w":round(r1w,2),
+                            "rel_1m":round(r1m-spy_1m,2),"rel_1w":round(r1w-spy_1w,2)})
+            time.sleep(0.1)
+        except Exception:
+            pass
+
+    if sectors:
+        sectors.sort(key=lambda x: x["rel_1m"], reverse=True)
+        leader = sectors[0]["label"]
+        if leader in ["Finans","Sanayi","Tüketim Döngüsel"]:
+            note = "Para döngüsel sektörlere akıyor — büyüme beklentisi var"
+        elif leader in ["Kamu Hizmetleri","Tüketim Savunmacı","Sağlık"]:
+            note = "Para savunmacı sektörlere akıyor — risk-off modu"
+        else:
+            note = f"{leader} öne çıkıyor"
+
+        result = {"sectors":sectors,"spy_1m":round(spy_1m,2),
+                  "spy_1w":round(spy_1w,2),"rotation_note":note,
+                  "leader":sectors[0],"laggard":sectors[-1]}
+
+    return result
+
+
+def fetch_put_call_ratio() -> dict:
     """
-    8 sektör ETF'inin göreceli performansını ölç.
-    Hangi sektöre para akıyor, hangisinden çıkılıyor?
-    Returns: {ticker: {name, perf_pct, signal, rank}}
+    Gerçek Put/Call oranı proxy: SPXU/UPRO oranı (bear/bull ETF)
+    veya VIX/VIX3M term structure ile hesaplanır.
+    PCR > 1.0 = aşırı korku = contrarian alım sinyali
+    PCR < 0.7 = aşırı açgözlülük = dikkat
     """
     try:
         import yfinance as yf
-        from datetime import datetime, timedelta
+        # SPXU (3x bear S&P) vs UPRO (3x bull S&P) hacim oranı
+        spxu_fi = yf.Ticker("SPXU").fast_info
+        upro_fi = yf.Ticker("UPRO").fast_info
+        spxu_vol = float(getattr(spxu_fi, "three_month_average_volume", 0) or 0)
+        upro_vol = float(getattr(upro_fi, "three_month_average_volume", 0) or 0)
 
-        end   = datetime.now()
-        start = end - timedelta(days=lookback_days + 5)
+        if spxu_vol > 0 and upro_vol > 0:
+            pcr_proxy = round(spxu_vol / upro_vol, 2)
+            if pcr_proxy >= 0.8:
+                sig  = "green"
+                note = f"Put/Call Proxy: {pcr_proxy:.2f} — Bear ETF talebi yüksek, contrarian ALIM sinyali"
+            elif pcr_proxy >= 0.5:
+                sig  = "neutral"
+                note = f"Put/Call Proxy: {pcr_proxy:.2f} — Dengeli, belirgin sinyal yok"
+            else:
+                sig  = "amber"
+                note = f"Put/Call Proxy: {pcr_proxy:.2f} — Bull ETF hakimiyeti, aşırı iyimserlik riski"
+            return {"value": pcr_proxy, "signal": sig, "note": note}
+    except Exception as e:
+        logger.debug("Put/Call ratio failed: %s", e)
+    return {}
 
-        results = {}
-        perfs   = {}
 
-        for etf, name in SECTOR_ETFS.items():
-            try:
-                hist = yf.Ticker(etf).history(start=start, end=end, interval="1d")["Close"]
-                if len(hist) < 5:
-                    continue
-                perf = (hist.iloc[-1] - hist.iloc[0]) / hist.iloc[0] * 100
-                perfs[etf] = round(perf, 2)
-                time.sleep(0.05)
-            except Exception:
-                pass
+def fetch_vix_term_structure() -> dict:
+    """
+    VIX term structure: VIX (kısa vade) vs VIX3M (3 ay) vs VIX6M (6 ay).
+    Contango (VIX < VIX3M) = normal, piyasa sakin
+    Backwardation (VIX > VIX3M) = kısa vadeli panik, piyasa stres altında
+    """
+    try:
+        import yfinance as yf
+        vix   = float(yf.Ticker("^VIX").fast_info.last_price or 0)
+        vix3m = float(yf.Ticker("^VIX3M").fast_info.last_price or 0)
 
-        if not perfs:
+        if vix <= 0 or vix3m <= 0:
             return {}
 
-        # Performansa göre sırala
-        sorted_etfs = sorted(perfs.items(), key=lambda x: x[1], reverse=True)
-        total = len(sorted_etfs)
+        ratio    = round(vix / vix3m, 3)
+        spread   = round(vix3m - vix, 2)   # Pozitif = contango (normal)
 
-        for rank, (etf, perf) in enumerate(sorted_etfs, 1):
-            # Üst %33 = lider, alt %33 = geri kalan
-            if rank <= total // 3:
-                signal = "green"
-                trend  = "🔥 Lider"
-            elif rank <= total * 2 // 3:
-                signal = "neutral"
-                trend  = "➡ Nötr"
-            else:
-                signal = "amber"
-                trend  = "❄ Zayıf"
+        if ratio >= 1.15:
+            sig  = "red"
+            note = (f"VIX Term Structure: {vix:.1f}/{vix3m:.1f} — "
+                   f"BACKWARDATION (ratio {ratio:.2f}). Kısa vadeli panik var, piyasa stres altında!")
+        elif ratio >= 1.05:
+            sig  = "amber"
+            note = (f"VIX Term Structure: {vix:.1f}/{vix3m:.1f} — "
+                   f"Düzleşme (ratio {ratio:.2f}). Artan kısa vade gerginliği.")
+        elif ratio <= 0.85:
+            sig  = "green"
+            note = (f"VIX Term Structure: {vix:.1f}/{vix3m:.1f} — "
+                   f"Derin contango (ratio {ratio:.2f}). Piyasa çok sakin, complacency riski.")
+        else:
+            sig  = "green"
+            note = (f"VIX Term Structure: {vix:.1f}/{vix3m:.1f} — "
+                   f"Normal contango (ratio {ratio:.2f}). Sağlıklı yapı.")
 
-            results[etf] = {
-                "name":     SECTOR_ETFS[etf],
-                "perf_pct": perf,
-                "rank":     rank,
-                "signal":   signal,
-                "trend":    trend,
-                "note":     f"{SECTOR_ETFS[etf]}: %{perf:+.1f} ({trend})",
-            }
-
-        # Rotasyon özeti
-        leaders  = [r["name"] for r in results.values() if r["signal"] == "green"]
-        laggards = [r["name"] for r in results.values() if r["signal"] == "amber"]
-
-        results["_summary"] = {
-            "leaders":  leaders,
-            "laggards": laggards,
-            "note":     (
-                f"Lider sektörler: {', '.join(leaders[:3])} | "
-                f"Zayıf sektörler: {', '.join(laggards[:3])}"
-            ),
+        return {
+            "vix":    vix,
+            "vix3m":  vix3m,
+            "ratio":  ratio,
+            "spread": spread,
+            "signal": sig,
+            "note":   note,
         }
-
-        return results
-
     except Exception as e:
-        logger.debug("Sector rotation failed: %s", e)
-        return {}
+        logger.debug("VIX term structure failed: %s", e)
+    return {}
 
 
-# ─── Ana Fonksiyon ───────────────────────────────────────────────────────────
+def fetch_all_economic_data() -> dict:
+    """Tüm Katman 2 ekonomik veriyi topla."""
+    logger.info("Ekonomik veri toplanıyor...")
+    result = {"macro_econ":{},"valuation":{},"sectors":{},"market_structure":{},"timestamp":datetime.now(timezone.utc).isoformat()}
 
-def fetch_layer2_data() -> dict:
-    """
-    Tüm Katman 2 verilerini tek seferde topla.
-    """
-    return {
-        "economic":        fetch_all_economic_data(),
-        "sp500_valuation": fetch_sp500_valuation(),
-        "sector_rotation": fetch_sector_rotation(lookback_days=20),
-    }
+    for fn, key in [(fetch_ism_manufacturing,"ISM_MFG"),(fetch_ism_services,"ISM_SVC"),
+                    (fetch_pce,"CORE_PCE"),(fetch_gdp_growth,"GDP"),(fetch_nfp,"NFP")]:
+        r = fn()
+        if r: result["macro_econ"][key] = r
+
+    result["macro_econ"].update(fetch_cpi())
+    result["valuation"].update(fetch_sp500_valuation())
+    result["sectors"] = fetch_sector_rotation()
+
+    # Piyasa yapısı — Put/Call + VIX term structure
+    pcr = fetch_put_call_ratio()
+    vts = fetch_vix_term_structure()
+    if pcr: result["market_structure"]["put_call"] = pcr
+    if vts: result["market_structure"]["vix_term"]  = vts
+
+    logger.info("Ekonomik veri: %d gösterge", len(result["macro_econ"]))
+    return result
+
+
+def build_economic_context(econ_data: dict) -> str:
+    """Ekonomik veriyi Claude için formatlı string döndür."""
+    lines = []
+
+    macro = econ_data.get("macro_econ", {})
+    if macro:
+        lines.append("=== EKONOMİK GÖSTERGELER (FRED) ===")
+        for ind in macro.values():
+            if hasattr(ind, "note"):
+                u = f" {ind.unit}" if ind.unit else ""
+                lines.append(f"  {ind.label}: {ind.value}{u} — {ind.note}")
+
+    val = econ_data.get("valuation", {})
+    if val:
+        lines.append("\n=== DEĞERLEME ===")
+        for ind in val.values():
+            if hasattr(ind, "note"):
+                lines.append(f"  {ind.label}: {ind.value} — {ind.note}")
+
+    sectors = econ_data.get("sectors", {})
+    if sectors.get("sectors"):
+        lines.append("\n=== SEKTÖR ROTASYONU (1 Aylık) ===")
+        lines.append(f"  {sectors.get('rotation_note','')}")
+        for s in sectors["sectors"]:
+            t = "↑" if s["rel_1m"] > 0 else "↓"
+            lines.append(f"  {t} {s['label']}: {s['ret_1m']:+.1f}% (SPY'a göre {s['rel_1m']:+.1f}%)")
+
+    ms = econ_data.get("market_structure", {})
+    if ms:
+        lines.append("\n=== PİYASA YAPISI ===")
+        pcr = ms.get("put_call", {})
+        if pcr.get("note"):
+            lines.append(f"  {pcr['note']}")
+        vts = ms.get("vix_term", {})
+        if vts.get("note"):
+            lines.append(f"  {vts['note']}")
+
+    return "\n".join(lines)
