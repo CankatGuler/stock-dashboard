@@ -31,6 +31,14 @@ TEMEL KURALLAR:
 3. Çelişkileri tespit et ve çöz. Portföy analizi "azalt" ama analist "al" diyorsa
    bu çelişkiyi açıkla ve zaman ufkuna göre çöz.
 
+4. risk_senaryosu_aksiyonlari ZORUNLUDUR. Bu alan ASLA boş bırakılmaz.
+   Her strateji raporu için mutlaka şunları doldur:
+   - tetikleyici: "VIX 32 üzerine çıkarsa VEYA S&P %8 düşerse" gibi somut seviye
+   - acil_aksiyonlar: ilk 24-48 saatte yapılacaklar (en az 2 madde)
+   - savunma_aksiyonlar: nakit artırma, stop loss seviyeleri (en az 2 madde)
+   - firsat_aksiyonlar: hangi hisse hangi seviyede alınır (en az 2 madde)
+   - recovery_isaretleri: toparlanma ne zaman başlar, nasıl anlaşılır (en az 2 madde)
+
 4. Portföy önce gelir. Yeni alımdan önce mevcut pozisyonların sağlığını değerlendir.
 
 5. Koşullu senaryolar somut olmalı. "AVGO $200'a gelirse" değil,
@@ -42,7 +50,16 @@ TEMEL KURALLAR:
 7. FOMC ve earnings tarihlerine dikkat et. Yaklaşan toplantı/açıklama varsa
    o hisse için "earnings sonrasına bekle" veya "FOMC öncesi pozisyon küçült" de.
 
-8. Yanıtını kesinlikle JSON formatında ver, başka hiçbir şey yazma.
+8. risk_senaryosu_aksiyonlari ZORUNLU — bu alanı MUTLAKA doldur, boş bırakma.
+   "Kötü senaryo gerçekleşirse ne yapmalısın?" sorusunu somut adımlarla yanıtla.
+   tetikleyici: "VIX 35 üzerine çıkarsa VEYA Fed hawkish sürpriz yaparsa VEYA portföy
+   %15 geriye giderse" gibi ölçülebilir koşullar belirt.
+   acil_aksiyonlar: ilk 48 saatte kapatılacak pozisyonlar (somut ticker + fiyat).
+   savunma_aksiyonlar: nakit oranını yükselt, stop-loss'ları sıkılaştır.
+   firsat_aksiyonlar: hangi fiyat seviyelerinde hangi hisseye alım yapılabilir.
+   recovery_isaretleri: toparlanma başladığını gösteren somut göstergeler.
+
+9. Yanıtını kesinlikle JSON formatında ver, başka hiçbir şey yazma.
    KRİTİK: Her string alanı maksimum 150 karakter olsun. Uzun açıklama yazma.
    Aksiyonlar için "neden" alanı tek kısa cümle. Senaryolar 2-3 cümle.
    JSON mutlaka tam ve geçerli olmalı — yarıda kesilmiş JSON kabul edilmez.

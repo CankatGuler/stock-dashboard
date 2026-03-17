@@ -255,7 +255,7 @@ def get_fundamental_score(ticker: str) -> tuple[float, dict]:
 
     except Exception as e:
         logger.warning("Fundamental score failed %s: %s", ticker, e)
-        return 40.0, {"ticker": ticker, "price": 0, "market_cap": 0}
+        return 35.0, {"ticker": ticker, "price": 0, "market_cap": 0}
 
 
 # ─── Katman 2: Temel Çarpan ───────────────────────────────────────────────────
@@ -770,74 +770,162 @@ def analyse_radar_opportunity(ticker: str, articles: list[dict], macro_desc: str
 
 def run_radar(
     max_age_hours: int = 24,
-    min_radar_score: float = 55.0,
+    min_radar_score: float = 50.0,
     max_tickers: int = 20,
     progress_callback=None,
 ) -> list[dict]:
     """
-    Fırsat Radarı v3 — 6 katmanlı puanlama.
+    Fırsat Radarı v4 — Universe-First Mimari.
 
-    Formül:
-      Radar = (Temel×0.25 + Haber×0.30 + Sürpriz×0.20 + Momentum×0.15)
-              × Makro_Çarpanı(6 faktör) + Insider_Bonus + Hafıza_Trend
+    Eski yaklaşım habere bağımlıydı: haber yoksa sonuç yok.
+    Yeni yaklaşım evreni tarar: haber amplify eder ama zorunlu değil.
+
+    Adımlar:
+      1. Watchlist + KNOWN_TICKERS evrenini birleştir
+      2. Her hisseyi Temel + Momentum ile skorla (habersiz çalışır)
+      3. Haber varsa Claude ile Haber Etkisi + Sürpriz amplify et
+      4. Haber yoksa Temel + Momentum + Makro yeterli
+      5. En yüksek skorları döndür
+
+    Formül (haberli):
+      Radar = (Temel×0.40 + Haber×0.25 + Sürpriz×0.15 + Momentum×0.20)
+              × Makro_Çarpanı + Insider_Bonus + Hafıza_Trend
+
+    Formül (habersiz):
+      Radar = (Temel×0.55 + Momentum×0.45) × Makro_Çarpanı + Insider_Bonus + Hafıza_Trend
     """
-    # ── Makro çarpanı — bir kez hesapla (6 faktör) ───────────────────────
+    # ── 1. Makro çarpanı ─────────────────────────────────────────────────
     macro_multiplier, macro_desc, macro_detail = get_macro_multiplier()
     logger.info("Makro çarpan: %.2f (skor: %.0f)", macro_multiplier,
                 macro_detail.get("macro_score", 0))
 
-    # ── Haberleri çek ve filtrele ─────────────────────────────────────────
-    all_articles    = fetch_radar_news(max_age_hours=max_age_hours)
-    signal_articles = filter_signal_articles(all_articles)
-    if not signal_articles:
-        signal_articles = all_articles[:50]
+    # Makro ortam kötüyse (çarpan < 1.0) min skoru otomatik düşür
+    # Çünkü kötü ortamda tüm hisselerin skoru aşağı çekilir
+    if macro_multiplier < 0.9:
+        effective_min = min_radar_score * macro_multiplier
+        logger.info("Makro düzeltme: min_radar_score %s → %.1f", min_radar_score, effective_min)
+        min_radar_score = effective_min
 
-    # ── Ticker tespiti ────────────────────────────────────────────────────
-    ticker_map = extract_tickers_from_articles(signal_articles)
-    if not ticker_map:
-        logger.warning("Radar: No tickers found")
-        return []
+    # ── 2. Ticker evreni oluştur ─────────────────────────────────────────
+    # Watchlist'i yükle ve KNOWN_TICKERS ile birleştir
+    universe = set(KNOWN_TICKERS)
+    try:
+        from breakout_scanner import load_watchlist
+        universe.update(load_watchlist())
+    except Exception:
+        pass
 
-    sorted_tickers = sorted(ticker_map.items(), key=lambda x: len(x[1]), reverse=True)[:max_tickers]
-    results = []
-    total   = len(sorted_tickers)
+    # ── 3. Haberleri çek — zorunlu değil, amplifier ───────────────────────
+    news_ticker_map = {}
+    try:
+        all_articles    = fetch_radar_news(max_age_hours=max_age_hours)
+        signal_articles = filter_signal_articles(all_articles)
+        if not signal_articles:
+            signal_articles = all_articles[:50]
+        news_ticker_map = extract_tickers_from_articles(signal_articles)
+        logger.info("Radar: %d haber, %d ticker haberde bulundu",
+                    len(all_articles), len(news_ticker_map))
+    except Exception as e:
+        logger.warning("Radar: Haber çekme başarısız, sadece fundamental: %s", e)
 
-    for idx, (ticker, articles) in enumerate(sorted_tickers):
+    # ── 4. Her ticker'ı önce fundamental ile hızlıca filtrele ────────────
+    # Önce temel skoru düşük olanları at, API çağrısı sayısını azalt
+    pre_scores = []
+    total_universe = list(universe)[:80]  # Max 80 ticker tara
+
+    for idx, ticker in enumerate(total_universe):
         if progress_callback:
-            progress_callback(ticker, idx + 1, total)
+            progress_callback(ticker, idx + 1, len(total_universe))
+        try:
+            fund_score, meta = get_fundamental_score(ticker)
+            momentum_score   = get_momentum_score(ticker, meta)
+            # Hızlı ön eleme: temel skor 25'in altındaysa atla (fallback 40 ile çakışmasın)
+            if fund_score < 25:
+                continue
+            articles = news_ticker_map.get(ticker, [])
+            pre_scores.append((ticker, fund_score, momentum_score, meta, articles))
+        except Exception as e:
+            logger.debug("Pre-score failed %s: %s", ticker, e)
 
-        # Katman 1: Zengin Temel Skor (9 faktör)
-        fundamental_score, meta = get_fundamental_score(ticker)
-        multiplier = get_base_multiplier(fundamental_score)
+    # Ön skora göre sırala, en iyi max_tickers×2 adayı al
+    pre_scores.sort(key=lambda x: x[1] * 0.6 + x[2] * 0.4, reverse=True)
+    candidates = pre_scores[:max_tickers * 2]
+    logger.info("Radar: %d aday belirlendi (evren: %d)", len(candidates), len(total_universe))
 
-        # Katman 2: Haber Etkisi + Gerçek EPS Sürprizi (Claude)
-        eps_score, eps_desc = get_eps_surprise(ticker)
-        claude_result = analyse_radar_opportunity(ticker, articles, macro_desc)
-        if not claude_result:
-            continue
+    results = []
 
-        haber_etkisi    = claude_result["haber_etkisi"]
-        # Sürpriz = Claude tahmini × 0.6 + EPS/analist verisi × 0.4
-        surpriz_faktoru = round(
-            claude_result["surpriz_faktoru"] * 0.6 + eps_score * 0.4, 1
-        )
+    for ticker, fundamental_score, momentum_score, meta, articles in candidates:
+        # ── Haber Etkisi — haber varsa Claude, yoksa skor tahmini ────────
+        haber_etkisi    = 0
+        surpriz_faktoru = 0
+        neden           = ""
+        tavsiye         = "İzle"
+        katalizor       = ""
+        claude_used     = False
 
-        # Katman 3: Momentum (52H, hacim, günlük değişim)
-        momentum_score = get_momentum_score(ticker, meta)
+        if articles:
+            # Haber var: Claude ile analiz
+            eps_score, eps_desc = get_eps_surprise(ticker)
+            claude_result = analyse_radar_opportunity(ticker, articles, macro_desc)
+            if claude_result:
+                haber_etkisi    = claude_result["haber_etkisi"]
+                surpriz_faktoru = round(
+                    claude_result["surpriz_faktoru"] * 0.6 + eps_score * 0.4, 1
+                )
+                neden    = claude_result.get("neden", "")
+                tavsiye  = claude_result.get("tavsiye", "İzle")
+                katalizor= claude_result.get("katalizor", "")
+                claude_used = True
+                eps_desc_out = eps_desc
+            else:
+                eps_score, eps_desc_out = get_eps_surprise(ticker)
+                surpriz_faktoru = eps_score * 0.4
+        else:
+            # Haber yok: EPS sürprizi + fundamental'dan tahmini haber etkisi
+            eps_score, eps_desc_out = get_eps_surprise(ticker)
+            # Fundamental skoru yüksekse habersiz de "potansiyel" var
+            haber_etkisi    = min(60, fundamental_score * 0.7)
+            surpriz_faktoru = eps_score * 0.4
+            # Neden metni fundamental'dan üret
+            upside = 0
+            price  = meta.get("price", 0)
+            tgt    = meta.get("tgt", 0)
+            if tgt > 0 and price > 0:
+                upside = (tgt - price) / price * 100
+            rec    = meta.get("rec", "")
+            neden  = (
+                f"Temel analiz güçlü (skor {fundamental_score:.0f}). "
+                + (f"Analist hedefi %{upside:.0f} yukarıda. " if upside > 10 else "")
+                + (f"Konsensüs: {rec}." if rec else "")
+            )
+            tavsiye = (
+                "İncele" if fundamental_score >= 65
+                else "Takibe Al" if fundamental_score >= 50
+                else "Önemsiz"
+            )
+            eps_desc_out = eps_desc
 
-        # Katman 4: Insider Bonus
-        insider_bonus = get_insider_bonus(ticker)
+        # ── Final Formül — haberli vs habersiz ───────────────────────────
+        if claude_used:
+            # Haberli: haber bilgisi daha güvenilir
+            base_score = (
+                fundamental_score * 0.40 +
+                haber_etkisi       * 0.25 +
+                surpriz_faktoru    * 0.15 +
+                momentum_score     * 0.20
+            )
+        else:
+            # Habersiz: fundamental ve momentum ağırlığı artar
+            base_score = (
+                fundamental_score * 0.55 +
+                momentum_score     * 0.45
+            )
+            # Habersiz maksimum skor kısıtı: 80
+            base_score = min(base_score, 80)
 
-        # Katman 5: Hafıza Trendi
-        memory_bonus, memory_desc = get_memory_context(ticker)
+        insider_bonus              = get_insider_bonus(ticker)
+        memory_bonus, memory_desc  = get_memory_context(ticker)
 
-        # ── Final Formül ──────────────────────────────────────────────────
-        base_score = (
-            fundamental_score * 0.25 +
-            haber_etkisi       * 0.30 +
-            surpriz_faktoru    * 0.20 +
-            momentum_score     * 0.15
-        )
         radar_score = base_score * macro_multiplier + insider_bonus + memory_bonus
         radar_score = round(min(100, max(0, radar_score)), 1)
 
@@ -858,8 +946,8 @@ def run_radar(
             # Haber & Sürpriz
             "haber_etkisi":      haber_etkisi,
             "surpriz_faktoru":   surpriz_faktoru,
-            "eps_score":         eps_score,
-            "eps_desc":          eps_desc,
+            "eps_score":         eps_score if 'eps_score' in dir() else 50,
+            "eps_desc":          eps_desc_out,
             # Makro
             "macro_multiplier":  macro_multiplier,
             "macro_desc":        macro_desc,
@@ -870,10 +958,11 @@ def run_radar(
             "memory_desc":       memory_desc,
             # Pozisyon
             "position_rec":      position_rec,
-            # Claude
-            "neden":             claude_result["neden"],
-            "tavsiye":           claude_result["tavsiye"],
-            "katalizor":         claude_result.get("katalizor", ""),
+            # Analiz
+            "neden":             neden,
+            "tavsiye":           tavsiye,
+            "katalizor":         katalizor,
+            "haber_var":         claude_used,
             # Meta
             "articles":          articles[:5],
             "price":             meta.get("price", 0),
