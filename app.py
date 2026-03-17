@@ -39,6 +39,7 @@ from analysis_memory import (
     save_macro_snapshot, get_macro_history, get_macro_snapshot_by_date,
     save_portfolio_analysis, get_portfolio_analysis_history,
     find_comparison_record, build_comparison_context,
+    load_user_profile, save_user_profile,
 )
 from radar_engine import run_radar
 
@@ -962,6 +963,32 @@ with tab_portfolio:
                 st.success(f"✅ {len(positions_new)} pozisyon yüklendi!")
                 st.rerun()
 
+    # ── Sektör Güncelleme Butonu ────────────────────────────────────────────
+    _sec_col1, _sec_col2 = st.columns([1, 3])
+    with _sec_col1:
+        if st.button("🔄 Tüm Sektörleri Güncelle", key="btn_update_sectors",
+                     help="Portföydeki 'Diğer' sektörlü hisseleri yfinance'ten otomatik günceller",
+                     use_container_width=True):
+            with st.spinner("Sektörler güncelleniyor..."):
+                import yfinance as _yf_sec
+                _updated = 0
+                _port_sec = load_portfolio()
+                for _pos in _port_sec:
+                    if _pos.get("sector", "Diğer") == "Diğer":
+                        try:
+                            _si = _yf_sec.Ticker(_pos["ticker"]).info
+                            _new_sec = _si.get("sector") or _si.get("industry") or "Diğer"
+                            if _new_sec != "Diğer":
+                                update_position(_pos["ticker"], sector=_new_sec)
+                                _updated += 1
+                        except Exception:
+                            pass
+                if _updated > 0:
+                    st.success(f"✅ {_updated} hissenin sektörü güncellendi!")
+                    st.rerun()
+                else:
+                    st.info("Tüm sektörler zaten güncel.")
+
     # ── Add Single Position Form ────────────────────────────────────────────
     with st.expander("➕  Tek Pozisyon Ekle / Yeni Alış", expanded=False):
         col_f1, col_f2, col_f3, col_f4 = st.columns([1.2, 1, 1.2, 1.5])
@@ -1000,7 +1027,7 @@ with tab_portfolio:
                 unsafe_allow_html=True,
             )
 
-        col_btn1, col_btn2 = st.columns([1, 3])
+        col_btn1, _ = st.columns([1, 3])
         with col_btn1:
             if st.button("💾  Kaydet", key="btn_add_pos"):
                 if p_ticker and p_shares > 0 and p_cost > 0:
@@ -1018,24 +1045,6 @@ with tab_portfolio:
                         pass
                     add_position(p_ticker, p_shares, p_cost, _auto_sector, p_notes)
                     st.success(f"✅ {p_ticker} portföye eklendi! Sektör: {_auto_sector}")
-                    st.rerun()
-        with col_btn2:
-            if st.button("🔄 Tüm Sektörleri Güncelle", key="btn_update_sectors", help="Portföydeki 'Diğer' sektörlü hisseleri yfinance'ten otomatik günceller"):
-                with st.spinner("Sektörler güncelleniyor..."):
-                    import yfinance as _yf_sec
-                    _updated = 0
-                    _port_sec = load_portfolio()
-                    for _pos in _port_sec:
-                        if _pos.get("sector", "Diğer") == "Diğer":
-                            try:
-                                _si = _yf_sec.Ticker(_pos["ticker"]).info
-                                _new_sec = _si.get("sector") or _si.get("industry") or "Diğer"
-                                if _new_sec != "Diğer":
-                                    update_position(_pos["ticker"], sector=_new_sec)
-                                    _updated += 1
-                            except Exception:
-                                pass
-                    st.success(f"✅ {_updated} hissenin sektörü güncellendi!")
                     st.rerun()
         if not (p_ticker and p_shares > 0 and p_cost > 0):
             st.error("Ticker, hisse adedi ve maliyet zorunludur.")
@@ -4284,7 +4293,6 @@ with tab_strategy:
 
     # ── Katman 2: Profil Ayarları ─────────────────────────────────────────
     # Profili GitHub'dan yükle (ilk açılışta veya cache yoksa)
-    from analysis_memory import load_user_profile, save_user_profile
     if st.session_state.get("user_profile_loaded") is None:
         _saved_profile = load_user_profile()
         st.session_state["user_profile_loaded"] = _saved_profile
