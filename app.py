@@ -2457,7 +2457,7 @@ with tab_radar:
         with r1:
             radar_hours = st.slider("🕐 Haber Penceresi (Saat)", 6, 48, 24)
         with r2:
-            radar_min_score = st.slider("🎯 Min Radar Puanı", 40, 90, 60)
+            radar_min_score = st.slider("🎯 Min Radar Puanı", 40, 90, 50)
         with r3:
             radar_max_tickers = st.slider("🔢 Maks Ticker", 5, 30, 15)
 
@@ -2541,7 +2541,14 @@ with tab_radar:
         radar_status.empty()
 
         if not radar_results:
-            st.info("📭 Belirlenen kriterlere uyan fırsat bulunamadı. Eşiği düşürmeyi veya haber penceresini genişletmeyi deneyin.")
+            st.warning(
+                f"📭 Belirlenen kriterlere uyan fırsat bulunamadı.\n\n"
+                f"**Olası nedenler:**\n"
+                f"- Haber kaynakları şu an yeterli sinyal üretmiyor (piyasa sakin olabilir)\n"
+                f"- Min puan eşiği ({radar_min_score}) çok yüksek — sola kaydır\n"
+                f"- Haber penceresi ({radar_hours} saat) çok dar — genişlet\n\n"
+                f"Slider'ı 45'e indirip tekrar dene."
+            )
         else:
             st.success(f"✅ {len(radar_results)} fırsat tespit edildi!")
             st.markdown("---")
