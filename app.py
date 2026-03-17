@@ -2576,6 +2576,9 @@ with tab_radar:
                     unsafe_allow_html=True,
                 )
 
+            # Portföydeki ticker'ları al — radar'da özel etiket için
+            _radar_port_tickers = {p["ticker"] for p in load_portfolio()}
+
             # ── Sonuç Kartları ───────────────────────────────────────────────
             for res in radar_results:
                 ticker        = res["ticker"]
@@ -2594,6 +2597,14 @@ with tab_radar:
                 insider_bonus = res.get("insider_bonus", 0)
                 memory_bonus  = res.get("memory_bonus", 0)
                 macro_mult    = res.get("macro_multiplier", 1.0)
+
+                # Portföyde var mı? Varsa aksiyonu "Ağırlık Artır" yap
+                _in_portfolio = ticker in _radar_port_tickers
+                if _in_portfolio:
+                    tavsiye = "Ağırlık Artır"
+                    if pos_rec:
+                        pos_rec = {**pos_rec, "action": "Ağırlık Artır",
+                                   "rationale": pos_rec.get("rationale", "") + " | Portföyde mevcut"}
 
                 # Sentiment skoru
                 try:
@@ -2633,7 +2644,8 @@ with tab_radar:
                 }.get(_action, "#5a6a7a")
 
                 with st.expander(
-                    f"🎯 {ticker}  —  Radar: {radar_score}  |  "
+                    f"{'💼 ' if _in_portfolio else '🎯 '}{ticker}"
+                    f"{'  ✅ Portföyde' if _in_portfolio else ''}  —  Radar: {radar_score}  |  "
                     f"{_action}  |  {haber_sayisi} haber  |  "
                     f"{'${:,.2f}'.format(price) if price else 'N/A'}",
                     expanded=(radar_score >= 75),
