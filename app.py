@@ -2790,11 +2790,12 @@ with tab_radar:
             # CSV indir + Telegram gönder
             col_dl, col_tg = st.columns([2, 1])
             with col_dl:
+                from datetime import datetime as _dt_radar
                 csv_radar = df_radar.to_csv(index=False).encode("utf-8")
                 st.download_button(
                     "⬇️ Radar Sonuçlarını İndir (CSV)",
                     data=csv_radar,
-                    file_name=f"radar_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                    file_name=f"radar_{_dt_radar.now().strftime('%Y%m%d_%H%M')}.csv",
                     mime="text/csv",
                     key="dl_radar",
                 )
@@ -4650,14 +4651,31 @@ with tab_strategy:
                             unsafe_allow_html=True,
                         )
 
-                # Aksiyonlar
+                # Ana Aksiyonlar
                 for _act in _vade.get("aksiyonlar", []):
                     st.markdown(
                         f'<div style="font-size:0.75rem;padding:3px 0;'
-                        f'border-bottom:0.5px solid var(--color-border-tertiary);">'
-                        f'• {_act}</div>',
+                        f'border-bottom:0.5px solid var(--color-border-tertiary);">',
                         unsafe_allow_html=True,
                     )
+                    st.markdown(f'• {_act}', unsafe_allow_html=False)
+
+                # Risk Senaryosu Aksiyonları
+                _risk_acts = _vade.get("risk_aksiyonlar", [])
+                if _risk_acts:
+                    st.markdown(
+                        '<div style="font-size:0.65rem;color:#e74c3c;font-weight:600;'
+                        'text-transform:uppercase;letter-spacing:0.06em;'
+                        'margin:10px 0 5px;padding-top:8px;'
+                        'border-top:1px dashed #e74c3c44;">🚨 Risk Senaryosu Gerçekleşirse</div>',
+                        unsafe_allow_html=True,
+                    )
+                    for _ra in _risk_acts:
+                        st.markdown(
+                            f'<div style="font-size:0.73rem;padding:3px 0;color:#ffb3b3;'
+                            f'border-bottom:0.5px solid #e74c3c22;">• {_ra}</div>',
+                            unsafe_allow_html=True,
+                        )
 
         # Risk Uyarıları & Güç Sinyalleri
         _risk_col, _guc_col = st.columns(2)
@@ -4690,48 +4708,6 @@ with tab_strategy:
                         f'padding:2px 0;">• {_g}</div>',
                         unsafe_allow_html=True,
                     )
-
-        # Risk Senaryosu Aksiyonları
-        _rsa = _s.get("risk_senaryosu_aksiyonlari", {})
-        if _rsa:
-            st.markdown('<hr style="border-color:var(--color-border-tertiary);margin:1rem 0;">', unsafe_allow_html=True)
-            with st.expander("🚨 Risk Senaryosu Aksiyonları — Kötü Senaryo Gerçekleşirse Ne Yaparsın?", expanded=False):
-                _tetik = _rsa.get("tetikleyici", "")
-                if _tetik:
-                    st.markdown(
-                        f'<div style="background:#2d1010;border-left:4px solid #e74c3c;'
-                        f'border-radius:0 8px 8px 0;padding:0.7rem 1rem;margin-bottom:0.8rem;'
-                        f'font-size:0.78rem;color:#ffb3b3;">'
-                        f'<b>Tetikleyici:</b> {_tetik}</div>',
-                        unsafe_allow_html=True,
-                    )
-
-                _rsa_c1, _rsa_c2 = st.columns(2)
-                with _rsa_c1:
-                    _acil = _rsa.get("acil_aksiyonlar", [])
-                    if _acil:
-                        st.markdown('<div style="font-size:0.65rem;color:#e74c3c;font-weight:600;text-transform:uppercase;margin-bottom:6px;">🚨 Acil Aksiyonlar</div>', unsafe_allow_html=True)
-                        for _a in _acil:
-                            st.markdown(f'<div style="font-size:0.75rem;padding:3px 0;border-bottom:0.5px solid var(--color-border-tertiary);">• {_a}</div>', unsafe_allow_html=True)
-
-                    _savunma = _rsa.get("savunma_aksiyonlar", [])
-                    if _savunma:
-                        st.markdown('<div style="font-size:0.65rem;color:#ffb300;font-weight:600;text-transform:uppercase;margin:8px 0 6px;">🛡️ Savunma Aksiyonları</div>', unsafe_allow_html=True)
-                        for _a in _savunma:
-                            st.markdown(f'<div style="font-size:0.75rem;padding:3px 0;border-bottom:0.5px solid var(--color-border-tertiary);">• {_a}</div>', unsafe_allow_html=True)
-
-                with _rsa_c2:
-                    _firsat = _rsa.get("firsat_aksiyonlar", [])
-                    if _firsat:
-                        st.markdown('<div style="font-size:0.65rem;color:#00c48c;font-weight:600;text-transform:uppercase;margin-bottom:6px;">🎯 Düşüşte Alım Fırsatları</div>', unsafe_allow_html=True)
-                        for _a in _firsat:
-                            st.markdown(f'<div style="font-size:0.75rem;padding:3px 0;border-bottom:0.5px solid var(--color-border-tertiary);">• {_a}</div>', unsafe_allow_html=True)
-
-                    _recovery = _rsa.get("recovery_isaretleri", [])
-                    if _recovery:
-                        st.markdown('<div style="font-size:0.65rem;color:#4fc3f7;font-weight:600;text-transform:uppercase;margin:8px 0 6px;">📈 Toparlanma Sinyalleri</div>', unsafe_allow_html=True)
-                        for _a in _recovery:
-                            st.markdown(f'<div style="font-size:0.75rem;padding:3px 0;border-bottom:0.5px solid var(--color-border-tertiary);">• {_a}</div>', unsafe_allow_html=True)
 
         # Yapılacaklar Özeti
         _aks_sum = _s.get("aksiyonlar", {})
