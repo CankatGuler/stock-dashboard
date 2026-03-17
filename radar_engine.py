@@ -914,7 +914,7 @@ def run_radar(
                 else "Takibe Al" if fundamental_score >= 50
                 else "Önemsiz"
             )
-            eps_desc_out = eps_desc
+            # eps_desc_out already set by get_eps_surprise above
 
         # ── Final Formül — haberli vs habersiz ───────────────────────────
         if claude_used:
