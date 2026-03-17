@@ -446,6 +446,20 @@ def collect_all_strategy_data(
     # Short interest (sadece portföy hisseleri)
     data["short_interest"] = fetch_short_interest(tickers)
 
+    # Katman 2: Ekonomik veri ve sektör rotasyonu
+    try:
+        from economic_data import fetch_layer2_data
+        _layer2 = fetch_layer2_data()
+        data["economic"]        = _layer2.get("economic", {})
+        data["sp500_valuation"] = _layer2.get("sp500_valuation", {})
+        data["sector_rotation"] = _layer2.get("sector_rotation", {})
+        logger.info("Katman 2 verisi eklendi")
+    except Exception as e:
+        logger.warning("Layer 2 data failed: %s", e)
+        data["economic"]        = {}
+        data["sp500_valuation"] = {}
+        data["sector_rotation"] = {}
+
     logger.info("Strateji verisi tamamlandı.")
     return data
 
@@ -598,6 +612,37 @@ def build_strategy_prompt(data: dict) -> str:
             )
     else:
         lines.append("  Hafıza skoru bulunamadı — son taramayı çalıştır.")
+
+    # ── Katman 2: Ekonomik Göstergeler ───────────────────────────────────
+    econ = data.get("economic", {})
+    if econ:
+        lines.append("\n=== EKONOMİK GÖSTERGELER (FRED) ===")
+        for sid, ed in econ.items():
+            if isinstance(ed, dict) and ed.get("value") is not None:
+                lines.append(
+                    f"  {ed.get('name','')}: {ed.get('value','—')}{ed.get('unit','')} "
+                    f"({ed.get('date','')}) — {ed.get('note','')}"
+                )
+
+    # ── S&P 500 Değerleme ─────────────────────────────────────────────────
+    spv = data.get("sp500_valuation", {})
+    if spv.get("forward_pe"):
+        lines.append("\n=== S&P 500 DEĞERLEME ===")
+        lines.append(f"  {spv.get('note','')}")
+        lines.append(f"  Tarihsel Ort: {spv.get('hist_avg','16.5')}x | "
+                     f"Prim/İskonto: %{spv.get('premium_pct',0):.0f}")
+
+    # ── Sektör Rotasyonu ─────────────────────────────────────────────────
+    sr = data.get("sector_rotation", {})
+    sr_summary = sr.get("_summary", {})
+    if sr_summary:
+        lines.append("\n=== SEKTÖR ROTASYONU (Son 20 Gün) ===")
+        lines.append(f"  {sr_summary.get('note','')}")
+        lines.append("  Detay:")
+        for etf, d in sorted(sr.items(), key=lambda x: x[1].get("perf_pct", 0) if isinstance(x[1], dict) else 0, reverse=True):
+            if etf == "_summary" or not isinstance(d, dict):
+                continue
+            lines.append(f"    {d.get('name','')}: %{d.get('perf_pct',0):+.1f} {d.get('trend','')}")
 
     lines.append("\n=== GÖREV ===")
     lines.append(
