@@ -85,6 +85,14 @@ def fetch_macro_data() -> dict[str, MacroIndicator]:
 
     # Sinyalleri hesapla
     _compute_signals(results)
+
+    # Katman 1 yeni metrikleri ekle
+    try:
+        extended = fetch_extended_macro()
+        results.update(extended)
+    except Exception as e:
+        logger.warning("Extended macro failed: %s", e)
+
     return results
 
 
@@ -287,3 +295,234 @@ def build_claude_macro_context(data: dict[str, MacroIndicator], regime: dict) ->
 
     lines.append("=" * 40)
     return "\n".join(lines)
+
+
+# ─── Katman 1 Genişletilmiş Makro Metrikler ──────────────────────────────────
+
+def fetch_extended_macro() -> dict:
+    """
+    Yeni Katman 1 metrikleri:
+    - Credit Spread (HYG/LQD proxy)
+    - OVX (Petrol Volatilitesi — jeopolitik proxy)
+    - MOVE Index proxy (tahvil volatilitesi)
+    - USD/JPY (carry trade riski)
+    - Global M2 proxy (TLT + SPY + GLD birleşimi)
+    - CME FedWatch proxy (FFR futures'dan)
+
+    Returns: {key: MacroIndicator}
+    """
+    import yfinance as yf
+    results = {}
+
+    # ── Credit Spread: HYG (Junk) vs LQD (Investment Grade) ─────────────
+    # Fark genişlerse kredi riski artıyor demektir — erken uyarı sinyali
+    try:
+        hyg_price = float(yf.Ticker("HYG").fast_info.last_price or 0)
+        lqd_price = float(yf.Ticker("LQD").fast_info.last_price or 0)
+        hyg_prev  = float(getattr(yf.Ticker("HYG").fast_info, "previous_close", hyg_price) or hyg_price)
+        lqd_prev  = float(getattr(yf.Ticker("LQD").fast_info, "previous_close", lqd_price) or lqd_price)
+
+        # Göreceli performans: HYG/LQD oranı — düşüyorsa credit spread genişliyor
+        if lqd_price > 0 and lqd_prev > 0:
+            ratio     = hyg_price / lqd_price
+            ratio_prev= hyg_prev / lqd_prev
+            ratio_chg = (ratio - ratio_prev) / ratio_prev * 100 if ratio_prev > 0 else 0
+
+            if ratio_chg <= -0.3:
+                signal = "red"
+                note   = f"Credit spread GENİŞLİYOR — kredi riski artıyor, yatırımcılar güvenli limana kaçıyor"
+            elif ratio_chg >= 0.2:
+                signal = "green"
+                note   = f"Credit spread DARAL IYOR — risk iştahı artıyor, kredi ortamı iyileşiyor"
+            else:
+                signal = "neutral"
+                note   = f"Credit spread stabil — kredi piyasası sakin"
+
+            results["CREDIT_SPREAD"] = MacroIndicator(
+                key="CREDIT_SPREAD", label="Credit Spread (HYG/LQD)",
+                value=round(ratio, 4), prev=round(ratio_prev, 4),
+                change_pct=round(ratio_chg, 2),
+                unit="", group="rates",
+                signal=signal, note=note,
+            )
+        time.sleep(0.15)
+    except Exception as e:
+        logger.debug("Credit spread failed: %s", e)
+
+    # ── OVX: Petrol Volatilitesi — Jeopolitik Proxy ───────────────────────
+    # OVX yükselince jeopolitik risk artıyor — Orta Doğu gerilimi, arz şokları
+    try:
+        ovx = float(yf.Ticker("^OVX").fast_info.last_price or 0)
+        if ovx > 0:
+            if ovx >= 50:
+                signal = "red"
+                note   = f"OVX {ovx:.0f} — Yüksek petrol volatilitesi: jeopolitik risk veya arz şoku"
+            elif ovx >= 35:
+                signal = "amber"
+                note   = f"OVX {ovx:.0f} — Orta petrol volatilitesi: dikkat"
+            else:
+                signal = "green"
+                note   = f"OVX {ovx:.0f} — Sakin petrol piyasası: jeopolitik risk düşük"
+
+            results["OVX"] = MacroIndicator(
+                key="OVX", label="OVX — Petrol Volatilitesi",
+                value=round(ovx, 1), prev=0, change_pct=0,
+                unit="", group="fear",
+                signal=signal, note=note,
+            )
+        time.sleep(0.15)
+    except Exception as e:
+        logger.debug("OVX failed: %s", e)
+
+    # ── USD/JPY: Carry Trade Riski ────────────────────────────────────────
+    # Yen güçlenirse carry trade çözülür, küresel likidite ani çekilir
+    try:
+        usdjpy     = float(yf.Ticker("JPY=X").fast_info.last_price or 0)
+        usdjpy_prev= float(getattr(yf.Ticker("JPY=X").fast_info, "previous_close", usdjpy) or usdjpy)
+        jpy_chg    = (usdjpy - usdjpy_prev) / usdjpy_prev * 100 if usdjpy_prev > 0 else 0
+
+        if usdjpy > 0:
+            if jpy_chg <= -1.0:  # Dolar düşüyor = Yen güçleniyor
+                signal = "red"
+                note   = f"Yen GÜÇLENIYOR ({usdjpy:.1f}) — carry trade çözülüyor, küresel likidite riski!"
+            elif usdjpy >= 155:
+                signal = "amber"
+                note   = f"USD/JPY {usdjpy:.1f} — Aşırı zayıf yen, BOJ müdahale riski"
+            elif usdjpy <= 140:
+                signal = "amber"
+                note   = f"USD/JPY {usdjpy:.1f} — Güçlü yen, carry trade pozisyonları risk altında"
+            else:
+                signal = "neutral"
+                note   = f"USD/JPY {usdjpy:.1f} — Normal aralıkta"
+
+            results["USDJPY"] = MacroIndicator(
+                key="USDJPY", label="USD/JPY — Carry Trade",
+                value=round(usdjpy, 2), prev=round(usdjpy_prev, 2),
+                change_pct=round(jpy_chg, 2),
+                unit="", group="fx",
+                signal=signal, note=note,
+            )
+        time.sleep(0.15)
+    except Exception as e:
+        logger.debug("USD/JPY failed: %s", e)
+
+    # ── Global M2 Proxy: GLD + TLT + SPY momentum ────────────────────────
+    # M2 genişlemesi varlık fiyatlarını şişirir — 2020 örneği
+    # Proxy: TLT (tahvil), GLD (altın), SPY (hisse) 1 aylık değişim
+    try:
+        tlt_info = yf.Ticker("TLT").fast_info
+        gld_info = yf.Ticker("GLD").fast_info
+        spy_info = yf.Ticker("SPY").fast_info
+
+        tlt_chg = 0.0
+        gld_chg = 0.0
+        spy_chg = 0.0
+
+        for ticker, fi, chg_ref in [
+            ("TLT", tlt_info, None),
+            ("GLD", gld_info, None),
+            ("SPY", spy_info, None),
+        ]:
+            p    = float(getattr(fi, "last_price", 0) or 0)
+            prev = float(getattr(fi, "previous_close", p) or p)
+            if prev > 0:
+                c = (p - prev) / prev * 100
+                if ticker == "TLT": tlt_chg = c
+                elif ticker == "GLD": gld_chg = c
+                elif ticker == "SPY": spy_chg = c
+
+        # Likidite skoru: hepsi yükseliyorsa bol likidite
+        liquidity_score = (spy_chg + gld_chg - tlt_chg) / 3
+        if liquidity_score > 0.5:
+            signal = "green"
+            note   = f"Likidite GENİŞ — hisse+altın yükseliyor, tahvil baskılı: risk varlıkları destekleniyor"
+        elif liquidity_score < -0.5:
+            signal = "red"
+            note   = f"Likidite DARALIYOR — tahvil yükseliyor, hisse+altın düşüyor: risk-off modu"
+        else:
+            signal = "neutral"
+            note   = f"Likidite NÖTR — karışık sinyaller"
+
+        results["LIQUIDITY"] = MacroIndicator(
+            key="LIQUIDITY", label="Küresel Likidite Proxy",
+            value=round(liquidity_score, 2), prev=0, change_pct=0,
+            unit="", group="market",
+            signal=signal, note=note,
+        )
+        time.sleep(0.15)
+    except Exception as e:
+        logger.debug("Liquidity proxy failed: %s", e)
+
+    # ── CME FedWatch Proxy: Fed Funds Futures ────────────────────────────
+    # ZQ = Fed Funds Futures — piyasanın Fed beklentisi
+    # Gerçek CME API yerine, mevcut faiz ile FFR futures farkından tahmin
+    try:
+        # ZQH26 gibi yakın vadeli fed funds futures
+        # Alternatif: SOFR veya FF Futures ETF
+        irx  = float(yf.Ticker("^IRX").fast_info.last_price or 0)  # 3M T-Bill ≈ Fed Funds
+        tnx  = float(yf.Ticker("^TNX").fast_info.last_price or 0)  # 10Y
+
+        # Basit FedWatch proxy: piyasanın kısa vade beklentisi
+        # IRX Fed Funds Rate'e çok yakın — beklenti için forward hesabı
+        if irx > 0:
+            # Tahmin: piyasa IRX'i hangi yönde fiyatlıyor?
+            # IRX'in son değişimine göre Fed hamle beklentisi
+            irx_prev = float(getattr(yf.Ticker("^IRX").fast_info, "previous_close", irx) or irx)
+            irx_chg  = irx - irx_prev
+
+            if irx_chg < -0.1:
+                fed_signal = "green"
+                fed_note   = f"Piyasa FAİZ İNDİRİMİ fiyatlıyor — 3M T-Bill düşüyor (şu an %{irx:.2f})"
+                fed_expectation = "İndirim Beklentisi"
+            elif irx_chg > 0.1:
+                fed_signal = "red"
+                fed_note   = f"Piyasa FAİZ ARTIRIMI fiyatlıyor — 3M T-Bill yükseliyor (şu an %{irx:.2f})"
+                fed_expectation = "Artırım Beklentisi"
+            else:
+                fed_signal = "neutral"
+                fed_note   = f"Fed beklentisi DEĞİŞMEDİ — piyasa sabit fiyatlıyor (3M: %{irx:.2f})"
+                fed_expectation = "Değişim Yok"
+
+            results["FED_WATCH"] = MacroIndicator(
+                key="FED_WATCH", label=f"Fed Beklentisi ({fed_expectation})",
+                value=round(irx, 2), prev=round(irx_prev, 2),
+                change_pct=round(irx_chg, 3),
+                unit="%", group="rates",
+                signal=fed_signal, note=fed_note,
+            )
+        time.sleep(0.15)
+    except Exception as e:
+        logger.debug("FedWatch proxy failed: %s", e)
+
+    # ── MOVE Index Proxy: Tahvil Volatilitesi ────────────────────────────
+    # MOVE direkt yfinance'te yok, TLT volatilitesi proxy olarak kullanılır
+    try:
+        tlt_hist = yf.Ticker("TLT").history(period="20d", interval="1d")["Close"]
+        if len(tlt_hist) >= 10:
+            import statistics
+            tlt_returns = [
+                (tlt_hist.iloc[i] - tlt_hist.iloc[i-1]) / tlt_hist.iloc[i-1]
+                for i in range(1, len(tlt_hist))
+            ]
+            tlt_vol = statistics.stdev(tlt_returns) * (252 ** 0.5) * 100  # Annualized %
+
+            if tlt_vol >= 15:
+                signal = "red"
+                note   = f"Tahvil volatilitesi YÜKSEK (%{tlt_vol:.0f} annualized) — MOVE yüksek, faiz belirsizliği çok"
+            elif tlt_vol >= 10:
+                signal = "amber"
+                note   = f"Tahvil volatilitesi ORTA (%{tlt_vol:.0f}) — dikkat"
+            else:
+                signal = "green"
+                note   = f"Tahvil volatilitesi DÜŞÜK (%{tlt_vol:.0f}) — faiz piyasası sakin"
+
+            results["MOVE_PROXY"] = MacroIndicator(
+                key="MOVE_PROXY", label="MOVE Proxy (TLT Vol)",
+                value=round(tlt_vol, 1), prev=0, change_pct=0,
+                unit="%", group="fear",
+                signal=signal, note=note,
+            )
+    except Exception as e:
+        logger.debug("MOVE proxy failed: %s", e)
+
+    return results

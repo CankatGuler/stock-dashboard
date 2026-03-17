@@ -3599,10 +3599,10 @@ with tab_macro:
 
         # ── Gösterge Grupları ─────────────────────────────────────────────────
         _groups = [
-            ("fear",      "Korku & Volatilite", ["VIX", "YIELD_CURVE"]),
-            ("rates",     "Faiz Ortamı",        ["TNX", "IRX", "TLT"]),
-            ("fx_comm",   "Dolar & Emtia",      ["DXY", "GOLD", "OIL", "COPPER"]),
-            ("market",    "Piyasa",             ["SPX", "NDX"]),
+            ("fear",      "Korku & Volatilite", ["VIX", "YIELD_CURVE", "OVX", "MOVE_PROXY"]),
+            ("rates",     "Faiz Ortamı",        ["TNX", "IRX", "TLT", "FED_WATCH"]),
+            ("fx_comm",   "Dolar & Emtia",      ["DXY", "GOLD", "OIL", "COPPER", "USDJPY"]),
+            ("market",    "Piyasa & Likidite",  ["SPX", "NDX", "LIQUIDITY", "CREDIT_SPREAD"]),
         ]
 
         _signal_colors = {

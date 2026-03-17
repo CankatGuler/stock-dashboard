@@ -534,6 +534,32 @@ def build_strategy_prompt(data: dict) -> str:
     lines.append(f"Sonraki FOMC: {fed.get('next_meeting', '—')} ({fed.get('days_until', '?')} gün)")
     lines.append(f"Son FOMC: {fed.get('last_meeting', '—')}")
 
+    # ── Katman 1 Yeni Metrikler ───────────────────────────────────────────
+    # Makro göstergeleri içinde yeni metrikler varsa ekle
+    _ext_keys = {
+        "CREDIT_SPREAD": "Credit Spread (HYG/LQD)",
+        "OVX":           "Petrol Volatilitesi (OVX)",
+        "USDJPY":        "USD/JPY Carry Trade",
+        "LIQUIDITY":     "Küresel Likidite",
+        "FED_WATCH":     "Fed Beklentisi",
+        "MOVE_PROXY":    "Tahvil Volatilitesi (MOVE)",
+    }
+
+    _ext_found = []
+    for _ek, _el in _ext_keys.items():
+        _ind = inds.get(_ek)
+        if _ind and isinstance(_ind, dict):
+            _val  = _ind.get("value", "—")
+            _note = _ind.get("note", "")
+            _ext_found.append(f"{_el}: {_val} — {_note}")
+        elif hasattr(_ind, "value"):
+            _ext_found.append(f"{_el}: {_ind.value} — {_ind.note}")
+
+    if _ext_found:
+        lines.append("\n=== GENİŞLETİLMİŞ MAKRO SİNYALLER ===")
+        for _ef in _ext_found:
+            lines.append(f"  {_ef}")
+
     # ── Earnings Takvimi ─────────────────────────────────────────────────
     lines.append("\n=== YAKLAŞAN EARNINGS (45 GÜN) ===")
     if ec:
