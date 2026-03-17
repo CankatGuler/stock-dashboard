@@ -864,3 +864,103 @@ def delete_strategy_from_archive(strategy_key: str) -> bool:
 
     logger.warning("Silinecek strateji bulunamadı: %s", strategy_key)
     return False
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# KULLANICI PROFİLİ KAYIT / YÜKLEME
+# ─────────────────────────────────────────────────────────────────────────────
+
+USER_PROFILE_FILE = "user_profile.json"
+
+
+def save_user_profile(profile: dict) -> bool:
+    """Kullanıcı profilini GitHub'a kaydet."""
+    try:
+        import requests, base64, os, json
+        token = os.getenv("GH_PAT", "") or os.getenv("GITHUB_TOKEN", "")
+        repo  = os.getenv("GITHUB_REPO", "")
+
+        profile["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+        # Lokal fallback
+        with open(USER_PROFILE_FILE, "w") as f:
+            json.dump(profile, f, ensure_ascii=False, indent=2)
+
+        if not token or not repo:
+            return True
+
+        headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
+        url     = f"https://api.github.com/repos/{repo}/contents/{USER_PROFILE_FILE}"
+        encoded = base64.b64encode(
+            json.dumps(profile, ensure_ascii=False, indent=2).encode()
+        ).decode()
+
+        sha = None
+        r = requests.get(url, headers=headers, timeout=10)
+        if r.status_code == 200:
+            sha = r.json().get("sha")
+
+        payload = {"message": f"user profile update {datetime.now().strftime('%Y-%m-%d')}", "content": encoded}
+        if sha:
+            payload["sha"] = sha
+
+        r2 = requests.put(url, headers=headers, json=payload, timeout=15)
+        r2.raise_for_status()
+        return True
+    except Exception as e:
+        logger.warning("User profile save failed: %s", e)
+        return False
+
+
+def load_user_profile() -> dict:
+    """Kullanıcı profilini GitHub'dan yükle. Yoksa varsayılanları döndür."""
+    _defaults = {
+        "time_horizon":  "1-3 yıl (Uzun Vade)",
+        "risk_tol":      "Orta-Yüksek (%20 düşüş tolere edilir)",
+        "cash_cycle":    "3 ayda bir",
+        "deploy_cash":   0.0,
+        "goal":          "Uzun vadeli büyüme odaklı, volatiliteyi minimize ederek portföyü sistematik şekilde büyütmek.",
+        "year_target_pct": 40.0,
+        "year_start_value": 0.0,
+    }
+    try:
+        import requests, base64, os, json
+        token = os.getenv("GH_PAT", "") or os.getenv("GITHUB_TOKEN", "")
+        repo  = os.getenv("GITHUB_REPO", "")
+
+        if not token or not repo:
+            if os.path.exists(USER_PROFILE_FILE):
+                with open(USER_PROFILE_FILE) as f:
+                    saved = json.load(f)
+                    _defaults.update(saved)
+            return _defaults
+
+        headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
+        url     = f"https://api.github.com/repos/{repo}/contents/{USER_PROFILE_FILE}"
+        resp    = requests.get(url, headers=headers, timeout=10)
+        if resp.status_code == 404:
+            return _defaults
+        resp.raise_for_status()
+        content = base64.b64decode(resp.json()["content"]).decode()
+        saved   = json.loads(content)
+        _defaults.update(saved)
+        return _defaults
+    except Exception as e:
+        logger.warning("User profile load failed: %s", e)
+        return _defaults
+
+
+def delete_weekly_report(report_id: str) -> bool:
+    """Verilen ID'ye sahip haftalık raporu arşivden sil."""
+    archive = _load_weekly_archive()
+    new_archive = [r for r in archive if r.get("id") != report_id]
+    if len(new_archive) == len(archive):
+        # ID ile bulunamadı, generated_at ile dene
+        new_archive = [r for r in archive
+                       if not r.get("saved_at", "").startswith(report_id[:16])]
+    if len(new_archive) < len(archive):
+        ok = _save_weekly_archive(new_archive)
+        logger.info("Haftalık rapor silindi: %s", report_id)
+        return ok
+    logger.warning("Silinecek haftalık rapor bulunamadı: %s", report_id)
+    return False

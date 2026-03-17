@@ -109,7 +109,14 @@ TEMEL KURALLAR:
     "aksiyonlar": ["Madde madde uzun vade aksiyonları"]
   },
   "risk_uyarilari": ["Kritik risk uyarıları listesi"],
-  "guc_sinyalleri": ["Pozitif güçlü sinyaller listesi"]
+  "guc_sinyalleri": ["Pozitif güçlü sinyaller listesi"],
+  "risk_senaryosu_aksiyonlari": {
+    "tetikleyici": "Risk senaryosu ne zaman devreye girer (örn: VIX 35 üzerine çıkarsa)",
+    "acil_aksiyonlar": ["Hemen yapılacaklar — örn: RKLB pozisyonunu kapat"],
+    "savunma_aksiyonlar": ["Savunmaya geç — örn: nakdi %40'a çıkar"],
+    "firsat_aksiyonlar": ["Düşüşte alım fırsatları — örn: AVGO 250 altında al"],
+    "recovery_isaretleri": ["Toparlanma sinyalleri — örn: VIX 20 altına düşerse"]
+  }
 }"""
 
 

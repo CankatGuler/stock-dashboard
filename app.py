@@ -1004,11 +1004,41 @@ with tab_portfolio:
         with col_btn1:
             if st.button("💾  Kaydet", key="btn_add_pos"):
                 if p_ticker and p_shares > 0 and p_cost > 0:
-                    add_position(p_ticker, p_shares, p_cost, "Diğer", p_notes)
-                    st.success(f"✅ {p_ticker} portföye eklendi! Sektör otomatik yüklenecek.")
+                    # Sektörü yfinance'ten otomatik çek
+                    _auto_sector = "Diğer"
+                    try:
+                        import yfinance as _yf_add
+                        _info = _yf_add.Ticker(p_ticker).info
+                        _auto_sector = (
+                            _info.get("sector") or
+                            _info.get("industry") or
+                            "Diğer"
+                        )
+                    except Exception:
+                        pass
+                    add_position(p_ticker, p_shares, p_cost, _auto_sector, p_notes)
+                    st.success(f"✅ {p_ticker} portföye eklendi! Sektör: {_auto_sector}")
                     st.rerun()
-                else:
-                    st.error("Ticker, hisse adedi ve maliyet zorunludur.")
+        with col_btn2:
+            if st.button("🔄 Tüm Sektörleri Güncelle", key="btn_update_sectors", help="Portföydeki 'Diğer' sektörlü hisseleri yfinance'ten otomatik günceller"):
+                with st.spinner("Sektörler güncelleniyor..."):
+                    import yfinance as _yf_sec
+                    _updated = 0
+                    _port_sec = load_portfolio()
+                    for _pos in _port_sec:
+                        if _pos.get("sector", "Diğer") == "Diğer":
+                            try:
+                                _si = _yf_sec.Ticker(_pos["ticker"]).info
+                                _new_sec = _si.get("sector") or _si.get("industry") or "Diğer"
+                                if _new_sec != "Diğer":
+                                    update_position(_pos["ticker"], sector=_new_sec)
+                                    _updated += 1
+                            except Exception:
+                                pass
+                    st.success(f"✅ {_updated} hissenin sektörü güncellendi!")
+                    st.rerun()
+        if not (p_ticker and p_shares > 0 and p_cost > 0):
+            st.error("Ticker, hisse adedi ve maliyet zorunludur.")
 
     # ── Cash Management ────────────────────────────────────────────────────
     with st.expander("💵  Nakit Ekle / Çıkar", expanded=False):
@@ -2276,7 +2306,7 @@ Türkçe, net ve somut yaz. Spesifik rakamlara dayan."""
         _type_emoji = {"portfolio": "💼", "surprise": "🔭", "macro": "🌍"}
         _type_label = {"portfolio": "Portföy", "surprise": "Sürpriz", "macro": "Makro"}
 
-        for _wr in _wr_list:
+        for _wri, _wr in enumerate(_wr_list):
             _wr_id     = _wr.get("id", "")
             _wr_date   = _wr.get("date", "")
             _wr_type   = _wr.get("type", "")
@@ -2363,17 +2393,38 @@ Türkçe, net ve somut yaz. Spesifik rakamlara dayan."""
                     except Exception:
                         pass
 
-                # ── PDF Download butonu ───────────────────────────────────
+                # ── PDF Download + Sil butonu ─────────────────────────────
                 st.markdown('<div style="margin-top:0.8rem;"></div>', unsafe_allow_html=True)
                 _html_content = generate_weekly_html(_wr)
-                st.download_button(
-                    label="📄 HTML Raporu İndir (PDF için tarayıcıdan Yazdır)",
-                    data=_html_content.encode("utf-8"),
-                    file_name=f"rapor_{_wr_id}.html",
-                    mime="text/html",
-                    key=f"dl_{_wr_id}",
-                    use_container_width=True,
-                )
+                _wr_dl_col, _wr_del_col = st.columns([3, 1])
+                with _wr_dl_col:
+                    st.download_button(
+                        label="📄 HTML Raporu İndir (PDF için tarayıcıdan Yazdır)",
+                        data=_html_content.encode("utf-8"),
+                        file_name=f"rapor_{_wr_id}.html",
+                        mime="text/html",
+                        key=f"dl_wr_{_wri}",
+                        use_container_width=True,
+                    )
+                with _wr_del_col:
+                    if st.button("🗑 Sil", key=f"del_wr_btn_{_wri}", use_container_width=True):
+                        st.session_state[f"del_wr_confirm_{_wri}"] = True
+
+                if st.session_state.get(f"del_wr_confirm_{_wri}"):
+                    st.warning(f"**{_wr_id}** raporunu silmek istediğine emin misin?")
+                    _wr_y, _wr_n, _ = st.columns([1, 1, 3])
+                    with _wr_y:
+                        if st.button("✅ Evet Sil", key=f"del_wr_yes_{_wri}", use_container_width=True):
+                            from analysis_memory import delete_weekly_report
+                            ok_del = delete_weekly_report(_wr_id)
+                            st.session_state[f"del_wr_confirm_{_wri}"] = False
+                            st.session_state["wr_cache"] = None
+                            st.success("Silindi!") if ok_del else st.error("Silinemedi.")
+                            st.rerun()
+                    with _wr_n:
+                        if st.button("❌ İptal", key=f"del_wr_no_{_wri}", use_container_width=True):
+                            st.session_state[f"del_wr_confirm_{_wri}"] = False
+                            st.rerun()
 
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -2528,6 +2579,17 @@ with tab_radar:
                 memory_bonus  = res.get("memory_bonus", 0)
                 macro_mult    = res.get("macro_multiplier", 1.0)
 
+                # Sentiment skoru
+                try:
+                    from sentiment_analyzer import score_articles, format_sentiment_badge
+                    _sent_result = score_articles(articles)
+                    _sent_score  = _sent_result["avg_score"]
+                    _sent_label  = _sent_result["label"]
+                    _sent_color  = _sent_result["color"]
+                    _sent_badge  = format_sentiment_badge(_sent_score)
+                except Exception:
+                    _sent_score, _sent_label, _sent_color, _sent_badge = 0.0, "—", "#8a9ab0", ""
+
                 # Renk
                 if radar_score >= 80:
                     border_color = "#00e676"
@@ -2605,6 +2667,8 @@ with tab_radar:
 
                     # ── Neden & Tavsiye ──────────────────────────────────────
                     _extras = []
+                    if _sent_badge:
+                        _extras.append(f"📰 Haber Sentimenti: {_sent_label} ({_sent_score:+.2f})")
                     if insider_bonus > 0:
                         _extras.append(f"👔 Insider bonus: +{insider_bonus:.1f}")
                     if memory_bonus != 0:
@@ -4219,39 +4283,75 @@ with tab_strategy:
         st.caption(f"Takvim yüklenemedi: {_cal_e}")
 
     # ── Katman 2: Profil Ayarları ─────────────────────────────────────────
+    # Profili GitHub'dan yükle (ilk açılışta veya cache yoksa)
+    from analysis_memory import load_user_profile, save_user_profile
+    if st.session_state.get("user_profile_loaded") is None:
+        _saved_profile = load_user_profile()
+        st.session_state["user_profile_loaded"] = _saved_profile
+    _saved_profile = st.session_state.get("user_profile_loaded", {})
+
+    # Seçenek listelerinde kayıtlı değeri bul
+    _th_opts  = ["1-3 yıl (Uzun Vade)", "3-12 ay (Orta Vade)", "1-3 ay (Kısa Vade)"]
+    _rt_opts  = ["Orta-Yüksek (%20 düşüş tolere edilir)", "Orta (%10 düşüş tolere edilir)", "Düşük (koruma öncelikli)"]
+    _cc_opts  = ["3 ayda bir", "Aylık düzenli", "Düzensiz / fırsata göre"]
+    _th_idx   = _th_opts.index(_saved_profile.get("time_horizon", _th_opts[0])) if _saved_profile.get("time_horizon") in _th_opts else 0
+    _rt_idx   = _rt_opts.index(_saved_profile.get("risk_tol", _rt_opts[0])) if _saved_profile.get("risk_tol") in _rt_opts else 0
+    _cc_idx   = _cc_opts.index(_saved_profile.get("cash_cycle", _cc_opts[0])) if _saved_profile.get("cash_cycle") in _cc_opts else 0
+
     with st.expander("⚙️ Yatırımcı Profili — Strateji Parametreleri", expanded=False):
         _pr_c1, _pr_c2, _pr_c3 = st.columns(3)
         with _pr_c1:
             _time_horizon = st.selectbox(
                 "Zaman Ufku:",
-                ["1-3 yıl (Uzun Vade)", "3-12 ay (Orta Vade)", "1-3 ay (Kısa Vade)"],
-                index=0, key="st_time_horizon",
+                _th_opts, index=_th_idx, key="st_time_horizon",
             )
             _risk_tol = st.selectbox(
                 "Risk Toleransı:",
-                ["Orta-Yüksek (%20 düşüş tolere edilir)",
-                 "Orta (%10 düşüş tolere edilir)",
-                 "Düşük (koruma öncelikli)"],
-                index=0, key="st_risk_tol",
+                _rt_opts, index=_rt_idx, key="st_risk_tol",
             )
         with _pr_c2:
             _cash_cycle = st.selectbox(
                 "Nakit Döngüsü:",
-                ["3 ayda bir", "Aylık düzenli", "Düzensiz / fırsata göre"],
-                index=0, key="st_cash_cycle",
+                _cc_opts, index=_cc_idx, key="st_cash_cycle",
             )
             _deploy_cash = st.number_input(
                 "Bu dönem dağıtılacak ek nakit ($):",
-                min_value=0.0, value=0.0, step=100.0,
-                key="st_deploy_cash",
+                min_value=0.0,
+                value=float(_saved_profile.get("deploy_cash", 0.0)),
+                step=100.0, key="st_deploy_cash",
             )
         with _pr_c3:
             _goal = st.text_area(
                 "Yatırım Hedefi:",
-                value="Uzun vadeli büyüme odaklı, volatiliteyi minimize ederek "
-                      "portföyü sistematik şekilde büyütmek.",
+                value=_saved_profile.get("goal",
+                    "Uzun vadeli büyüme odaklı, volatiliteyi minimize ederek "
+                    "portföyü sistematik şekilde büyütmek."),
                 height=80, key="st_goal",
             )
+            _year_target = st.number_input(
+                "Yıl Sonu Hedefi (%):",
+                min_value=0.0, max_value=500.0,
+                value=float(_saved_profile.get("year_target_pct", 40.0)),
+                step=5.0, key="st_year_target",
+            )
+
+        _save_prof_col, _ = st.columns([1, 3])
+        with _save_prof_col:
+            if st.button("💾 Profili Kaydet", key="btn_save_profile", use_container_width=True):
+                _new_profile = {
+                    "time_horizon":     _time_horizon,
+                    "risk_tol":         _risk_tol,
+                    "cash_cycle":       _cash_cycle,
+                    "deploy_cash":      float(_deploy_cash),
+                    "goal":             _goal,
+                    "year_target_pct":  float(_year_target),
+                }
+                ok_prof = save_user_profile(_new_profile)
+                st.session_state["user_profile_loaded"] = _new_profile
+                if ok_prof:
+                    st.success("✅ Profil kaydedildi!")
+                else:
+                    st.warning("Profil lokal kaydedildi, GitHub yazma hatası.")
 
     # ── Katman 3: Strateji Üret ───────────────────────────────────────────
     st.markdown('<hr style="border-color:var(--color-border-tertiary);margin:0.5rem 0;">', unsafe_allow_html=True)
@@ -4575,6 +4675,48 @@ with tab_strategy:
                         f'padding:2px 0;">• {_g}</div>',
                         unsafe_allow_html=True,
                     )
+
+        # Risk Senaryosu Aksiyonları
+        _rsa = _s.get("risk_senaryosu_aksiyonlari", {})
+        if _rsa:
+            st.markdown('<hr style="border-color:var(--color-border-tertiary);margin:1rem 0;">', unsafe_allow_html=True)
+            with st.expander("🚨 Risk Senaryosu Aksiyonları — Kötü Senaryo Gerçekleşirse Ne Yaparsın?", expanded=False):
+                _tetik = _rsa.get("tetikleyici", "")
+                if _tetik:
+                    st.markdown(
+                        f'<div style="background:#2d1010;border-left:4px solid #e74c3c;'
+                        f'border-radius:0 8px 8px 0;padding:0.7rem 1rem;margin-bottom:0.8rem;'
+                        f'font-size:0.78rem;color:#ffb3b3;">'
+                        f'<b>Tetikleyici:</b> {_tetik}</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                _rsa_c1, _rsa_c2 = st.columns(2)
+                with _rsa_c1:
+                    _acil = _rsa.get("acil_aksiyonlar", [])
+                    if _acil:
+                        st.markdown('<div style="font-size:0.65rem;color:#e74c3c;font-weight:600;text-transform:uppercase;margin-bottom:6px;">🚨 Acil Aksiyonlar</div>', unsafe_allow_html=True)
+                        for _a in _acil:
+                            st.markdown(f'<div style="font-size:0.75rem;padding:3px 0;border-bottom:0.5px solid var(--color-border-tertiary);">• {_a}</div>', unsafe_allow_html=True)
+
+                    _savunma = _rsa.get("savunma_aksiyonlar", [])
+                    if _savunma:
+                        st.markdown('<div style="font-size:0.65rem;color:#ffb300;font-weight:600;text-transform:uppercase;margin:8px 0 6px;">🛡️ Savunma Aksiyonları</div>', unsafe_allow_html=True)
+                        for _a in _savunma:
+                            st.markdown(f'<div style="font-size:0.75rem;padding:3px 0;border-bottom:0.5px solid var(--color-border-tertiary);">• {_a}</div>', unsafe_allow_html=True)
+
+                with _rsa_c2:
+                    _firsat = _rsa.get("firsat_aksiyonlar", [])
+                    if _firsat:
+                        st.markdown('<div style="font-size:0.65rem;color:#00c48c;font-weight:600;text-transform:uppercase;margin-bottom:6px;">🎯 Düşüşte Alım Fırsatları</div>', unsafe_allow_html=True)
+                        for _a in _firsat:
+                            st.markdown(f'<div style="font-size:0.75rem;padding:3px 0;border-bottom:0.5px solid var(--color-border-tertiary);">• {_a}</div>', unsafe_allow_html=True)
+
+                    _recovery = _rsa.get("recovery_isaretleri", [])
+                    if _recovery:
+                        st.markdown('<div style="font-size:0.65rem;color:#4fc3f7;font-weight:600;text-transform:uppercase;margin:8px 0 6px;">📈 Toparlanma Sinyalleri</div>', unsafe_allow_html=True)
+                        for _a in _recovery:
+                            st.markdown(f'<div style="font-size:0.75rem;padding:3px 0;border-bottom:0.5px solid var(--color-border-tertiary);">• {_a}</div>', unsafe_allow_html=True)
 
         # Yapılacaklar Özeti
         _aks_sum = _s.get("aksiyonlar", {})
