@@ -149,6 +149,17 @@
       "currency": "TRY",
       "added": "2026-03-18 18:30",
       "updated": "2026-03-18 18:30"
+    },
+    {
+      "ticker": "NNF",
+      "shares": 8876.0,
+      "avg_cost": 22.869555,
+      "sector": "TEFAS",
+      "notes": "Hedef Portföy Birinci Hisse Senedi Fonu",
+      "asset_class": "tefas",
+      "currency": "TRY",
+      "added": "2026-03-18 18:32",
+      "updated": "2026-03-18 18:32"
     }
   ],
   "cash": 1060.76
