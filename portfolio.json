@@ -413,7 +413,18 @@
       "currency": "USD",
       "added": "2026-03-18 21:07",
       "updated": "2026-03-18 21:07"
+    },
+    {
+      "ticker": "AIXBT-USD",
+      "shares": 5215.86445,
+      "avg_cost": 0.1,
+      "sector": "Kripto",
+      "notes": "",
+      "asset_class": "crypto",
+      "currency": "USD",
+      "added": "2026-03-18 21:09",
+      "updated": "2026-03-18 21:09"
     }
   ],
-  "cash": -362473.79
+  "cash": -362995.38
 }
