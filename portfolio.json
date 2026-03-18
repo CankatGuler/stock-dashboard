@@ -369,7 +369,18 @@
       "currency": "USD",
       "added": "2026-03-18 20:54",
       "updated": "2026-03-18 20:54"
+    },
+    {
+      "ticker": "JUP29210-USD",
+      "shares": 933.6654,
+      "avg_cost": 0.80245455,
+      "sector": "Kripto",
+      "notes": "",
+      "asset_class": "crypto",
+      "currency": "USD",
+      "added": "2026-03-18 20:57",
+      "updated": "2026-03-18 20:57"
     }
   ],
-  "cash": -352882.92
+  "cash": -353632.14
 }
