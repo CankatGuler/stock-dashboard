@@ -218,14 +218,14 @@
     },
     {
       "ticker": "ETH-USD",
-      "shares": 0.2389485,
-      "avg_cost": 3390.47,
+      "shares": 1.44364325,
+      "avg_cost": 3129.8695202918034,
       "sector": "Kripto",
       "notes": "",
       "asset_class": "crypto",
       "currency": "USD",
       "added": "2026-03-18 19:37",
-      "updated": "2026-03-18 19:37"
+      "updated": "2026-03-18 21:00"
     },
     {
       "ticker": "SOL-USD",
@@ -393,5 +393,5 @@
       "updated": "2026-03-18 20:58"
     }
   ],
-  "cash": -353856.41
+  "cash": -357564.68
 }
