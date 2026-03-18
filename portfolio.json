@@ -314,7 +314,18 @@
       "currency": "USD",
       "added": "2026-03-18 19:51",
       "updated": "2026-03-18 19:51"
+    },
+    {
+      "ticker": "ENA-USD",
+      "shares": 1084.05554,
+      "avg_cost": 0.47721557,
+      "sector": "Kripto",
+      "notes": "",
+      "asset_class": "crypto",
+      "currency": "USD",
+      "added": "2026-03-18 19:52",
+      "updated": "2026-03-18 19:52"
     }
   ],
-  "cash": -348636.61
+  "cash": -349153.94
 }
