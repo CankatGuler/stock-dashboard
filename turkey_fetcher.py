@@ -1,3 +1,4 @@
+import streamlit as st
 # turkey_fetcher.py — Türkiye Borsası ve TEFAS Veri Modülü
 #
 # Katman 5 metrikleri — Uzman Türkiye Borsa Perspektifi:
@@ -54,6 +55,7 @@ BIST30_MAJOR = [
 
 # ─── 1. BIST Temel Veriler ────────────────────────────────────────────────────
 
+@st.cache_data(ttl=900, show_spinner=False)
 def fetch_bist_data() -> dict:
     """
     BIST100 ve alt endekslerin hem TL hem dolar bazlı değerleri.
@@ -153,6 +155,7 @@ def fetch_bist_data() -> dict:
 
 # ─── 2. XBANK Derinlemesine Analiz ───────────────────────────────────────────
 
+@st.cache_data(ttl=1800, show_spinner=False)
 def fetch_xbank_analysis() -> dict:
     """
     XBANK derinlemesine analiz — Türkiye borsasının lokomotifi.
@@ -606,6 +609,7 @@ def fetch_turkey_correlations() -> dict:
 
 # ─── 7. TEFAS Entegrasyonu ────────────────────────────────────────────────────
 
+@st.cache_data(ttl=3600, show_spinner=False)
 def fetch_tefas_fund(fund_code: str) -> dict:
     """
     TEFAS fon verisi çek.
@@ -811,7 +815,8 @@ def fetch_tefas_portfolio(fund_codes: list) -> dict:
 
 # ─── Ana Toplayıcı ───────────────────────────────────────────────────────────
 
-def fetch_all_turkey_data(tefas_codes: list = None) -> dict:
+@st.cache_data(ttl=1800, show_spinner=False)
+def fetch_all_turkey_data(tefas_codes: tuple = None) -> dict:
     """
     Tüm Katman 5 Türkiye verilerini tek seferde topla.
     """

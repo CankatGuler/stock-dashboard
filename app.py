@@ -1254,14 +1254,37 @@ with tab_portfolio:
             # Çoklu varlık sınıfı fiyat çekme sistemi
             import yfinance as _yf_port
             failed_tickers = []
-            with st.spinner("📊 Fiyatlar çekiliyor: ABD hisse, kripto, emtia, TEFAS..."):
+
+            # Session state cache — 5 dk içinde tekrar fetch yapma
+            import time as _time_port
+            _cache_key   = "portfolio_price_cache"
+            _cache_ts_key= "portfolio_price_cache_ts"
+            _cache_ttl   = 300  # 5 dakika
+
+            _now_ts      = _time_port.time()
+            _last_ts     = st.session_state.get(_cache_ts_key, 0)
+            _cached_data = st.session_state.get(_cache_key, {})
+            _port_tickers_key = str(sorted([p["ticker"] for p in positions]))
+
+            # Cache geçerliyse direkt kullan
+            if (_cached_data
+                and (_now_ts - _last_ts) < _cache_ttl
+                and _cached_data.get("_tickers_key") == _port_tickers_key):
+                price_map  = _cached_data.get("price_map",  {})
+                change_map = _cached_data.get("change_map", {})
+                sector_map = _cached_data.get("sector_map", {})
+                w52h_map   = _cached_data.get("w52h_map",   {})
+                w52l_map   = _cached_data.get("w52l_map",   {})
+                _usd_try   = _cached_data.get("usd_try",    32.0)
+            else:
+              with st.spinner("📊 Fiyatlar güncelleniyor..."):
                 price_map:  dict[str, float] = {}
                 change_map: dict[str, float] = {}
                 sector_map: dict[str, str]   = {}
                 w52h_map:   dict[str, float] = {}
                 w52l_map:   dict[str, float] = {}
-    
-                # USD/TRY kuru — TEFAS fiyatını USD'ye çevirmek için
+
+                # USD/TRY kuru
                 _usd_try = 32.0
                 try:
                     _usd_try = float(_yf_port.Ticker("USDTRY=X").fast_info.last_price or 32.0)

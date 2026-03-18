@@ -1,3 +1,4 @@
+import streamlit as st
 # macro_dashboard.py — Makro Gösterge Paneli
 #
 # yfinance üzerinden anlık makro veri çeker:
@@ -54,6 +55,7 @@ def _safe(val, default=0.0):
         return default
 
 
+@st.cache_data(ttl=900, show_spinner=False)
 def fetch_macro_data() -> dict[str, MacroIndicator]:
     """
     Tüm makro göstergeleri yfinance'ten çek.
