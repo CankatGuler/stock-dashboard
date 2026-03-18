@@ -2,6 +2,7 @@
 # Run with:  streamlit run app.py
 
 import os
+import json
 import time
 import logging
 
@@ -4837,373 +4838,410 @@ with tab_strategy:
             key="btn_strategy", use_container_width=True, type="primary",
         )
 
-    # Strateji çalıştır
+    # Strateji çalıştır — İKİ AŞAMALI SİSTEM
     if _run_strategy:
-        with st.spinner("Tüm veriler toplanıyor ve analiz ediliyor... (30-60 saniye)"):
+        # Progress takibi için
+        _prog_bar  = st.progress(0)
+        _prog_text = st.empty()
+
+        def _two_phase_progress(step, total, message):
+            _prog_bar.progress(step / total)
+            _prog_text.markdown(
+                f'<div style="font-size:0.75rem;color:#4fc3f7;">'
+                f'⚙️ Adım {step}/{total}: {message}</div>',
+                unsafe_allow_html=True,
+            )
+
+        try:
+            from breakout_scanner import load_watchlist as _lw_strat
+            from strategy_data    import collect_all_strategy_data
+            from signal_engine    import generate_all_signals
+            from strategy_director import run_two_phase_analysis
+
+            _watchlist_tickers = _lw_strat()
+            _port_enriched = [
+                {**p, "current_price": p.get("current_price", p.get("avg_cost", 0))}
+                for p in _port_now if float(p.get("shares", 0)) > 0
+            ]
+
+            # Kullanıcı profili
+            _user_profile_strat = {
+                "time_horizon":    _time_horizon,
+                "risk_tol":        _risk_tol,
+                "cash_cycle":      _cash_cycle,
+                "goal":            _goal,
+                "year_target_pct": float(st.session_state.get("st_year_target", 40.0)),
+            }
+
+            _two_phase_progress(1, 8, "Tüm veriler toplanıyor...")
+
+            # Tüm veri topla (kripto, emtia, Türkiye dahil)
+            _strat_data = collect_all_strategy_data(
+                positions          = _port_enriched,
+                watchlist_tickers  = _watchlist_tickers,
+                cash               = _cash_now,
+            )
+            _strat_data["user_profile"] = _user_profile_strat
+
+            _two_phase_progress(2, 8, "Sinyal motoru çalışıyor...")
+
+            # Sinyal motoru
             try:
-                # Tüm veri kaynaklarını topla
-                from breakout_scanner    import load_watchlist
-                from price_target_tracker import get_all_targets_summary
-                from analysis_memory     import get_weekly_reports, get_top_tickers
-
-                _watchlist_tickers = load_watchlist()
-                # shares > 0 filtresi — satılmış pozisyonlar dahil olmasın
-                _port_enriched = [
-                    {**p, "current_price": p.get("current_price", p.get("avg_cost", 0))}
-                    for p in _port_now
-                    if float(p.get("shares", 0)) > 0
-                ]
-
-                # Hisse skorları (hafızadan) — SADECE aktif portföy + watchlist
-                # Eski analizlerde görünen satılmış hisseler buraya girmemeli
-                _active_tickers = set(
-                    [p["ticker"] for p in _port_enriched] + _watchlist_tickers
+                _signals = generate_all_signals(
+                    macro_data      = _strat_data.get("macro",     {}),
+                    economic_data   = _strat_data,
+                    crypto_data     = _strat_data.get("crypto",    {}),
+                    commodity_data  = _strat_data.get("commodity", {}),
+                    turkey_data     = _strat_data.get("turkey",    {}),
+                    portfolio_data  = _strat_data.get("portfolio", {}),
+                    year_target_pct = float(_user_profile_strat.get("year_target_pct", 40)),
                 )
-                _top_tickers = get_top_tickers(limit=50)
-                _scores = {
-                    t["ticker"]: t.get("avg_score", 0)
-                    for t in _top_tickers
-                    if t["ticker"] in _active_tickers
-                }
+                _strat_data["signals"] = _signals
+            except Exception as _se:
+                logger.warning("Signal engine failed: %s", _se)
+                _strat_data["signals"] = {}
 
-                # Analist hedefleri
-                _all_targets = get_all_targets_summary(_watchlist_tickers + [p["ticker"] for p in _port_now])
-                _targets_dict = {t["ticker"]: {"mean": t["mean"], "upside": t["upside"],
-                                               "n_analysts": t["n_analysts"], "rec": t["rec"]}
-                                 for t in _all_targets}
+            # İki aşamalı analiz
+            _two_phase_result = run_two_phase_analysis(
+                all_data          = _strat_data,
+                progress_callback = lambda s, t, m: _two_phase_progress(s + 2, t + 2, m),
+            )
 
-                # Kullanıcı profili override
-                from strategy_data import get_user_profile
-                _user_profile = get_user_profile()
-                _user_profile["time_horizon_years"] = _time_horizon
-                _user_profile["risk_tolerance"]     = _risk_tol
-                _user_profile["cash_cycle"]         = _cash_cycle
-                _user_profile["goal"]               = _goal
+            _prog_bar.progress(1.0)
+            _prog_text.empty()
 
-                # Strateji verisi topla
-                _strat_data = collect_all_strategy_data(
-                    positions=_port_enriched,
-                    watchlist_tickers=_watchlist_tickers,
-                    cash=_cash_now,
-                    existing_scores=_scores,
-                    existing_targets=_targets_dict,
+            st.session_state["two_phase_result"] = _two_phase_result
+            st.session_state["two_phase_data"]   = _strat_data
+
+            if _two_phase_result.get("success"):
+                # Arşivle
+                from analysis_memory import save_strategy_to_archive
+                _dir_out = _two_phase_result.get("director", {})
+                save_strategy_to_archive(
+                    strategy        = _dir_out,
+                    portfolio_value = _port_val_now,
+                    cash            = _cash_now,
+                    summary         = _dir_out.get("piyasa_ozeti", "")[:150],
                 )
-                _strat_data["user_profile"] = _user_profile
+                from datetime import datetime as _dt_strat
+                st.session_state["strategy_generated_at"] = _dt_strat.now().strftime("%Y-%m-%d %H:%M")
+                st.success("✅ İki aşamalı analiz tamamlandı ve arşivlendi!")
+                st.rerun()
+            else:
+                st.error("Analiz başarısız oldu.")
 
-                # Haftalık raporlar
-                _weekly = get_weekly_reports(limit=4)
+        except Exception as _e:
+            _prog_bar.empty()
+            _prog_text.empty()
+            st.error(f"Hata: {_e}")
+            import traceback
+            st.code(traceback.format_exc())
 
-                # Radar sonuçları (session state'den)
-                _radar  = st.session_state.get("radar_results", [])
+    # ── Katman 4: Strateji Görüntüleme — YENİ İKİ AŞAMALI FORMAT ─────────
+    _tpr = st.session_state.get("two_phase_result", {})
+    if _tpr and _tpr.get("success"):
+        _dir = _tpr.get("director", {})
+        _ar  = _tpr.get("analyst_reports", {})
 
-                # Watchlist hedef verileri
-                _wl_data = _all_targets
-
-                # Strateji üret
-                _result = generate_strategy(
-                    strategy_data=_strat_data,
-                    weekly_reports=_weekly,
-                    radar_results=_radar,
-                    watchlist_data=_wl_data,
-                    user_cash_to_deploy=float(_deploy_cash),
-                )
-
-                st.session_state["strategy_result"] = _result
-                st.session_state["strategy_data"]   = _strat_data
-
-                if _result["success"]:
-                    # Çalışan GitHub mekanizmasıyla arşivle
-                    from analysis_memory import save_strategy_to_archive
-                    _strat_obj = _result.get("strategy", {})
-                    save_strategy_to_archive(
-                        strategy=_strat_obj,
-                        portfolio_value=_port_val_now,
-                        cash=_cash_now,
-                        summary=_strat_obj.get("ozet", "")[:150],
-                    )
-                    st.success("✅ Strateji üretildi ve arşivlendi!")
-                    from datetime import datetime as _dt_strat
-                    st.session_state["strategy_generated_at"] = _dt_strat.now().strftime("%Y-%m-%d %H:%M")
-                else:
-                    st.error(f"Strateji üretilemedi: {_result.get('error', '?')}")
-
-            except Exception as _e:
-                st.error(f"Hata: {_e}")
-                import traceback
-                st.code(traceback.format_exc())
-
-    # ── Katman 4: Strateji Görüntüleme ────────────────────────────────────
-    _sr = st.session_state.get("strategy_result", {})
-    if _sr and _sr.get("success") and _sr.get("strategy"):
-        _s = _sr["strategy"]
-
-        # Genel Özet
-        if _s.get("ozet"):
+        # ── BÖLÜM 1: PİYASA ÖZETİ + ANALİST SENTEZİ ─────────────────────
+        # Kullanıcı buraya önce bakıyor — en büyük, en net kısım
+        _poz = _dir.get("piyasa_ozeti", "")
+        if _poz:
             st.markdown(
                 f'<div style="background:var(--color-background-secondary);'
-                f'border-left:4px solid #4fc3f7;border-radius:0 var(--border-radius-lg) '
-                f'var(--border-radius-lg) 0;padding:1rem 1.2rem;margin:1rem 0;'
-                f'font-size:0.82rem;line-height:1.7;">'
-                f'<b style="font-size:0.7rem;color:var(--color-text-tertiary);'
-                f'text-transform:uppercase;letter-spacing:0.08em;">Genel Değerlendirme</b><br>'
-                f'{_s["ozet"]}</div>',
+                f'border-left:4px solid #4fc3f7;border-radius:0 12px 12px 0;'
+                f'padding:1rem 1.2rem;margin:1rem 0;font-size:0.85rem;line-height:1.7;">'
+                f'<div style="font-size:0.6rem;color:#4fc3f7;font-weight:700;'
+                f'text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px;">'
+                f'🌍 PİYASA ÖZETİ</div>{_poz}</div>',
                 unsafe_allow_html=True,
             )
 
-        # Çelişkiler
-        if _s.get("celiskiler"):
+        # Analist sentezi — 5 analist tek satırda
+        _as = _dir.get("analist_sentezi", {})
+        if _as:
             st.markdown(
-                '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
-                'letter-spacing:0.1em;margin:1rem 0 0.5rem;">⚡ TESPİT EDİLEN ÇELİŞKİLER</div>',
+                '<div style="font-size:0.6rem;color:#5a6a7a;font-weight:700;'
+                'text-transform:uppercase;letter-spacing:0.1em;margin:0.8rem 0 0.4rem;">'
+                '📊 ANALİST SENTEZİ</div>',
                 unsafe_allow_html=True,
             )
-            for _c in _s["celiskiler"]:
+            _sig_colors = {
+                "AL": "#00c48c", "GÜÇLÜ AL": "#00c48c", "ARTIR": "#4fc3f7",
+                "TUT": "#8a9ab0", "BEKLE": "#ffb300",
+                "AZALT": "#ff8c00", "SAT": "#e74c3c", "GÜÇLÜ SAT": "#c0392b",
+            }
+            _as_cols = st.columns(5)
+            _as_items = [
+                ("🌍 Makro",        _as.get("makro",     {})),
+                ("🇺🇸 ABD Hisse",   _as.get("abd_hisse", {})),
+                ("₿  Kripto",       _as.get("kripto",    {})),
+                ("🥇 Emtia",        _as.get("emtia",     {})),
+                ("🇹🇷 Türkiye",     _as.get("turkiye",   {})),
+            ]
+            for i, (label, item) in enumerate(_as_items):
+                with _as_cols[i]:
+                    sinyal = item.get("sinyal", "—")
+                    gerek  = item.get("gerekcce", item.get("gerekçe", ""))[:60]
+                    color  = _sig_colors.get(sinyal, "#8a9ab0")
+                    st.markdown(
+                        f'<div style="background:var(--color-background-secondary);'
+                        f'border-top:3px solid {color};border-radius:4px;'
+                        f'padding:0.6rem;text-align:center;">'
+                        f'<div style="font-size:0.65rem;color:#8a9ab0;">{label}</div>'
+                        f'<div style="font-size:1rem;font-weight:700;color:{color};">{sinyal}</div>'
+                        f'<div style="font-size:0.62rem;color:#5a6a7a;margin-top:4px;">{gerek}</div>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+
+        # Analist detayları
+        if _ar:
+            with st.expander("🔬 Analist Raporları Detayı", expanded=False):
+                for _ar_key, _ar_label in [
+                    ("makro", "🌍 Makro"), ("abd", "🇺🇸 ABD Hisse"),
+                    ("kripto", "₿ Kripto"), ("emtia", "🥇 Emtia"), ("turkiye", "🇹🇷 Türkiye")
+                ]:
+                    _rep = _ar.get(_ar_key, {})
+                    if not _rep:
+                        continue
+                    sinyal = _rep.get("sinyal", "—")
+                    color  = _sig_colors.get(sinyal, "#8a9ab0")
+                    st.markdown(
+                        f'<div style="border-left:3px solid {color};padding:0.5rem 0.8rem;'
+                        f'margin-bottom:0.6rem;background:var(--color-background-secondary);'
+                        f'border-radius:0 6px 6px 0;">'
+                        f'<b style="color:{color};">{_ar_label}: {sinyal}</b> '
+                        f'(Güven: {_rep.get("guven","?")}/10)<br>'
+                        f'<span style="font-size:0.75rem;">{_rep.get("ana_gerekcce","")}</span>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+                    for _d in _rep.get("destekleyen", [])[:2]:
+                        st.markdown(f'<div style="font-size:0.7rem;color:#00c48c;padding-left:1rem;">✅ {_d}</div>', unsafe_allow_html=True)
+                    for _r in _rep.get("riskler", [])[:2]:
+                        st.markdown(f'<div style="font-size:0.7rem;color:#ffb300;padding-left:1rem;">⚠️ {_r}</div>', unsafe_allow_html=True)
+                    if _rep.get("oneri"):
+                        st.caption(f"Öneri: {_rep['oneri']}")
+
+        st.markdown('<hr style="border-color:var(--color-border-tertiary);margin:1rem 0;">', unsafe_allow_html=True)
+
+        # ── BÖLÜM 2: ÇELİŞKİLER ─────────────────────────────────────────
+        _cel = _dir.get("celiskiler", [])
+        if _cel:
+            st.markdown(
+                '<div style="font-size:0.6rem;color:#ffb300;font-weight:700;'
+                'text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.4rem;">'
+                '⚡ ÇELİŞKİ ÇÖZÜMÜ</div>',
+                unsafe_allow_html=True,
+            )
+            for _c in _cel:
                 st.markdown(
-                    f'<div style="background:var(--color-background-secondary);'
-                    f'border-left:3px solid #ffb300;border-radius:0 8px 8px 0;'
-                    f'padding:0.7rem 1rem;margin-bottom:0.5rem;font-size:0.78rem;">'
-                    f'<b>{_c.get("hisse","")}</b> — {_c.get("celisik_sinyaller","")}<br>'
-                    f'<span style="color:#00c48c;">→ {_c.get("cozum","")}</span>'
+                    f'<div style="background:#2b1f00;border-left:3px solid #ffb300;'
+                    f'border-radius:0 8px 8px 0;padding:0.6rem 0.8rem;margin-bottom:0.4rem;">'
+                    f'<b style="color:#ffb300;">{_c.get("baslik","")}</b><br>'
+                    f'<span style="font-size:0.73rem;">{_c.get("aciklama","")}</span><br>'
+                    f'<span style="font-size:0.7rem;color:#4fc3f7;">→ Karar: {_c.get("karar","")}</span>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
-
-        # Aksiyon Planı
-        _aks = _s.get("aksiyonlar", {})
-        if _aks:
-            st.markdown(
-                '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
-                'letter-spacing:0.1em;margin:1rem 0 0.5rem;">🎯 AKSİYON PLANI</div>',
-                unsafe_allow_html=True,
-            )
-
-            _ak_c1, _ak_c2, _ak_c3 = st.columns(3)
-
-            # Sat / Azalt
-            with _ak_c1:
-                st.markdown(
-                    '<div style="font-size:0.65rem;font-weight:500;color:#e74c3c;'
-                    'text-transform:uppercase;margin-bottom:0.5rem;">📉 Sat / Azalt</div>',
-                    unsafe_allow_html=True,
-                )
-                for _item in _aks.get("sat_azalt", []):
-                    st.markdown(
-                        f'<div style="background:var(--color-background-secondary);'
-                        f'border:0.5px solid #e74c3c44;border-radius:var(--border-radius-md);'
-                        f'padding:0.7rem;margin-bottom:0.5rem;">'
-                        f'<b style="font-size:14px;">{_item.get("ticker","")}</b> '
-                        f'<span style="color:#e74c3c;font-size:12px;">%{_item.get("miktar_pct",0)} azalt</span><br>'
-                        f'<span style="font-size:11px;color:var(--color-text-tertiary);">'
-                        f'{_item.get("gercekle","Hemen")} · {_item.get("neden","")}</span>'
-                        f'</div>',
-                        unsafe_allow_html=True,
-                    )
-
-            # Al / Artır
-            with _ak_c2:
-                st.markdown(
-                    '<div style="font-size:0.65rem;font-weight:500;color:#00c48c;'
-                    'text-transform:uppercase;margin-bottom:0.5rem;">📈 Al / Artır</div>',
-                    unsafe_allow_html=True,
-                )
-                for _item in _aks.get("al_arttir", []):
-                    _src_emoji = {"watchlist": "👁", "radar": "🔭", "sürpriz": "⚡"}.get(
-                        _item.get("kaynak","").lower(), "📊")
-                    st.markdown(
-                        f'<div style="background:var(--color-background-secondary);'
-                        f'border:0.5px solid #00c48c44;border-radius:var(--border-radius-md);'
-                        f'padding:0.7rem;margin-bottom:0.5rem;">'
-                        f'<b style="font-size:14px;">{_item.get("ticker","")}</b> '
-                        f'<span style="color:#00c48c;font-size:12px;">Nakit %{_item.get("nakit_pct",0)}</span> '
-                        f'{_src_emoji}<br>'
-                        + (f'<span style="font-size:11px;">Hedef: ${_item.get("hedef_fiyat",0):.0f} · '
-                           f'Stop: ${_item.get("stop_loss",0):.0f}</span><br>'
-                           if _item.get("hedef_fiyat") else "")
-                        + f'<span style="font-size:11px;color:var(--color-text-tertiary);">'
-                        f'{_item.get("neden","")}</span>'
-                        f'</div>',
-                        unsafe_allow_html=True,
-                    )
-
-            # Bekle / İzle (Koşullu)
-            with _ak_c3:
-                st.markdown(
-                    '<div style="font-size:0.65rem;font-weight:500;color:#ffb300;'
-                    'text-transform:uppercase;margin-bottom:0.5rem;">⏳ Koşullu / Bekle</div>',
-                    unsafe_allow_html=True,
-                )
-                for _item in _aks.get("bekle_izle", []):
-                    st.markdown(
-                        f'<div style="background:var(--color-background-secondary);'
-                        f'border:0.5px solid #ffb30044;border-radius:var(--border-radius-md);'
-                        f'padding:0.7rem;margin-bottom:0.5rem;">'
-                        f'<b style="font-size:14px;">{_item.get("ticker","")}</b> '
-                        f'<span style="color:#ffb300;font-size:12px;">{_item.get("islem","")}</span><br>'
-                        f'<span style="font-size:11px;color:#ffb300;">📌 {_item.get("kosul","")}</span><br>'
-                        f'<span style="font-size:11px;color:var(--color-text-tertiary);">'
-                        f'{_item.get("neden","")}</span>'
-                        f'</div>',
-                        unsafe_allow_html=True,
-                    )
-
-            # Nakit rezerv
-            _nakit_res = _aks.get("nakit_rezerv_pct", 0)
-            if _nakit_res > 0:
-                st.markdown(
-                    f'<div style="background:var(--color-background-secondary);'
-                    f'border:0.5px solid var(--color-border-secondary);'
-                    f'border-radius:var(--border-radius-md);padding:0.6rem 1rem;'
-                    f'font-size:0.75rem;margin-top:0.3rem;">'
-                    f'💵 <b>Nakit Rezerv: %{_nakit_res}</b> — '
-                    f'{_aks.get("nakit_rezerv_neden","")}'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
-
-        # Vade Planları
-        for _vade_key, _vade_label, _vade_color in [
-            ("kisa_vade",  "📅 Kısa Vade (1-3 Ay)",    "#4fc3f7"),
-            ("orta_vade",  "📆 Orta Vade (3-12 Ay)",   "#ce93d8"),
-            ("uzun_vade",  "🗓️ Uzun Vade (1-3 Yıl)",   "#ffb300"),
-        ]:
-            _vade = _s.get(_vade_key, {})
-            if not _vade:
-                continue
-
-            with st.expander(
-                f"{_vade_label} — {_vade.get('senaryo_baz', _vade.get('hedef_portfoy',''))[:60]}",
-                expanded=(_vade_key == "kisa_vade"),
-            ):
-                _v1, _v2 = st.columns(2)
-                with _v1:
-                    if _vade.get("senaryo_baz"):
-                        st.markdown(
-                            f'<div style="font-size:0.7rem;color:{_vade_color};'
-                            f'font-weight:500;margin-bottom:4px;">Ana Senaryo</div>'
-                            f'<div style="font-size:0.78rem;">{_vade["senaryo_baz"]}</div>',
-                            unsafe_allow_html=True,
-                        )
-                    elif _vade.get("hedef_portfoy"):
-                        st.markdown(
-                            f'<div style="font-size:0.7rem;color:{_vade_color};'
-                            f'font-weight:500;margin-bottom:4px;">Hedef Portföy</div>'
-                            f'<div style="font-size:0.78rem;">{_vade["hedef_portfoy"]}</div>',
-                            unsafe_allow_html=True,
-                        )
-                with _v2:
-                    if _vade.get("senaryo_risk"):
-                        st.markdown(
-                            f'<div style="font-size:0.7rem;color:#e74c3c;'
-                            f'font-weight:500;margin-bottom:4px;">Risk Senaryosu</div>'
-                            f'<div style="font-size:0.78rem;">{_vade["senaryo_risk"]}</div>',
-                            unsafe_allow_html=True,
-                        )
-
-                # Ana Aksiyonlar
-                for _act in _vade.get("aksiyonlar", []):
-                    st.markdown(
-                        f'<div style="font-size:0.75rem;padding:3px 0;'
-                        f'border-bottom:0.5px solid var(--color-border-tertiary);">',
-                        unsafe_allow_html=True,
-                    )
-                    st.markdown(f'• {_act}', unsafe_allow_html=False)
-
-                # Risk Senaryosu Aksiyonları
-                _risk_acts = _vade.get("risk_aksiyonlar", [])
-                if _risk_acts:
-                    st.markdown(
-                        '<div style="font-size:0.65rem;color:#e74c3c;font-weight:600;'
-                        'text-transform:uppercase;letter-spacing:0.06em;'
-                        'margin:10px 0 5px;padding-top:8px;'
-                        'border-top:1px dashed #e74c3c44;">🚨 Risk Senaryosu Gerçekleşirse</div>',
-                        unsafe_allow_html=True,
-                    )
-                    for _ra in _risk_acts:
-                        st.markdown(
-                            f'<div style="font-size:0.73rem;padding:3px 0;color:#ffb3b3;'
-                            f'border-bottom:0.5px solid #e74c3c22;">• {_ra}</div>',
-                            unsafe_allow_html=True,
-                        )
-
-        # Risk Uyarıları & Güç Sinyalleri
-        _risk_col, _guc_col = st.columns(2)
-        with _risk_col:
-            _risks = _s.get("risk_uyarilari", [])
-            if _risks:
-                st.markdown(
-                    '<div style="font-size:0.65rem;color:#e74c3c;text-transform:uppercase;'
-                    'letter-spacing:0.08em;margin:0.8rem 0 0.4rem;">⚠️ Risk Uyarıları</div>',
-                    unsafe_allow_html=True,
-                )
-                for _r in _risks:
-                    st.markdown(
-                        f'<div style="font-size:0.75rem;color:var(--color-text-secondary);'
-                        f'padding:2px 0;">• {_r}</div>',
-                        unsafe_allow_html=True,
-                    )
-
-        with _guc_col:
-            _gucs = _s.get("guc_sinyalleri", [])
-            if _gucs:
-                st.markdown(
-                    '<div style="font-size:0.65rem;color:#00c48c;text-transform:uppercase;'
-                    'letter-spacing:0.08em;margin:0.8rem 0 0.4rem;">💪 Güç Sinyalleri</div>',
-                    unsafe_allow_html=True,
-                )
-                for _g in _gucs:
-                    st.markdown(
-                        f'<div style="font-size:0.75rem;color:var(--color-text-secondary);'
-                        f'padding:2px 0;">• {_g}</div>',
-                        unsafe_allow_html=True,
-                    )
-
-        # Yapılacaklar Özeti
-        _aks_sum = _s.get("aksiyonlar", {})
-        _todos   = []
-        for _item in _aks_sum.get("sat_azalt", []):
-            _todos.append(f"🔴 **{_item.get('ticker','')}** — %{_item.get('miktar_pct',0)} azalt · {_item.get('gercekle','Hemen')}")
-        for _item in _aks_sum.get("al_arttir", []):
-            _todos.append(f"🟢 **{_item.get('ticker','')}** — Nakit %{_item.get('nakit_pct',0)} ile al · Hedef ${_item.get('hedef_fiyat',0):.0f}")
-        for _item in _aks_sum.get("bekle_izle", []):
-            _todos.append(f"🟡 **{_item.get('ticker','')}** — {_item.get('kosul','')} olursa {_item.get('islem','al')}")
-        if _aks_sum.get("nakit_rezerv_pct", 0):
-            _todos.append(f"💵 Nakdin %{_aks_sum['nakit_rezerv_pct']}'ini rezervde tut")
-        for _act in _s.get("kisa_vade", {}).get("aksiyonlar", []):
-            _todos.append(f"📅 {_act}")
-
-        if _todos:
             st.markdown('<hr style="border-color:var(--color-border-tertiary);margin:1rem 0;">', unsafe_allow_html=True)
+
+        # ── BÖLÜM 3: PORTFÖY AKSİYONLARI ────────────────────────────────
+        _pa = _dir.get("portfoy_aksiyonlari", {})
+        if _pa:
             st.markdown(
-                '<div style="font-size:0.65rem;color:#4fc3f7;text-transform:uppercase;'
-                'letter-spacing:0.1em;margin-bottom:0.8rem;">YAPILACAKLAR OZETI</div>',
+                '<div style="font-size:0.6rem;color:#e74c3c;font-weight:700;'
+                'text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.6rem;">'
+                '🎯 AKSİYON PLANI</div>',
                 unsafe_allow_html=True,
             )
-            for _i, _todo in enumerate(_todos, 1):
+            _ac1, _ac2, _ac3 = st.columns(3)
+
+            # Hemen yap
+            with _ac1:
+                st.markdown('<div style="font-size:0.65rem;color:#e74c3c;font-weight:600;margin-bottom:6px;">🔴 HEMEN YAP</div>', unsafe_allow_html=True)
+                for _item in _pa.get("hemen_yap", []):
+                    _ticker = _item.get("ticker", "") or _item.get("varlik_sinifi", "")
+                    _eylem  = _item.get("eylem",  "")
+                    _neden  = _item.get("neden",  "")[:70]
+                    _sl     = _item.get("stop_loss")
+                    _hedef  = _item.get("hedef")
+                    _miktar = _item.get("miktar_pct", 0)
+                    st.markdown(
+                        f'<div style="font-size:0.73rem;padding:5px 0;'
+                        f'border-bottom:0.5px solid var(--color-border-tertiary);">'
+                        f'<b>{_ticker}</b> — {_eylem}'
+                        + (f' %{_miktar}' if _miktar else '')
+                        + f'<br><span style="color:var(--color-text-tertiary);font-size:0.65rem;">{_neden}</span>'
+                        + (f'<br><span style="font-size:0.62rem;color:#ffb300;">SL: ${_sl:,.0f}</span>' if _sl else '')
+                        + (f' <span style="font-size:0.62rem;color:#00c48c;">Hedef: ${_hedef:,.0f}</span>' if _hedef else '')
+                        + f'</div>',
+                        unsafe_allow_html=True,
+                    )
+                if not _pa.get("hemen_yap"):
+                    st.caption("Acil aksiyon yok")
+
+            # Koşullu yap
+            with _ac2:
+                st.markdown('<div style="font-size:0.65rem;color:#ffb300;font-weight:600;margin-bottom:6px;">🟡 KOŞULLU YAP</div>', unsafe_allow_html=True)
+                for _item in _pa.get("kosullu_yap", []):
+                    _kosul  = _item.get("kosul",  "")[:60]
+                    _eylem  = _item.get("eylem",  "")
+                    _ticker = _item.get("ticker", "")
+                    st.markdown(
+                        f'<div style="font-size:0.73rem;padding:5px 0;'
+                        f'border-bottom:0.5px solid var(--color-border-tertiary);">'
+                        f'<span style="color:#ffb300;font-size:0.65rem;">Koşul: {_kosul}</span><br>'
+                        f'<b>{_ticker}</b> {_eylem}'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+                if not _pa.get("kosullu_yap"):
+                    st.caption("Koşullu aksiyon yok")
+
+            # İzle/karar ver
+            with _ac3:
+                st.markdown('<div style="font-size:0.65rem;color:#4fc3f7;font-weight:600;margin-bottom:6px;">🔵 İZLE / KARAR VER</div>', unsafe_allow_html=True)
+                for _item in _pa.get("izle_karar_ver", []):
+                    _varlik    = _item.get("varlik",    "")
+                    _izlenecek = _item.get("izlenecek", "")[:60]
+                    _eylem     = _item.get("eylem",     "")
+                    st.markdown(
+                        f'<div style="font-size:0.73rem;padding:5px 0;'
+                        f'border-bottom:0.5px solid var(--color-border-tertiary);">'
+                        f'<b>{_varlik}</b><br>'
+                        f'<span style="color:#4fc3f7;font-size:0.65rem;">{_izlenecek}</span><br>'
+                        f'<span style="font-size:0.65rem;">→ {_eylem}</span>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+                if not _pa.get("izle_karar_ver"):
+                    st.caption("İzleme listesi boş")
+
+            # Nakit oranı
+            _nakit = _pa.get("nakit_orani", {})
+            if _nakit:
+                _nakit_mev = _nakit.get("mevcut_pct",   0)
+                _nakit_one = _nakit.get("onerilen_pct",  15)
+                _nakit_ren = "#e74c3c" if _nakit_mev < _nakit_one - 5 else "#00c48c"
                 st.markdown(
-                    f'<div style="font-size:0.78rem;padding:5px 0;'
-                    f'border-bottom:0.5px solid var(--color-border-tertiary);">'
-                    f'{_i}. {_todo}</div>',
+                    f'<div style="background:var(--color-background-secondary);'
+                    f'border-radius:8px;padding:0.5rem 0.8rem;margin-top:0.6rem;font-size:0.73rem;">'
+                    f'💵 <b>Nakit:</b> Mevcut %{_nakit_mev:.0f} → '
+                    f'<span style="color:{_nakit_ren};">Önerilen %{_nakit_one:.0f}</span>'
+                    f' — {_nakit.get("neden","")[:80]}</div>',
                     unsafe_allow_html=True,
                 )
 
-        # PDF Download + Oluşturulma zamanı
-        st.markdown('<div style="margin-top:1rem;"></div>', unsafe_allow_html=True)
-        _dl_col, _ts_col = st.columns([1, 1])
-        with _dl_col:
-            _html_export = generate_strategy_html(_sr, _port_val_now, _cash_now)
-            _export_date = _sr.get("generated_at", "")[:10]
-            st.download_button(
-                label="📄 HTML İndir (PDF için Yazdır)",
-                data=_html_export.encode("utf-8"),
-                file_name=f"strateji_{_export_date}.html",
-                mime="text/html",
-                key="dl_strategy",
-                use_container_width=True,
-            )
-        with _ts_col:
+        st.markdown('<hr style="border-color:var(--color-border-tertiary);margin:1rem 0;">', unsafe_allow_html=True)
+
+        # ── BÖLÜM 4: RİSK SENARYOSU ──────────────────────────────────────
+        _rs = _dir.get("risk_senaryosu", {})
+        if _rs:
+            with st.expander(f"🚨 Risk Senaryosu — {_rs.get('tetikleyici','')[:60]}", expanded=False):
+                _rs1, _rs2 = st.columns(2)
+                with _rs1:
+                    st.markdown('<div style="font-size:0.65rem;color:#e74c3c;font-weight:600;margin-bottom:4px;">🚨 İlk 24 Saat</div>', unsafe_allow_html=True)
+                    for _a in _rs.get("ilk_24_saat", []):
+                        st.markdown(f'<div style="font-size:0.73rem;padding:3px 0;">• {_a}</div>', unsafe_allow_html=True)
+                    st.markdown('<div style="font-size:0.65rem;color:#ffb300;font-weight:600;margin:8px 0 4px;">🛡️ Savunma</div>', unsafe_allow_html=True)
+                    for _a in _rs.get("savunma", []):
+                        st.markdown(f'<div style="font-size:0.73rem;padding:3px 0;">• {_a}</div>', unsafe_allow_html=True)
+                with _rs2:
+                    st.markdown('<div style="font-size:0.65rem;color:#00c48c;font-weight:600;margin-bottom:4px;">🎯 Alım Fırsatları</div>', unsafe_allow_html=True)
+                    for _f in _rs.get("firsat_listesi", []):
+                        st.markdown(
+                            f'<div style="font-size:0.73rem;padding:3px 0;">'
+                            f'<b>{_f.get("ticker","")}</b> ${_f.get("seviye",0):,.0f} — {_f.get("neden","")[:50]}'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
+                    st.markdown('<div style="font-size:0.65rem;color:#4fc3f7;font-weight:600;margin:8px 0 4px;">📈 Toparlanma Sinyali</div>', unsafe_allow_html=True)
+                    st.markdown(f'<div style="font-size:0.73rem;">{_rs.get("toparlanma_sinyali","")}</div>', unsafe_allow_html=True)
+
+        # ── BÖLÜM 5: VADE PLANLARI ───────────────────────────────────────
+        _vp = _dir.get("vade_planlari", {})
+        if _vp:
             st.markdown(
-                f'<div style="font-size:0.65rem;color:var(--color-text-tertiary);'
-                f'text-align:right;padding-top:0.6rem;">'
-                f'Oluşturulma: {_sr.get("generated_at","")[:16]}</div>',
+                '<div style="font-size:0.6rem;color:#8a9ab0;font-weight:700;'
+                'text-transform:uppercase;letter-spacing:0.1em;margin:0.8rem 0 0.4rem;">'
+                '📅 VADE PLANLARI</div>',
                 unsafe_allow_html=True,
             )
+            _vp1, _vp2, _vp3 = st.columns(3)
+            for _col, _key, _label, _color in [
+                (_vp1, "kisa",  "📅 Kısa Vade (1-3 Ay)",   "#4fc3f7"),
+                (_vp2, "orta",  "📆 Orta Vade (3-12 Ay)",  "#ffb300"),
+                (_vp3, "uzun",  "🗓 Uzun Vade (1-3 Yıl)",  "#00c48c"),
+            ]:
+                _vd = _vp.get(_key, {})
+                with _col:
+                    st.markdown(
+                        f'<div style="background:var(--color-background-secondary);'
+                        f'border-top:3px solid {_color};border-radius:4px;padding:0.7rem;">'
+                        f'<div style="font-size:0.65rem;color:{_color};font-weight:600;">{_label}</div>'
+                        f'<div style="font-size:0.65rem;color:#8a9ab0;margin:4px 0 2px;">Ana Senaryo</div>'
+                        f'<div style="font-size:0.72rem;">{_vd.get("baz_senaryo", _vd.get("tema",""))[:120]}</div>'
+                        f'<div style="font-size:0.65rem;color:#ffb300;margin:4px 0 2px;">Risk Senaryosu</div>'
+                        f'<div style="font-size:0.72rem;">{_vd.get("risk_senaryosu", _vd.get("pozisyonlama",""))[:120]}</div>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+
+        st.markdown('<hr style="border-color:var(--color-border-tertiary);margin:1rem 0;">', unsafe_allow_html=True)
+
+        # ── BÖLÜM 6: YIL SONU HEDEFİ ────────────────────────────────────
+        _yt = _dir.get("yil_sonu_hedefi", {})
+        if _yt:
+            _yt_c1, _yt_c2, _yt_c3, _yt_c4 = st.columns(4)
+            with _yt_c1:
+                st.metric("Hedef", f"%{_yt.get('hedef_pct',40):.0f}")
+            with _yt_c2:
+                st.metric("Mevcut", f"%{_yt.get('mevcut_pct',0):+.1f}")
+            with _yt_c3:
+                st.metric("Kalan", f"%{_yt.get('kalan_pct',0):.1f}")
+            with _yt_c4:
+                st.metric("Aylık Gereken", f"%{_yt.get('gerekan_aylik_pct',0):.1f}")
+            if _yt.get("tavsiye"):
+                st.info(_yt["tavsiye"])
+
+        # ── BÖLÜM 7: BİR SONRAKİ KONTROL ────────────────────────────────
+        _snk = _dir.get("bir_sonraki_kontrol", {})
+        if _snk and _snk.get("tarih"):
+            st.markdown(
+                f'<div style="background:#0d2b1a;border:1px solid #00c48c44;'
+                f'border-radius:8px;padding:0.8rem 1rem;margin-top:0.5rem;">'
+                f'<div style="font-size:0.65rem;color:#00c48c;font-weight:700;'
+                f'text-transform:uppercase;margin-bottom:4px;">📅 BİR SONRAKİ KONTROL</div>'
+                f'<div style="font-size:0.85rem;font-weight:600;">{_snk.get("tarih","")}</div>'
+                f'<div style="font-size:0.73rem;color:#8a9ab0;">{_snk.get("neden","")}</div>',
+                unsafe_allow_html=True,
+            )
+            for _t in _snk.get("tetikleyiciler", [])[:3]:
+                _tip   = _t.get("tip",   "")
+                _acik  = _t.get("aciklama", "")
+                _esik  = _t.get("esik",  "")
+                _tip_emoji = {"fiyat": "💰", "takvim": "📅", "durum": "📊"}.get(_tip, "•")
+                st.markdown(
+                    f'<div style="font-size:0.7rem;padding:2px 0;">'
+                    f'{_tip_emoji} {_acik}'
+                    + (f' — <b>{_esik}</b>' if _esik else '')
+                    + f'</div>',
+                    unsafe_allow_html=True,
+                )
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        # ── HTML Export ───────────────────────────────────────────────────
+        st.markdown('<div style="margin-top:1rem;"></div>', unsafe_allow_html=True)
+        from datetime import datetime as _dt_strat2
+        _export_ts = _dt_strat2.now().strftime("%Y-%m-%d")
+        st.download_button(
+            label="📄 Raporu İndir (HTML)",
+            data=json.dumps(_dir, ensure_ascii=False, indent=2).encode("utf-8"),
+            file_name=f"strateji_{_export_ts}.json",
+            mime="application/json",
+            key="dl_strategy_json",
+            use_container_width=False,
+        )
+
