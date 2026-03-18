@@ -624,8 +624,24 @@ def fetch_tefas_fund(fund_code: str) -> dict:
     start_date = (datetime.now() - timedelta(days=365)).strftime("%d.%m.%Y")
     code       = fund_code.upper().strip()
 
+    # TEFAS session cookie gerektiriyor — önce ana sayfayı ziyaret et
+    session = requests.Session()
+    session.headers.update({
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                      "Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "tr-TR,tr;q=0.9,en;q=0.8",
+    })
+
+    # Session cookie al
+    try:
+        session.get(
+            "https://www.tefas.gov.tr/FonAnaliz.aspx",
+            timeout=15,
+        )
+    except Exception as e:
+        logger.debug("TEFAS session init failed: %s", e)
+
     HEADERS = {
-        "User-Agent":       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Content-Type":     "application/x-www-form-urlencoded; charset=UTF-8",
         "Accept":           "application/json, text/javascript, */*; q=0.01",
         "Referer":          "https://www.tefas.gov.tr/FonAnaliz.aspx",
@@ -633,10 +649,9 @@ def fetch_tefas_fund(fund_code: str) -> dict:
         "X-Requested-With": "XMLHttpRequest",
     }
 
-    # Önce BindFundInfo ile anlık fiyat + meta verisi çek (daha hızlı)
-    def _try_bind_info(fontip_val: str) -> dict | None:
+    def _try_bind_info(fontip_val: str) -> list | None:
         try:
-            r = requests.post(
+            r = session.post(
                 "https://www.tefas.gov.tr/api/DB/BindHistoryInfo",
                 data={
                     "fontip":   fontip_val,
@@ -649,37 +664,24 @@ def fetch_tefas_fund(fund_code: str) -> dict:
             )
             if r.status_code != 200:
                 return None
-            records = r.json().get("data", [])
+            rj = r.json()
+            records = rj.get("data", [])
             if records:
                 return records
         except Exception as e:
             logger.debug("TEFAS BindHistoryInfo fontip=%s failed: %s", fontip_val, e)
         return None
 
-    # fontip değerlerini sırayla dene
+    # Tüm fontip değerlerini dene
     records = None
-    for fontip in ["", "YAT", "HIS", "BOR", "KAR", "DEG", "PAR"]:
+    for fontip in ["", "YAT", "HIS", "BYF", "BOR", "KAR", "DEG", "PAR", "ALT"]:
         records = _try_bind_info(fontip)
         if records:
-            logger.debug("TEFAS %s bulundu, fontip=%s, %d kayıt", code, fontip, len(records))
+            logger.info("TEFAS %s bulundu fontip=%r, %d kayıt", code, fontip, len(records))
             break
 
     if not records:
-        # Son çare: BindFundComparison endpoint
-        try:
-            r2 = requests.post(
-                "https://www.tefas.gov.tr/api/DB/BindFundComparison",
-                data={"fonkod": code, "bastarih": start_date, "bittarih": end_date},
-                headers=HEADERS,
-                timeout=15,
-            )
-            if r2.status_code == 200:
-                records = r2.json().get("data", [])
-        except Exception as e:
-            logger.debug("TEFAS BindFundComparison failed: %s", e)
-
-    if not records:
-        logger.warning("TEFAS: %s fonu hiçbir endpoint/fontip ile bulunamadı", code)
+        logger.warning("TEFAS: %s bulunamadı", code)
         return {}
 
     # Fiyat hesapla
