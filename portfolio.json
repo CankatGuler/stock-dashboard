@@ -380,7 +380,18 @@
       "currency": "USD",
       "added": "2026-03-18 20:57",
       "updated": "2026-03-18 20:57"
+    },
+    {
+      "ticker": "APT21794-USD",
+      "shares": 41.37858,
+      "avg_cost": 5.42,
+      "sector": "Kripto",
+      "notes": "",
+      "asset_class": "crypto",
+      "currency": "USD",
+      "added": "2026-03-18 20:58",
+      "updated": "2026-03-18 20:58"
     }
   ],
-  "cash": -353632.14
+  "cash": -353856.41
 }
