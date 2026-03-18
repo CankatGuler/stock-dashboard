@@ -160,6 +160,17 @@
       "currency": "TRY",
       "added": "2026-03-18 18:32",
       "updated": "2026-03-18 18:32"
+    },
+    {
+      "ticker": "URA",
+      "shares": 101622.0,
+      "avg_cost": 1.899187,
+      "sector": "TEFAS",
+      "notes": "ATA Portföy Enerji Değişken Fon",
+      "asset_class": "tefas",
+      "currency": "TRY",
+      "added": "2026-03-18 18:34",
+      "updated": "2026-03-18 18:34"
     }
   ],
   "cash": 1060.76
