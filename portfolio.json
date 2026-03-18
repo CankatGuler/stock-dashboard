@@ -193,6 +193,17 @@
       "currency": "TRY",
       "added": "2026-03-18 18:39",
       "updated": "2026-03-18 18:39"
+    },
+    {
+      "ticker": "XAGTRY=X",
+      "shares": 506.84,
+      "avg_cost": 70.4176,
+      "sector": "Gümüş",
+      "notes": "Gümüş Gram",
+      "asset_class": "commodity",
+      "currency": "TRY",
+      "added": "2026-03-18 19:17",
+      "updated": "2026-03-18 19:17"
     }
   ],
   "cash": -343513.24
