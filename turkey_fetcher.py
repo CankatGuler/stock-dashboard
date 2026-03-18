@@ -608,40 +608,72 @@ def fetch_turkey_correlations() -> dict:
 
 def fetch_tefas_fund(fund_code: str) -> dict:
     """
-    TEFAS fon verisi çek — 3 farklı yöntemle dener.
+    TEFAS fon verisi çek.
 
-    Yöntem 1: TEFAS API (session cookie ile, tüm fontip değerleri)
-    Yöntem 2: TEFAS HTML scraping (FonAnaliz.aspx)
-    Yöntem 3: fundturkey.com veya finans.mynet.com alternatif kaynak
+    Yöntem 1: tefas-crawler paketi (en güvenilir)
+    Yöntem 2: TEFAS API (session + tüm fontip değerleri)
+    Yöntem 3: TEFAS HTML scraping
     """
     import requests
-    from bs4 import BeautifulSoup
 
     code = fund_code.upper().strip()
+    today     = datetime.now()
+    yesterday = today - timedelta(days=5)  # hafta sonu/tatil buffer
+    start_1y  = today - timedelta(days=380)
 
-    end_date   = datetime.now().strftime("%d.%m.%Y")
-    start_date = (datetime.now() - timedelta(days=90)).strftime("%d.%m.%Y")
-    start_1y   = (datetime.now() - timedelta(days=380)).strftime("%d.%m.%Y")
-
-    session = requests.Session()
-    session.headers.update({
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/122.0.0.0 Safari/537.36"
-        ),
-        "Accept-Language": "tr-TR,tr;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br",
-    })
-
-    # ── Yöntem 1: TEFAS API (tüm fontip değerleri + session) ─────────────
+    # ── Yöntem 1: tefas-crawler paketi ───────────────────────────────────
     try:
-        # Session cookie al
+        from tefas import Crawler
+        tefas_crawler = Crawler()
+        df = tefas_crawler.fetch(
+            start=yesterday.strftime("%Y-%m-%d"),
+            end=today.strftime("%Y-%m-%d"),
+            name=code,
+        )
+        if df is not None and len(df) > 0:
+            latest_row = df.iloc[-1]
+            price = float(latest_row.get("price", 0) or latest_row.get("FIYAT", 0) or 0)
+            if price > 0:
+                # 1 yıllık veri çek getiri hesabı için
+                df_1y = tefas_crawler.fetch(
+                    start=start_1y.strftime("%Y-%m-%d"),
+                    end=today.strftime("%Y-%m-%d"),
+                    name=code,
+                )
+                p_1m = p_3m = p_1y = price
+                if df_1y is not None and len(df_1y) > 5:
+                    n = len(df_1y)
+                    p_1m = float(df_1y.iloc[max(0, n-22)].get("price", price) or price)
+                    p_3m = float(df_1y.iloc[max(0, n-66)].get("price", price) or price)
+                    p_1y = float(df_1y.iloc[0].get("price", price) or price)
+
+                logger.info("TEFAS crawler başarılı: %s = %.4f TL", code, price)
+                return {
+                    "fund_code": code,
+                    "price":     round(price, 4),
+                    "ret_1m":    round((price - p_1m) / p_1m * 100, 2) if p_1m > 0 else 0,
+                    "ret_3m":    round((price - p_3m) / p_3m * 100, 2) if p_3m > 0 else 0,
+                    "ret_1y":    round((price - p_1y) / p_1y * 100, 2) if p_1y > 0 else 0,
+                    "date":      today.strftime("%Y-%m-%d"),
+                    "source":    "tefas-crawler",
+                }
+    except Exception as e:
+        logger.debug("tefas-crawler başarısız: %s", e)
+
+    # ── Yöntem 2: TEFAS API (session cookie ile) ─────────────────────────
+    try:
+        session = requests.Session()
+        session.headers.update({
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/122.0.0.0 Safari/537.36"
+            ),
+        })
         session.get(
             f"https://www.tefas.gov.tr/FonAnaliz.aspx?fonKod={code}",
             timeout=15,
         )
-
         api_headers = {
             "Content-Type":     "application/x-www-form-urlencoded; charset=UTF-8",
             "Accept":           "application/json, text/javascript, */*; q=0.01",
@@ -649,158 +681,100 @@ def fetch_tefas_fund(fund_code: str) -> dict:
             "Origin":           "https://www.tefas.gov.tr",
             "X-Requested-With": "XMLHttpRequest",
         }
+        end_str   = today.strftime("%d.%m.%Y")
+        start_str = start_1y.strftime("%d.%m.%Y")
 
-        # Tüm olası fontip değerlerini dene
-        for fontip in ["", "YAT", "HIS", "BYF", "BOR", "KAR", "DEG", "PAR",
-                       "ALT", "EMK", "HYF", "KYF", "DYF"]:
-            for url in [
-                "https://www.tefas.gov.tr/api/DB/BindHistoryInfo",
-                "https://www.tefas.gov.tr/api/DB/BindHistoryAllocation",
-            ]:
-                try:
-                    r = session.post(
-                        url,
-                        data={
-                            "fontip":   fontip,
-                            "bastarih": start_1y,
-                            "bittarih": end_date,
-                            "fonkod":   code,
-                        },
-                        headers=api_headers,
-                        timeout=12,
-                    )
-                    if r.status_code == 200:
-                        rj = r.json()
-                        records = rj.get("data", [])
-                        if records and len(records) > 0:
-                            # Fiyat alanını bul
-                            price_field = None
-                            for field in ["FIYAT", "PORTFOYBUYUKLUK", "BIRIMPAYFIYATI"]:
-                                if records[0].get(field):
-                                    price_field = field
-                                    break
-                            if not price_field:
-                                continue
-
-                            latest = records[-1]
-                            oldest = records[0]
-                            price_latest = float(latest.get(price_field) or 0)
-                            price_oldest = float(oldest.get(price_field) or 0)
-
-                            if price_latest <= 0:
-                                continue
-
-                            # Getiri hesapla
-                            n = len(records)
-                            price_1m = float(records[max(0, n-22)].get(price_field) or price_oldest)
-                            price_3m = float(records[max(0, n-66)].get(price_field) or price_oldest)
-
-                            ret_1m = round((price_latest - price_1m)  / price_1m  * 100, 2) if price_1m  > 0 else 0
-                            ret_3m = round((price_latest - price_3m)  / price_3m  * 100, 2) if price_3m  > 0 else 0
-                            ret_1y = round((price_latest - price_oldest) / price_oldest * 100, 2) if price_oldest > 0 else 0
-
-                            logger.info("TEFAS API başarılı: %s (fontip=%r, %d kayıt)", code, fontip, n)
-                            return {
-                                "fund_code": code,
-                                "price":     round(price_latest, 4),
-                                "ret_1m":    ret_1m,
-                                "ret_3m":    ret_3m,
-                                "ret_1y":    ret_1y,
-                                "date":      latest.get("TARIH", ""),
-                                "source":    "tefas_api",
-                            }
-                except Exception:
+        for fontip in ["", "YAT", "HIS", "BYF", "BOR", "KAR", "DEG", "PAR", "ALT", "EMK"]:
+            try:
+                r = session.post(
+                    "https://www.tefas.gov.tr/api/DB/BindHistoryInfo",
+                    data={"fontip": fontip, "bastarih": start_str,
+                          "bittarih": end_str, "fonkod": code},
+                    headers=api_headers,
+                    timeout=12,
+                )
+                if r.status_code != 200:
                     continue
-    except Exception as e:
-        logger.debug("TEFAS API yöntemi başarısız: %s", e)
+                records = r.json().get("data", [])
+                if not records:
+                    continue
 
-    # ── Yöntem 2: TEFAS HTML scraping ────────────────────────────────────
-    try:
-        r = session.get(
-            f"https://www.tefas.gov.tr/FonAnaliz.aspx?fonKod={code}",
-            timeout=15,
-        )
-        if r.status_code == 200 and code in r.text:
-            soup = BeautifulSoup(r.content, "html.parser")
+                # Fiyat alanını bul
+                price_field = None
+                sample = records[-1]
+                for f in ["FIYAT", "BIRIMPAYFIYATI", "PORTFOYBUYUKLUK"]:
+                    if sample.get(f) and float(sample.get(f) or 0) > 0:
+                        price_field = f
+                        break
+                if not price_field:
+                    continue
 
-            # Son fiyat — farklı CSS sınıflarını dene
-            price = 0.0
-            for selector in [
-                "span.main-indicators > ul > li:first-child span",
-                "#ctl00_MainContent_FormViewMainIndicators_LabelPriceValue",
-                ".price-indicator",
-                "span[id*='Price']",
-                "span[id*='Fiyat']",
-            ]:
-                el = soup.select_one(selector)
-                if el:
-                    raw = el.get_text(strip=True).replace(",", ".").replace("%", "").strip()
-                    try:
-                        price = float(raw)
-                        if price > 0:
-                            break
-                    except ValueError:
-                        pass
+                latest = records[-1]
+                price = float(latest.get(price_field) or 0)
+                if price <= 0:
+                    continue
 
-            # Getiri değerleri
-            def _get_return(soup_obj, identifiers):
-                for ident in identifiers:
-                    el = soup_obj.find(id=ident) or soup_obj.select_one(f"[id*='{ident}']")
-                    if el:
-                        raw = el.get_text(strip=True).replace(",", ".").replace("%", "").strip()
-                        try:
-                            return float(raw)
-                        except ValueError:
-                            pass
-                return 0.0
+                n = len(records)
+                p_1m = float(records[max(0, n-22)].get(price_field) or price)
+                p_3m = float(records[max(0, n-66)].get(price_field) or price)
+                p_1y = float(records[0].get(price_field) or price)
 
-            ret_1m = _get_return(soup, ["Return1M", "OneMonth", "BirAy", "LabelOneMonth"])
-            ret_3m = _get_return(soup, ["Return3M", "ThreeMonth", "UcAy",  "LabelThreeMonth"])
-            ret_1y = _get_return(soup, ["Return1Y", "OneYear",   "BirYil","LabelOneYear"])
-
-            if price > 0:
-                logger.info("TEFAS HTML scraping başarılı: %s, fiyat: %s", code, price)
+                logger.info("TEFAS API başarılı: %s fontip=%r, %.4f TL", code, fontip, price)
                 return {
                     "fund_code": code,
                     "price":     round(price, 4),
-                    "ret_1m":    ret_1m,
-                    "ret_3m":    ret_3m,
-                    "ret_1y":    ret_1y,
-                    "date":      datetime.now().strftime("%Y-%m-%d"),
-                    "source":    "tefas_html",
+                    "ret_1m":    round((price - p_1m) / p_1m * 100, 2) if p_1m > 0 else 0,
+                    "ret_3m":    round((price - p_3m) / p_3m * 100, 2) if p_3m > 0 else 0,
+                    "ret_1y":    round((price - p_1y) / p_1y * 100, 2) if p_1y > 0 else 0,
+                    "date":      latest.get("TARIH", today.strftime("%Y-%m-%d")),
+                    "source":    "tefas-api",
+                }
+            except Exception:
+                continue
+    except Exception as e:
+        logger.debug("TEFAS API yöntemi başarısız: %s", e)
+
+    # ── Yöntem 3: TEFAS HTML scraping ────────────────────────────────────
+    try:
+        from bs4 import BeautifulSoup
+        session2 = requests.Session()
+        session2.headers.update({
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        })
+        r = session2.get(
+            f"https://www.tefas.gov.tr/FonAnaliz.aspx?fonKod={code}",
+            timeout=15,
+        )
+        if r.status_code == 200:
+            soup = BeautifulSoup(r.content, "html.parser")
+            # TEFAS sayfasındaki data-value attribute veya metin
+            price = 0.0
+            # Tablo hücreleri veya span'lar içinde fiyat ara
+            for el in soup.find_all(["span", "td", "div"]):
+                text = el.get_text(strip=True).replace(",", ".").replace(" ", "")
+                try:
+                    val = float(text)
+                    # TEFAS fon fiyatı genellikle 0.1 - 1000 TL arası
+                    if 0.01 < val < 10000:
+                        price = val
+                        break
+                except ValueError:
+                    pass
+            if price > 0:
+                logger.info("TEFAS HTML scraping başarılı: %s = %.4f", code, price)
+                return {
+                    "fund_code": code,
+                    "price":     round(price, 4),
+                    "ret_1m":    0.0,
+                    "ret_3m":    0.0,
+                    "ret_1y":    0.0,
+                    "date":      today.strftime("%Y-%m-%d"),
+                    "source":    "tefas-html",
                 }
     except Exception as e:
         logger.debug("TEFAS HTML scraping başarısız: %s", e)
 
-    # ── Yöntem 3: Alternatif kaynaklar ───────────────────────────────────
-    alt_urls = [
-        f"https://fundturkey.com.tr/api/fund/{code}",
-        f"https://www.isyatirim.com.tr/tr-tr/analiz/yatirim-fonu/sayfalar/fon.aspx?fonKod={code}",
-    ]
-    for alt_url in alt_urls:
-        try:
-            r = session.get(alt_url, timeout=10)
-            if r.status_code == 200 and r.text:
-                try:
-                    data = r.json()
-                    price = float(data.get("price") or data.get("lastPrice") or data.get("fiyat") or 0)
-                    if price > 0:
-                        return {
-                            "fund_code": code,
-                            "price":     round(price, 4),
-                            "ret_1m":    float(data.get("ret1m") or data.get("return1m") or 0),
-                            "ret_3m":    float(data.get("ret3m") or data.get("return3m") or 0),
-                            "ret_1y":    float(data.get("ret1y") or data.get("return1y") or 0),
-                            "date":      datetime.now().strftime("%Y-%m-%d"),
-                            "source":    alt_url.split("/")[2],
-                        }
-                except Exception:
-                    pass
-        except Exception:
-            pass
-
-    # ── Hiçbiri çalışmadı ────────────────────────────────────────────────
-    logger.error("TEFAS: %s için tüm yöntemler başarısız oldu", code)
+    logger.error("TEFAS: %s için tüm yöntemler başarısız", code)
     return {}
 
 
