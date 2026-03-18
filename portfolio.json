@@ -490,7 +490,18 @@
       "currency": "USD",
       "added": "2026-03-18 21:31",
       "updated": "2026-03-18 21:31"
+    },
+    {
+      "ticker": "SOULS-USD",
+      "shares": 156.364,
+      "avg_cost": 0.00221,
+      "sector": "Kripto",
+      "notes": "",
+      "asset_class": "crypto",
+      "currency": "USD",
+      "added": "2026-03-18 21:32",
+      "updated": "2026-03-18 21:32"
     }
   ],
-  "cash": -367310.78
+  "cash": -367311.13
 }
