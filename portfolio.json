@@ -369,17 +369,6 @@
       "currency": "USD",
       "added": "2026-03-18 20:00",
       "updated": "2026-03-18 20:00"
-    },
-    {
-      "ticker": "JUP-USD",
-      "shares": 933.6654,
-      "avg_cost": 0.80245455,
-      "sector": "Kripto",
-      "notes": "",
-      "asset_class": "crypto",
-      "currency": "USD",
-      "added": "2026-03-18 20:18",
-      "updated": "2026-03-18 20:18"
     }
   ],
   "cash": -351533.2
