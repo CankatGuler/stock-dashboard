@@ -53,5 +53,31 @@
     "total_value": 5946.0184953200005,
     "position_count": 13,
     "extra": {}
+  },
+  {
+    "date": "2026-03-18",
+    "timestamp": "2026-03-18T09:41:53",
+    "type": "risk",
+    "analysis": "# KURUMSAL PORTFÖY ANALİZ RAPORU\n\n**Tarih:** Haziran 2025  \n**Portföy Değeri:** $5,949  \n**Toplam P&L:** -$27 (-%0.45)\n\n---\n\n## 🔴 RİSK DEĞERLENDİRMESİ\n\n| Risk Kategorisi | Puan | Açıklama |\n|---|---|---|\n| **Sektörel Yoğunlaşma** | 8/10 | Teknoloji %32 ile kritik seviyede. AVGO, CRWD, ZETA, AMD aynı sektörde ve hepsi zararda |\n| **Korelasyon Riski** | 7/10 | Tech hisseleri + IREN/SOFI (kripto-tech korelasyonu) portföyün %50'sinden fazlası aynı yönde hareket eder |\n| **Sistematik/Makro Risk** | 6/10 | Fed faiz politikası değişiminde growth hisseleri (CRWD, ZETA, SOFI, RKLB) sert etkilenir |\n| **Likidite Riski** | 3/10 | Tüm hisseler yüksek hacimli, likidite sorunu yok |\n| **Döviz/Jeopolitik Risk** | 5/10 | AVGO (Çin geliri %30+), AMD (Çin satış kısıtlamaları), CCJ (Kazakistan uranyum) riskleri mevcut |\n\n**Genel Risk Skoru: 6.5/10** — 🟠 **YÜKSEK**\n\n> Portföy tek senaryoya (AI/Tech rallisi devamı) fazla bağımlı. Bu senaryo gerçekleşmezse -%20+ drawdown riski var.\n\n---\n\n## 📊 SEKTÖREL ANALİZ\n\n### Kritik Yoğunlaşma: Teknoloji (%32)\n```\nAVGO ($889) + CRWD ($406) + ZETA ($330) + AMD ($262) = $1,887\n→ Portföyün %32'si, toplam P&L: -$152 (hepsi zararda!)\n```\n\n### Tehlike: Gizli Korelasyonlar\n\n**\"AI Hype\" Sepeti (Aynı Anda Düşer):**\n| Hisse | Neden Korele |\n|-------|--------------|\n| AVGO | AI çip satışları |\n| AMD | AI GPU rekabeti |\n| VRT | Data center soğutma |\n| IREN | Bitcoin mining + AI compute |\n| CRWD | Cloud security (tech capex bağımlı) |\n\n> ⚠️ Bu 5 hisse = $2,456 (%41). AI sentiment bozulursa hepsi birlikte düşer.\n\n**\"Spekülatif Growth\" Sepeti:**\n| Hisse | Beta | Risk |\n|-------|------|------|\n| SOFI | ~2.0 | Fintech, kârsız |\n| ZETA | ~2.2 | Kârsız AdTech |\n| RKLB | ~2.5 | Uzay, kârsız |\n| IREN | ~2.3 | Kripto bağımlı |\n\n> Bu 4 hisse portföyün %24'ü ama volatilitenin %40'ından sorumlu.\n\n---\n\n## ⚡ ACİL AKSİYON ÖNERİLERİ\n\n### **[1. Öncelik]** 🔴 SOFI → **TAMAMEN SAT**\n\n| Metrik | Değer |\n|--------|-------|\n| **Durum** | -%27.8 zararda, -$108 P&L |\n| **Güncel Değer** |",
+    "macro_regime": "",
+    "scenario": "",
+    "tickers": [
+      "AMZN",
+      "AVGO",
+      "PPA",
+      "IREN",
+      "VRT",
+      "CRWD",
+      "SCHD",
+      "CCJ",
+      "RKLB",
+      "ZETA",
+      "SOFI",
+      "AMD",
+      "NBIS"
+    ],
+    "total_value": 5948.9935563,
+    "position_count": 13,
+    "extra": {}
   }
 ]
