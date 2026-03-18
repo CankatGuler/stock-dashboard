@@ -182,6 +182,17 @@
       "currency": "TRY",
       "added": "2026-03-18 18:36",
       "updated": "2026-03-18 18:36"
+    },
+    {
+      "ticker": "TSI",
+      "shares": 48000.0,
+      "avg_cost": 0.173574,
+      "sector": "TEFAS",
+      "notes": "IS Portföy Maksimum Hesap Kısa Vadeli Borçlanma Araçları",
+      "asset_class": "tefas",
+      "currency": "TRY",
+      "added": "2026-03-18 18:39",
+      "updated": "2026-03-18 18:39"
     }
   ],
   "cash": 1060.76
