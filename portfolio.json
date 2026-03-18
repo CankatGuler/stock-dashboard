@@ -259,7 +259,18 @@
       "currency": "USD",
       "added": "2026-03-18 19:43",
       "updated": "2026-03-18 19:43"
+    },
+    {
+      "ticker": "VIRTUAL-USD",
+      "shares": 313.04188,
+      "avg_cost": 1.13,
+      "sector": "Kripto",
+      "notes": "",
+      "asset_class": "crypto",
+      "currency": "USD",
+      "added": "2026-03-18 19:44",
+      "updated": "2026-03-18 19:44"
     }
   ],
-  "cash": -345837.65
+  "cash": -346191.39
 }
