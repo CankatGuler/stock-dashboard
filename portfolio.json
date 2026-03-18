@@ -328,14 +328,14 @@
     },
     {
       "ticker": "EIGEN-USD",
-      "shares": 243.91584,
-      "avg_cost": 1.54,
+      "shares": 376.31384,
+      "avg_cost": 1.5234288693713733,
       "sector": "Kripto",
       "notes": "",
       "asset_class": "crypto",
       "currency": "USD",
       "added": "2026-03-18 19:57",
-      "updated": "2026-03-18 19:57"
+      "updated": "2026-03-18 21:28"
     },
     {
       "ticker": "XAI-USD",
@@ -470,5 +470,5 @@
       "updated": "2026-03-18 21:25"
     }
   ],
-  "cash": -366321.68
+  "cash": -366519.34
 }
