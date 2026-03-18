@@ -391,7 +391,18 @@
       "currency": "USD",
       "added": "2026-03-18 20:58",
       "updated": "2026-03-18 20:58"
+    },
+    {
+      "ticker": "LINK-USD",
+      "shares": 32.81715,
+      "avg_cost": 22.83,
+      "sector": "Kripto",
+      "notes": "",
+      "asset_class": "crypto",
+      "currency": "USD",
+      "added": "2026-03-18 21:03",
+      "updated": "2026-03-18 21:03"
     }
   ],
-  "cash": -361084.19
+  "cash": -361833.41
 }
