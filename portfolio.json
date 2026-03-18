@@ -336,7 +336,18 @@
       "currency": "USD",
       "added": "2026-03-18 19:53",
       "updated": "2026-03-18 19:53"
+    },
+    {
+      "ticker": "ZIL-USD",
+      "shares": 15030.3,
+      "avg_cost": 0.03031709,
+      "sector": "Kripto",
+      "notes": "",
+      "asset_class": "crypto",
+      "currency": "USD",
+      "added": "2026-03-18 19:55",
+      "updated": "2026-03-18 19:55"
     }
   ],
-  "cash": -349478.17
+  "cash": -349933.84
 }
