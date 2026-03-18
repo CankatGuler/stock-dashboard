@@ -204,6 +204,17 @@
       "currency": "TRY",
       "added": "2026-03-18 19:17",
       "updated": "2026-03-18 19:17"
+    },
+    {
+      "ticker": "ALTIN_GRAM_TRY",
+      "shares": 70.9,
+      "avg_cost": 6790.86,
+      "sector": "Altın",
+      "notes": "Altın Gram",
+      "asset_class": "commodity",
+      "currency": "TRY",
+      "added": "2026-03-18 19:31",
+      "updated": "2026-03-18 19:31"
     }
   ],
   "cash": -343513.24
