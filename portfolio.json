@@ -424,7 +424,18 @@
       "currency": "USD",
       "added": "2026-03-18 21:09",
       "updated": "2026-03-18 21:09"
+    },
+    {
+      "ticker": "TIA-USD",
+      "shares": 241.90555,
+      "avg_cost": 2.649,
+      "sector": "Kripto",
+      "notes": "",
+      "asset_class": "crypto",
+      "currency": "USD",
+      "added": "2026-03-18 21:10",
+      "updated": "2026-03-18 21:10"
     }
   ],
-  "cash": -362995.38
+  "cash": -363636.19
 }
