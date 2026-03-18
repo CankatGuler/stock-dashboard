@@ -270,7 +270,18 @@
       "currency": "USD",
       "added": "2026-03-18 19:44",
       "updated": "2026-03-18 19:44"
+    },
+    {
+      "ticker": "BTC-USD",
+      "shares": 0.00253746,
+      "avg_cost": 48015.76,
+      "sector": "Kripto",
+      "notes": "",
+      "asset_class": "crypto",
+      "currency": "USD",
+      "added": "2026-03-18 19:45",
+      "updated": "2026-03-18 19:45"
     }
   ],
-  "cash": -346191.39
+  "cash": -346313.23
 }
