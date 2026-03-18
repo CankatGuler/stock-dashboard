@@ -1764,27 +1764,69 @@ with tab_portfolio:
                     st.rerun()
 
         # Emtia pozisyonları
+        # TRY gram emtialar için özel dönüşüm
+        GRAM_TICKERS = {
+            "XAUTRY=X": {"label": "Altın", "unit": "TL/gram", "div": 31.1035, "currency": "TRY"},
+            "XAGTRY=X": {"label": "Gümüş", "unit": "TL/gram", "div": 31.1035, "currency": "TRY"},
+        }
+
         _comm_pos = [p for p in load_portfolio() if p.get("asset_class") == "commodity"]
         if _comm_pos:
             import yfinance as _yf_e
+            _usd_try_e = 32.0
+            try:
+                _usd_try_e = float(_yf_e.Ticker("USDTRY=X").fast_info.last_price or 32.0)
+            except Exception:
+                pass
+
             _e_rows = []
             for _ep in _comm_pos:
+                _ticker    = _ep["ticker"]
+                _is_gram   = _ticker in GRAM_TICKERS
+                _gram_info = GRAM_TICKERS.get(_ticker, {})
+                _div       = _gram_info.get("div", 1.0)   # ons → gram bölen
+                _cur       = _gram_info.get("currency", "USD")
+
                 try:
-                    _fi = _yf_e.Ticker(_ep["ticker"]).fast_info
-                    _ep_price = float(getattr(_fi, "last_price", 0) or 0)
-                    _ep_prev  = float(getattr(_fi, "previous_close", _ep_price) or _ep_price)
-                    _ep_chg   = (_ep_price - _ep_prev) / _ep_prev * 100 if _ep_prev > 0 else 0
+                    _fi = _yf_e.Ticker(_ticker).fast_info
+                    _raw_price = float(getattr(_fi, "last_price",     0) or 0)
+                    _raw_prev  = float(getattr(_fi, "previous_close", _raw_price) or _raw_price)
                 except Exception:
-                    _ep_price, _ep_chg = float(_ep.get("avg_cost", 0)), 0
-                _ep_val = _ep["shares"] * _ep_price
-                _ep_pnl = (_ep_price - float(_ep.get("avg_cost", 0))) / float(_ep.get("avg_cost", 1)) * 100
+                    _raw_price = float(_ep.get("avg_cost", 0)) * _div if _is_gram else float(_ep.get("avg_cost", 0))
+                    _raw_prev  = _raw_price
+
+                # Gram fiyatı hesapla
+                if _is_gram and _div > 1:
+                    _ep_price = _raw_price / _div   # TRY/gram
+                    _ep_prev  = _raw_prev  / _div
+                else:
+                    _ep_price = _raw_price
+                    _ep_prev  = _raw_prev
+
+                _ep_chg = (_ep_price - _ep_prev) / _ep_prev * 100 if _ep_prev > 0 else 0
+                _avg    = float(_ep.get("avg_cost", 0))
+
+                # Değer hesabı
+                if _is_gram and _cur == "TRY":
+                    # TRY cinsinden değer → USD'ye çevir
+                    _ep_val = _ep["shares"] * _ep_price / _usd_try_e
+                    _price_disp = f"{_ep_price:,.2f} TL"
+                    _val_disp   = f"${_ep_val:,.2f} (={_ep['shares']*_ep_price:,.0f} TL)"
+                else:
+                    _ep_val   = _ep["shares"] * _ep_price
+                    _price_disp = f"${_ep_price:,.2f}"
+                    _val_disp   = f"${_ep_val:,.2f}"
+
+                _ep_pnl = (_ep_price - _avg) / _avg * 100 if _avg > 0 else 0
+                _label  = _gram_info.get("label", _ticker)
+
                 _e_rows.append({
-                    "Ticker":       _ep["ticker"],
-                    "Adet":         _ep["shares"],
-                    "Ort. Maliyet": f"${float(_ep.get('avg_cost',0)):,.2f}",
-                    "Güncel":       f"${_ep_price:,.2f}",
+                    "Varlık":       _label or _ticker,
+                    "Adet (gram/birim)": f"{_ep['shares']:,.2f}",
+                    "Ort. Maliyet": f"{_avg:,.4f}" + (" TL/g" if _is_gram else " $"),
+                    "Güncel Fiyat": _price_disp,
                     "24s Değ.":     f"{_ep_chg:+.1f}%",
-                    "Değer ($)":    f"${_ep_val:,.2f}",
+                    "Değer":        _val_disp,
                     "K/Z %":        f"{_ep_pnl:+.1f}%",
                 })
             st.dataframe(_e_rows, use_container_width=True)
