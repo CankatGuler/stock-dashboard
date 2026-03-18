@@ -1757,9 +1757,11 @@ with tab_portfolio:
                 key="e_type_radio",
             )
 
+            # Altın/Gümüş gram TL: GC=F/SI=F (USD/oz) × USD/TRY ÷ 31.1035
+            # XAUTRY=X/XAGTRY=X güncellenmemiş — GC=F+kur hesabı daha doğru
             _GRAM_MAP = {
-                "🥇 Altın Gram (TL)": {"ticker": "XAUTRY=X", "label": "Altın", "cost_label": "Ort. Maliyet (TL/gram)", "unit": "gram", "currency": "TRY"},
-                "🥈 Gümüş Gram (TL)": {"ticker": "XAGTRY=X", "label": "Gümüş", "cost_label": "Ort. Maliyet (TL/gram)", "unit": "gram", "currency": "TRY"},
+                "🥇 Altın Gram (TL)": {"ticker": "ALTIN_GRAM_TRY", "label": "Altın", "cost_label": "Ort. Maliyet (TL/gram)", "unit": "gram", "currency": "TRY"},
+                "🥈 Gümüş Gram (TL)": {"ticker": "GUMUS_GRAM_TRY", "label": "Gümüş", "cost_label": "Ort. Maliyet (TL/gram)", "unit": "gram", "currency": "TRY"},
                 "💵 USD Bazlı (Futures/ETF)": {"ticker": "", "label": "", "cost_label": "Ort. Maliyet ($)", "unit": "kontrat/adet", "currency": "USD"},
             }
             _cfg = _GRAM_MAP[_e_type]
@@ -1769,7 +1771,8 @@ with tab_portfolio:
             with _em1:
                 if _is_try_gram:
                     # Ticker sabit, göster ama değiştirme
-                    st.text_input("Ticker (otomatik)", value=_cfg["ticker"],
+                    _ticker_disp = "GC=F × USD/TRY ÷ 31.1 (Altın)" if _cfg["ticker"] == "ALTIN_GRAM_TRY" else "SI=F × USD/TRY ÷ 31.1 (Gümüş)"
+                    st.text_input("Kaynak (otomatik)", value=_ticker_disp,
                                   disabled=True, key="e_ticker_disp")
                     _e_ticker = _cfg["ticker"]
                 else:
@@ -1808,10 +1811,13 @@ with tab_portfolio:
                     st.error("Ticker, miktar ve maliyet zorunludur.")
 
         # Emtia pozisyonları
-        # TRY gram emtialar için özel dönüşüm
+        # TRY gram emtialar — GC=F/SI=F × USD/TRY ÷ 31.1035 = TRY/gram
+        # Hem yeni ticker'lar hem eski XAUTRY=X/XAGTRY=X geriye uyumlu
         GRAM_TICKERS = {
-            "XAUTRY=X": {"label": "Altın", "unit": "TL/gram", "div": 31.1035, "currency": "TRY"},
-            "XAGTRY=X": {"label": "Gümüş", "unit": "TL/gram", "div": 31.1035, "currency": "TRY"},
+            "ALTIN_GRAM_TRY": {"label": "Altın",  "usd_ticker": "GC=F", "div": 31.1035, "currency": "TRY"},
+            "GUMUS_GRAM_TRY": {"label": "Gümüş",  "usd_ticker": "SI=F", "div": 31.1035, "currency": "TRY"},
+            "XAUTRY=X":       {"label": "Altın",  "usd_ticker": "GC=F", "div": 31.1035, "currency": "TRY"},
+            "XAGTRY=X":       {"label": "Gümüş",  "usd_ticker": "SI=F", "div": 31.1035, "currency": "TRY"},
         }
 
         _comm_pos = [p for p in load_portfolio() if p.get("asset_class") == "commodity"]
@@ -1841,8 +1847,17 @@ with tab_portfolio:
 
                 # Gram fiyatı hesapla
                 if _is_gram and _div > 1:
-                    _ep_price = _raw_price / _div   # TRY/gram
-                    _ep_prev  = _raw_prev  / _div
+                    # USD/oz → TRY/gram: GC=F veya SI=F fiyatı al, × kur ÷ 31.1035
+                    _usd_ticker = _gram_info.get("usd_ticker", "GC=F")
+                    try:
+                        _usd_fi    = _yf_e.Ticker(_usd_ticker).fast_info
+                        _usd_oz    = float(getattr(_usd_fi, "last_price",    0) or 0)
+                        _usd_oz_p  = float(getattr(_usd_fi, "previous_close", _usd_oz) or _usd_oz)
+                        _ep_price  = _usd_oz   * _usd_try_e / _div   # TRY/gram
+                        _ep_prev   = _usd_oz_p * _usd_try_e / _div
+                    except Exception:
+                        _ep_price  = _raw_price / _div
+                        _ep_prev   = _raw_prev  / _div
                 else:
                     _ep_price = _raw_price
                     _ep_prev  = _raw_prev
