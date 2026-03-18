@@ -92,12 +92,12 @@
     },
     {
       "ticker": "NBIS",
-      "shares": 4.2337,
+      "shares": 2.2337,
       "avg_cost": 94.47,
       "sector": "Diğer",
       "notes": "",
       "added": "2026-03-16 09:10",
-      "updated": "2026-03-16 09:10"
+      "updated": "2026-03-18 06:31"
     },
     {
       "ticker": "RKLB",
@@ -118,5 +118,5 @@
       "updated": "2026-03-16 09:10"
     }
   ],
-  "cash": 1436.79
+  "cash": 1664.79
 }
