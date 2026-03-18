@@ -325,7 +325,18 @@
       "currency": "USD",
       "added": "2026-03-18 19:52",
       "updated": "2026-03-18 19:52"
+    },
+    {
+      "ticker": "ONDO-USD",
+      "shares": 346.2534,
+      "avg_cost": 0.9364,
+      "sector": "Kripto",
+      "notes": "",
+      "asset_class": "crypto",
+      "currency": "USD",
+      "added": "2026-03-18 19:53",
+      "updated": "2026-03-18 19:53"
     }
   ],
-  "cash": -349153.94
+  "cash": -349478.17
 }
