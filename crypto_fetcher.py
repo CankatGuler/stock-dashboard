@@ -991,10 +991,15 @@ COINGECKO_ID_MAP = {
     "BONK":  "bonk",            "FLOKI": "floki",
     "TRX":   "tron",            "TON":   "the-open-network",
     "SUI":   "sui",             "APT":   "aptos",
+    "STRK":  "starknet",        "MANTA": "manta-network",
+    "ZETA":  "zetachain",       "DYM":   "dymension",
+    "PIXEL": "pixels",          "PORTAL":"portal-2",
+    "SAGA":  "saga-2",          "REZ":   "renzo-protocol",
+    "INJ":   "injective-protocol",
     "ARB":   "arbitrum",        "OP":    "optimism",
     "INJ":   "injective-protocol",
     "SEI":   "sei-network",     "TIA":   "celestia",
-    "JUP":   "jupiter-exchange-solana",
+    "JUP":   "jupiter-ag",
     "PYTH":  "pyth-network",    "WEN":   "wen-4",
     "RNDR":  "render-token",    "FET":   "fetch-ai",
     "AGIX":  "singularitynet",  "OCEAN": "ocean-protocol",
@@ -1064,6 +1069,37 @@ def fetch_price_coingecko(symbol: str) -> dict:
 
         if resp.status_code == 429:
             return {"found": False, "error": "CoinGecko rate limit — biraz bekle"}
+        if resp.status_code == 404:
+            # ID yanlış olabilir — search API ile tekrar dene
+            try:
+                search_resp = requests.get(
+                    "https://api.coingecko.com/api/v3/search",
+                    params={"query": symbol},
+                    headers={"User-Agent": "Mozilla/5.0"},
+                    timeout=10,
+                )
+                if search_resp.status_code == 200:
+                    coins = search_resp.json().get("coins", [])
+                    for coin in coins[:5]:
+                        if coin.get("symbol", "").upper() == symbol.upper():
+                            new_id = coin["id"]
+                            # Doğru ID ile tekrar dene
+                            retry = requests.get(
+                                f"https://api.coingecko.com/api/v3/coins/{new_id}",
+                                params={"localization": "false", "tickers": "false",
+                                        "market_data": "true", "community_data": "false",
+                                        "developer_data": "false"},
+                                headers={"User-Agent": "Mozilla/5.0"},
+                                timeout=15,
+                            )
+                            if retry.status_code == 200:
+                                resp = retry
+                                cg_id = new_id
+                                break
+            except Exception:
+                pass
+            if resp.status_code != 200:
+                return {"found": False, "error": f"CoinGecko: {symbol} bulunamadı (ID: {cg_id})"}
         if resp.status_code != 200:
             return {"found": False, "error": f"CoinGecko HTTP {resp.status_code}"}
 
@@ -1112,9 +1148,13 @@ def fetch_crypto_price_universal(symbol: str) -> dict:
 
     # yfinance'te sorunlu bilinen coinler — direkt CoinGecko
     CG_PREFERRED = {
+        # yfinance'te güvenilmez veya çalışmayan coinler
         "JUP", "WIF", "BONK", "PEPE", "FLOKI", "NOT", "HMSTR",
         "PYTH", "TIA", "SEI", "WEN", "RNDR", "FET", "AGIX",
         "JTO", "BOME", "POPCAT", "MEW", "SLERF", "PONKE",
+        # Layer 1 / yeni chain coinleri — yfinance'te eksik
+        "SUI", "APT", "INJ", "TIA", "STRK", "MANTA", "ALT",
+        "ZETA", "DYM", "PIXEL", "PORTAL", "SAGA", "REZ",
     }
 
     yf_price = 0.0
