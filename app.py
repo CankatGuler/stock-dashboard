@@ -1848,19 +1848,33 @@ with tab_portfolio:
 
             if st.button("💾 Fon Ekle", key="btn_add_tefas"):
                 if _t_code and _t_shares > 0 and _t_cost > 0:
-                    # Önce fon kodunu doğrula
+                    # Fon kodunu doğrula — bulunamazsa bypass seçeneği sun
                     try:
                         from turkey_fetcher import fetch_tefas_fund
                         _fund_check = fetch_tefas_fund(_t_code)
                         if _fund_check:
                             add_position(_t_code, _t_shares, _t_cost, "TEFAS", _t_notes,
                                         deduct_from_cash=False, asset_class="tefas", currency="TRY")
-                            st.success(f"✅ {_t_code} eklendi! Güncel fiyat: {_fund_check.get('price',0):.4f} TL")
+                            src = _fund_check.get("source", "")
+                            st.success(f"✅ {_t_code} eklendi! Güncel fiyat: {_fund_check.get('price',0):.4f} TL (kaynak: {src})")
                             st.rerun()
                         else:
-                            st.error(f"❌ '{_t_code}' fon kodu TEFAS'ta bulunamadı. Kodu kontrol et.")
+                            st.warning(
+                                f"⚠️ '{_t_code}' için TEFAS API'den otomatik veri alınamadı. "
+                                f"Fonu yine de eklemek ister misin? (Fiyat güncellemesi manuel olacak)"
+                            )
+                            if st.button(f"✅ {_t_code}'yi yine de ekle (manuel fiyat)", key="btn_force_add_tefas"):
+                                add_position(_t_code, _t_shares, _t_cost, "TEFAS", _t_notes,
+                                            deduct_from_cash=False, asset_class="tefas", currency="TRY")
+                                st.success(f"✅ {_t_code} eklendi (manuel maliyet: {_t_cost:.4f} TL)!")
+                                st.rerun()
                     except Exception as _te:
                         st.error(f"TEFAS bağlantı hatası: {_te}")
+                        if st.button(f"✅ Yine de ekle", key="btn_force_add_tefas_err"):
+                            add_position(_t_code, _t_shares, _t_cost, "TEFAS", _t_notes,
+                                        deduct_from_cash=False, asset_class="tefas", currency="TRY")
+                            st.success(f"✅ {_t_code} eklendi!")
+                            st.rerun()
 
         # TEFAS pozisyonları
         _tefas_pos = [p for p in load_portfolio() if p.get("asset_class") == "tefas"]
