@@ -448,17 +448,28 @@ def collect_all_strategy_data(
 
     # Katman 2: Ekonomik veri ve sektör rotasyonu
     try:
-        from economic_data import fetch_layer2_data
-        _layer2 = fetch_layer2_data()
-        data["economic"]        = _layer2.get("economic", {})
-        data["sp500_valuation"] = _layer2.get("sp500_valuation", {})
-        data["sector_rotation"] = _layer2.get("sector_rotation", {})
-        logger.info("Katman 2 verisi eklendi")
+        from economic_data import fetch_all_economic_data, build_economic_context
+        _layer2 = fetch_all_economic_data()
+        data["economic"]        = _layer2.get("macro_econ", {})
+        data["sp500_valuation"] = _layer2.get("valuation", {})
+        data["sector_rotation"] = _layer2.get("sectors", {})
+        data["economic_context"]= build_economic_context(_layer2)
+        logger.info("Katman 2 verisi eklendi: %d gösterge", len(data["economic"]))
     except Exception as e:
         logger.warning("Layer 2 data failed: %s", e)
         data["economic"]        = {}
         data["sp500_valuation"] = {}
         data["sector_rotation"] = {}
+
+    # Cross-asset korelasyon analizi
+    try:
+        from correlation_engine import fetch_all_correlations
+        _corr = fetch_all_correlations(portfolio_tickers=tickers)
+        data["correlations"] = _corr
+        logger.info("Korelasyon analizi eklendi")
+    except Exception as e:
+        logger.warning("Correlation analysis failed: %s", e)
+        data["correlations"] = {}
 
     logger.info("Strateji verisi tamamlandı.")
     return data
@@ -643,6 +654,17 @@ def build_strategy_prompt(data: dict) -> str:
             if etf == "_summary" or not isinstance(d, dict):
                 continue
             lines.append(f"    {d.get('name','')}: %{d.get('perf_pct',0):+.1f} {d.get('trend','')}")
+
+    # Ekonomik göstergeler (FRED verisi)
+    eco_ctx = data.get("economic_context", "")
+    if eco_ctx:
+        lines.append(f"\n{eco_ctx}")
+
+    # ── Korelasyon Analizi ────────────────────────────────────────────────
+    corr_data = data.get("correlations", {})
+    corr_prompt = corr_data.get("prompt", "")
+    if corr_prompt:
+        lines.append(corr_prompt)
 
     lines.append("\n=== GÖREV ===")
     lines.append(
