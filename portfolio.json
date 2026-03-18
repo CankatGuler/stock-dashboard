@@ -358,7 +358,18 @@
       "currency": "USD",
       "added": "2026-03-18 19:57",
       "updated": "2026-03-18 19:57"
+    },
+    {
+      "ticker": "APT-USD",
+      "shares": 41.37858,
+      "avg_cost": 5.42,
+      "sector": "Kripto",
+      "notes": "",
+      "asset_class": "crypto",
+      "currency": "USD",
+      "added": "2026-03-18 19:58",
+      "updated": "2026-03-18 19:58"
     }
   ],
-  "cash": -350309.47
+  "cash": -350533.74
 }
