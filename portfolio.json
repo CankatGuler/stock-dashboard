@@ -446,7 +446,18 @@
       "currency": "USD",
       "added": "2026-03-18 21:12",
       "updated": "2026-03-18 21:12"
+    },
+    {
+      "ticker": "HYPE32196-USD",
+      "shares": 10.2129,
+      "avg_cost": 24.99,
+      "sector": "Kripto",
+      "notes": "",
+      "asset_class": "crypto",
+      "currency": "USD",
+      "added": "2026-03-18 21:20",
+      "updated": "2026-03-18 21:20"
     }
   ],
-  "cash": -364164.39
+  "cash": -364419.61
 }
