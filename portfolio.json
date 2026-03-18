@@ -138,6 +138,17 @@
       "currency": "TRY",
       "added": "2026-03-18 18:27",
       "updated": "2026-03-18 18:27"
+    },
+    {
+      "ticker": "TTE",
+      "shares": 170310.0,
+      "avg_cost": 1.133224,
+      "sector": "TEFAS",
+      "notes": "IS Portföy BIST Teknoloji Ağırlık Sıralamalı Endeksi",
+      "asset_class": "tefas",
+      "currency": "TRY",
+      "added": "2026-03-18 18:30",
+      "updated": "2026-03-18 18:30"
     }
   ],
   "cash": 1060.76
