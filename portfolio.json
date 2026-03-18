@@ -281,7 +281,18 @@
       "currency": "USD",
       "added": "2026-03-18 19:45",
       "updated": "2026-03-18 19:45"
+    },
+    {
+      "ticker": "SUI-USD",
+      "shares": 175.4773,
+      "avg_cost": 3.49,
+      "sector": "Kripto",
+      "notes": "",
+      "asset_class": "crypto",
+      "currency": "USD",
+      "added": "2026-03-18 19:46",
+      "updated": "2026-03-18 19:46"
     }
   ],
-  "cash": -346313.23
+  "cash": -346925.65
 }
