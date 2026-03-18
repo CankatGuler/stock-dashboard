@@ -347,7 +347,18 @@
       "currency": "USD",
       "added": "2026-03-18 19:55",
       "updated": "2026-03-18 19:55"
+    },
+    {
+      "ticker": "EIGEN-USD",
+      "shares": 243.91584,
+      "avg_cost": 1.54,
+      "sector": "Kripto",
+      "notes": "",
+      "asset_class": "crypto",
+      "currency": "USD",
+      "added": "2026-03-18 19:57",
+      "updated": "2026-03-18 19:57"
     }
   ],
-  "cash": -349933.84
+  "cash": -350309.47
 }
