@@ -347,7 +347,18 @@
       "currency": "USD",
       "added": "2026-03-18 20:00",
       "updated": "2026-03-18 20:00"
+    },
+    {
+      "ticker": "WIF-USD",
+      "shares": 192.7142,
+      "avg_cost": 0.648,
+      "sector": "Kripto",
+      "notes": "",
+      "asset_class": "crypto",
+      "currency": "USD",
+      "added": "2026-03-18 20:36",
+      "updated": "2026-03-18 20:36"
     }
   ],
-  "cash": -351533.2
+  "cash": -351658.08
 }
