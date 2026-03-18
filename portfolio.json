@@ -435,7 +435,18 @@
       "currency": "USD",
       "added": "2026-03-18 21:10",
       "updated": "2026-03-18 21:10"
+    },
+    {
+      "ticker": "AXL17799-USD",
+      "shares": 495.03633,
+      "avg_cost": 1.067,
+      "sector": "Kripto",
+      "notes": "",
+      "asset_class": "crypto",
+      "currency": "USD",
+      "added": "2026-03-18 21:12",
+      "updated": "2026-03-18 21:12"
     }
   ],
-  "cash": -363636.19
+  "cash": -364164.39
 }
