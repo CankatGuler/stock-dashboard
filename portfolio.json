@@ -116,6 +116,17 @@
       "notes": "",
       "added": "2026-03-16 09:10",
       "updated": "2026-03-18 06:33"
+    },
+    {
+      "ticker": "IIH",
+      "shares": 12632.0,
+      "avg_cost": 30.554925,
+      "sector": "TEFAS",
+      "notes": "İstanbul Portföy Üçüncü Hisse Senedi Fonu",
+      "asset_class": "tefas",
+      "currency": "TRY",
+      "added": "2026-03-18 18:25",
+      "updated": "2026-03-18 18:25"
     }
   ],
   "cash": 1060.76
