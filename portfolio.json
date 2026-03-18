@@ -273,14 +273,14 @@
     },
     {
       "ticker": "BTC-USD",
-      "shares": 0.00253746,
-      "avg_cost": 48015.76,
+      "shares": 0.02927727,
+      "avg_cost": 80747.6543530493,
       "sector": "Kripto",
       "notes": "",
       "asset_class": "crypto",
       "currency": "USD",
       "added": "2026-03-18 19:45",
-      "updated": "2026-03-18 19:45"
+      "updated": "2026-03-18 21:01"
     },
     {
       "ticker": "WLD-USD",
@@ -393,5 +393,5 @@
       "updated": "2026-03-18 20:58"
     }
   ],
-  "cash": -357564.68
+  "cash": -359806.91
 }
