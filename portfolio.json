@@ -237,7 +237,18 @@
       "currency": "USD",
       "added": "2026-03-18 19:39",
       "updated": "2026-03-18 19:39"
+    },
+    {
+      "ticker": "XRP-USD",
+      "shares": 183.9883,
+      "avg_cost": 1.09,
+      "sector": "Kripto",
+      "notes": "",
+      "asset_class": "crypto",
+      "currency": "USD",
+      "added": "2026-03-18 19:41",
+      "updated": "2026-03-18 19:41"
     }
   ],
-  "cash": -345037.8
+  "cash": -345238.35
 }
