@@ -248,7 +248,18 @@
       "currency": "USD",
       "added": "2026-03-18 19:41",
       "updated": "2026-03-18 19:41"
+    },
+    {
+      "ticker": "ETHFI-USD",
+      "shares": 440.6589,
+      "avg_cost": 1.36,
+      "sector": "Kripto",
+      "notes": "",
+      "asset_class": "crypto",
+      "currency": "USD",
+      "added": "2026-03-18 19:43",
+      "updated": "2026-03-18 19:43"
     }
   ],
-  "cash": -345238.35
+  "cash": -345837.65
 }
