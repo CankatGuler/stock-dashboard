@@ -963,558 +963,983 @@ with tab_portfolio:
                 st.success(f"✅ {len(positions_new)} pozisyon yüklendi!")
                 st.rerun()
 
-    # ── Sektör Güncelleme Butonu ────────────────────────────────────────────
-    _sec_col1, _sec_col2 = st.columns([1, 3])
-    with _sec_col1:
-        if st.button("🔄 Tüm Sektörleri Güncelle", key="btn_update_sectors",
-                     help="Portföydeki 'Diğer' sektörlü hisseleri yfinance'ten otomatik günceller",
-                     use_container_width=True):
-            with st.spinner("Sektörler güncelleniyor..."):
-                import yfinance as _yf_sec
-                _updated = 0
-                _port_sec = load_portfolio()
-                for _pos in _port_sec:
-                    if _pos.get("sector", "Diğer") == "Diğer":
-                        try:
-                            _si = _yf_sec.Ticker(_pos["ticker"]).info
-                            _new_sec = _si.get("sector") or _si.get("industry") or "Diğer"
-                            if _new_sec != "Diğer":
-                                update_position(_pos["ticker"], sector=_new_sec)
-                                _updated += 1
-                        except Exception:
-                            pass
-                if _updated > 0:
-                    st.success(f"✅ {_updated} hissenin sektörü güncellendi!")
-                    st.rerun()
-                else:
-                    st.info("Tüm sektörler zaten güncel.")
+    # ── Varlık Sınıfı Alt Sekmeleri ───────────────────────────────────────────
+    pt_us, pt_crypto, pt_commodity, pt_tefas = st.tabs([
+        "🇺🇸 ABD Hisseler",
+        "₿  Kripto",
+        "🥇 Emtia",
+        "🇹🇷 TEFAS",
+    ])
 
-    # ── Add Single Position Form ────────────────────────────────────────────
-    with st.expander("➕  Tek Pozisyon Ekle / Yeni Alış", expanded=False):
-        col_f1, col_f2, col_f3, col_f4 = st.columns([1.2, 1, 1.2, 1.5])
-        with col_f1:
-            p_ticker = st.text_input("Ticker", placeholder="AAPL", key="p_ticker").upper().strip()
-        with col_f2:
-            p_shares = st.number_input("Hisse Adedi", min_value=0.0, step=1.0, key="p_shares")
-        with col_f3:
-            p_cost   = st.number_input("Ortalama Maliyet ($)", min_value=0.0, step=0.01, key="p_cost")
-        with col_f4:
-            p_notes  = st.text_input("Not", placeholder="İsteğe bağlı", key="p_notes")
-
-        st.caption("💡 Sektör bilgisi otomatik olarak piyasadan çekilir.")
-
-        # Nakit önizlemesi
-        _buy_cash = get_cash()
-        if p_shares > 0 and p_cost > 0:
-            _buy_total = p_shares * p_cost
-            _remaining = _buy_cash - _buy_total
-            _clr = "#00c48c" if _remaining >= 0 else "#e74c3c"
-            _emoji = "✅" if _remaining >= 0 else "⚠️"
+    # ═══════════════════════════════════════════════════════════════════════
+    # ALT SEKME: ABD HİSSELER
+    # ═══════════════════════════════════════════════════════════════════════
+    with pt_us:
+        _sec_col1, _sec_col2 = st.columns([1, 3])
+        with _sec_col1:
+            if st.button("🔄 Tüm Sektörleri Güncelle", key="btn_update_sectors",
+                         help="Portföydeki 'Diğer' sektörlü hisseleri yfinance'ten otomatik günceller",
+                         use_container_width=True):
+                with st.spinner("Sektörler güncelleniyor..."):
+                    import yfinance as _yf_sec
+                    _updated = 0
+                    _port_sec = load_portfolio()
+                    for _pos in _port_sec:
+                        if _pos.get("sector", "Diğer") == "Diğer":
+                            try:
+                                _si = _yf_sec.Ticker(_pos["ticker"]).info
+                                _new_sec = _si.get("sector") or _si.get("industry") or "Diğer"
+                                if _new_sec != "Diğer":
+                                    update_position(_pos["ticker"], sector=_new_sec)
+                                    _updated += 1
+                            except Exception:
+                                pass
+                    if _updated > 0:
+                        st.success(f"✅ {_updated} hissenin sektörü güncellendi!")
+                        st.rerun()
+                    else:
+                        st.info("Tüm sektörler zaten güncel.")
+    
+        # ── Add Single Position Form ────────────────────────────────────────────
+        with st.expander("➕  Pozisyon Ekle — ABD Hisse / Kripto / Emtia / TEFAS", expanded=False):
+    
+            # Varlık sınıfı seçimi
+            _ac_options = {
+                "🇺🇸 ABD Hisse Senedi":  "us_equity",
+                "₿  Kripto":             "crypto",
+                "🥇 Emtia":              "commodity",
+                "🇹🇷 TEFAS Fonu":        "tefas",
+                "📦 Diğer":              "other",
+            }
+            _ac_label = st.radio(
+                "Varlık Sınıfı:",
+                list(_ac_options.keys()),
+                horizontal=True,
+                key="p_asset_class_radio",
+            )
+            _ac_value = _ac_options[_ac_label]
+    
+            # Varlık sınıfına göre placeholder ve para birimi
+            _ticker_placeholders = {
+                "us_equity": "AAPL, NVDA, AVGO",
+                "crypto":    "BTC-USD, ETH-USD, SOL-USD",
+                "commodity": "GC=F (Altın), CL=F (Petrol), GLD",
+                "tefas":     "AEY, YAC, MAC (fon kodu)",
+                "other":     "Ticker",
+            }
+            _cost_labels = {
+                "us_equity": "Ort. Maliyet ($)",
+                "crypto":    "Ort. Maliyet ($/adet)",
+                "commodity": "Ort. Maliyet ($)",
+                "tefas":     "Ort. Maliyet (TL/adet)",
+                "other":     "Ort. Maliyet",
+            }
+            _currency = "TRY" if _ac_value == "tefas" else "USD"
+            _step_map  = {"crypto": 0.0001, "tefas": 1.0, "us_equity": 1.0,
+                         "commodity": 0.01, "other": 1.0}
+    
+            col_f1, col_f2, col_f3, col_f4 = st.columns([1.2, 1, 1.2, 1.5])
+            with col_f1:
+                p_ticker = st.text_input(
+                    "Ticker / Fon Kodu",
+                    placeholder=_ticker_placeholders[_ac_value],
+                    key="p_ticker",
+                ).upper().strip()
+            with col_f2:
+                p_shares = st.number_input(
+                    "Adet / Miktar",
+                    min_value=0.0,
+                    step=_step_map.get(_ac_value, 1.0),
+                    format="%.4f" if _ac_value == "crypto" else "%.2f",
+                    key="p_shares",
+                )
+            with col_f3:
+                p_cost = st.number_input(
+                    _cost_labels[_ac_value],
+                    min_value=0.0,
+                    step=0.01,
+                    key="p_cost",
+                )
+            with col_f4:
+                p_notes = st.text_input("Not", placeholder="İsteğe bağlı", key="p_notes")
+    
+            # Varlık sınıfına göre yardım notu
+            _help_notes = {
+                "us_equity": "💡 Sektör bilgisi yfinance'ten otomatik çekilir.",
+                "crypto":    "💡 Ticker: BTC-USD, ETH-USD formatında. Fiyat yfinance'ten çekilir.",
+                "commodity": "💡 Altın: GC=F, Petrol: CL=F, Gümüş: SI=F veya GLD/SLV ETF.",
+                "tefas":     "💡 TEFAS fon kodu gir (örn: AEY). Günlük fiyat TEFAS API'den çekilir.",
+                "other":     "💡 Fiyat yfinance'ten çekilmeye çalışılır.",
+            }
+            st.caption(_help_notes[_ac_value])
+    
+            # Nakit önizlemesi
+            _buy_cash = get_cash()
+            if p_shares > 0 and p_cost > 0:
+                _buy_total = p_shares * p_cost
+                _remaining = _buy_cash - _buy_total
+                _clr = "#00c48c" if _remaining >= 0 else "#e74c3c"
+                _emoji = "✅" if _remaining >= 0 else "⚠️"
+                st.markdown(
+                    f'<div style="background:#0d1117;border:1px solid #1e2833;border-radius:6px;'
+                    f'padding:0.45rem 0.8rem;font-size:0.75rem;margin-bottom:0.3rem;">'
+                    f'Mevcut nakit: <b style="color:#4fc3f7;">${_buy_cash:,.2f}</b>'
+                    f' &nbsp;→&nbsp; Alım tutarı: <b>${_buy_total:,.2f}</b>'
+                    f' &nbsp;→&nbsp; Kalan: <b style="color:{_clr};">{_emoji} ${_remaining:,.2f}</b>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    f'<div style="font-size:0.72rem;color:#5a6a7a;margin-bottom:0.3rem;">'
+                    f'Mevcut nakit: <b style="color:#4fc3f7;">${_buy_cash:,.2f}</b> — '
+                    f'Alım onaylandığında otomatik düşülür.</div>',
+                    unsafe_allow_html=True,
+                )
+    
+            col_btn1, _ = st.columns([1, 3])
+            with col_btn1:
+                if st.button("💾  Kaydet", key="btn_add_pos"):
+                    if p_ticker and p_shares > 0 and p_cost > 0:
+                        _auto_sector  = "Diğer"
+                        _final_ticker = p_ticker
+    
+                        if _ac_value == "us_equity":
+                            # ABD hissesi: yfinance'ten sektör çek
+                            try:
+                                import yfinance as _yf_add
+                                _info = _yf_add.Ticker(p_ticker).info
+                                _auto_sector = (_info.get("sector") or
+                                              _info.get("industry") or "Diğer")
+                            except Exception:
+                                pass
+    
+                        elif _ac_value == "crypto":
+                            # Kripto: BTC, ETH → BTC-USD formatına çevir
+                            if not p_ticker.endswith("-USD") and "-" not in p_ticker:
+                                _final_ticker = f"{p_ticker}-USD"
+                            _auto_sector = "Kripto"
+    
+                        elif _ac_value == "commodity":
+                            _auto_sector = "Emtia"
+    
+                        elif _ac_value == "tefas":
+                            _auto_sector = "TEFAS"
+    
+                        add_position(
+                            _final_ticker, p_shares, p_cost,
+                            _auto_sector, p_notes,
+                            deduct_from_cash=(_ac_value not in ("tefas",)),
+                            asset_class=_ac_value,
+                            currency=_currency,
+                        )
+                        st.success(
+                            f"✅ {_final_ticker} portföye eklendi! "
+                            f"({_ac_label}, Sektör: {_auto_sector})"
+                        )
+                        st.rerun()
+            if not (p_ticker and p_shares > 0 and p_cost > 0):
+                st.error("Ticker, hisse adedi ve maliyet zorunludur.")
+    
+        # ── Cash Management ────────────────────────────────────────────────────
+        with st.expander("💵  Nakit Ekle / Çıkar", expanded=False):
+            _cur_cash = get_cash()
             st.markdown(
-                f'<div style="background:#0d1117;border:1px solid #1e2833;border-radius:6px;'
-                f'padding:0.45rem 0.8rem;font-size:0.75rem;margin-bottom:0.3rem;">'
-                f'Mevcut nakit: <b style="color:#4fc3f7;">${_buy_cash:,.2f}</b>'
-                f' &nbsp;→&nbsp; Alım tutarı: <b>${_buy_total:,.2f}</b>'
-                f' &nbsp;→&nbsp; Kalan: <b style="color:{_clr};">{_emoji} ${_remaining:,.2f}</b>'
+                f'<div style="background:#0d1117;border:1px solid #1e6a9e;border-radius:8px;'
+                f'padding:0.6rem 1rem;margin-bottom:0.8rem;display:flex;align-items:center;gap:12px;">'
+                f'<span style="font-size:0.7rem;color:#5a6a7a;text-transform:uppercase;letter-spacing:0.08em;">Mevcut Nakit</span>'
+                f'<span style="font-size:1.4rem;font-weight:700;color:#4fc3f7;">${_cur_cash:,.2f}</span>'
+                f'<span style="font-size:0.65rem;color:#5a6a7a;margin-left:auto;">Hisse alımında otomatik düşülür · Satışta otomatik eklenir</span>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
-        else:
-            st.markdown(
-                f'<div style="font-size:0.72rem;color:#5a6a7a;margin-bottom:0.3rem;">'
-                f'Mevcut nakit: <b style="color:#4fc3f7;">${_buy_cash:,.2f}</b> — '
-                f'Alım onaylandığında otomatik düşülür.</div>',
-                unsafe_allow_html=True,
-            )
-
-        col_btn1, _ = st.columns([1, 3])
-        with col_btn1:
-            if st.button("💾  Kaydet", key="btn_add_pos"):
-                if p_ticker and p_shares > 0 and p_cost > 0:
-                    # Sektörü yfinance'ten otomatik çek
-                    _auto_sector = "Diğer"
-                    try:
-                        import yfinance as _yf_add
-                        _info = _yf_add.Ticker(p_ticker).info
-                        _auto_sector = (
-                            _info.get("sector") or
-                            _info.get("industry") or
-                            "Diğer"
-                        )
-                    except Exception:
-                        pass
-                    add_position(p_ticker, p_shares, p_cost, _auto_sector, p_notes)
-                    st.success(f"✅ {p_ticker} portföye eklendi! Sektör: {_auto_sector}")
-                    st.rerun()
-        if not (p_ticker and p_shares > 0 and p_cost > 0):
-            st.error("Ticker, hisse adedi ve maliyet zorunludur.")
-
-    # ── Cash Management ────────────────────────────────────────────────────
-    with st.expander("💵  Nakit Ekle / Çıkar", expanded=False):
-        _cur_cash = get_cash()
-        st.markdown(
-            f'<div style="background:#0d1117;border:1px solid #1e6a9e;border-radius:8px;'
-            f'padding:0.6rem 1rem;margin-bottom:0.8rem;display:flex;align-items:center;gap:12px;">'
-            f'<span style="font-size:0.7rem;color:#5a6a7a;text-transform:uppercase;letter-spacing:0.08em;">Mevcut Nakit</span>'
-            f'<span style="font-size:1.4rem;font-weight:700;color:#4fc3f7;">${_cur_cash:,.2f}</span>'
-            f'<span style="font-size:0.65rem;color:#5a6a7a;margin-left:auto;">Hisse alımında otomatik düşülür · Satışta otomatik eklenir</span>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-        cash_col1, cash_col2, cash_col3 = st.columns([1.5, 1, 2])
-        with cash_col1:
-            cash_op = st.radio(
-                "İşlem:", ["➕ Nakit Ekle", "➖ Nakit Çıkar", "🔄 Bakiyeyi Ayarla"],
-                key="cash_op", horizontal=False,
-            )
-        with cash_col2:
-            cash_amount = st.number_input(
-                "Miktar ($)", min_value=0.0, step=100.0, key="cash_amount"
-            )
-        with cash_col3:
-            cash_note = st.text_input(
-                "Not (isteğe bağlı)", placeholder="örn: Maaş, Temettü, Para yatırma...",
-                key="cash_note"
-            )
-            if cash_op == "🔄 Bakiyeyi Ayarla":
-                st.caption("Nakiti doğrudan girdiğin değere ayarlar (mevcut bakiyeyi ezer).")
-            st.markdown('<div style="margin-top:0.4rem;"></div>', unsafe_allow_html=True)
-            if st.button("✅ Uygula", key="btn_cash", use_container_width=True):
-                if cash_amount > 0:
-                    if cash_op == "➕ Nakit Ekle":
-                        new_bal, msg = add_cash(cash_amount, cash_note or "Nakit ekleme")
-                    elif cash_op == "➖ Nakit Çıkar":
-                        new_bal, msg = deduct_cash(cash_amount, cash_note or "Nakit çıkarma")
-                    else:
-                        set_cash(cash_amount)
-                        new_bal = cash_amount
-                        msg = f"Bakiye ${cash_amount:,.2f} olarak ayarlandı."
-                    st.success(f"✅ {msg}")
-                    st.rerun()
-                else:
-                    st.error("Miktar 0'dan büyük olmalı.")
-
-    # ── Sell Position Form ──────────────────────────────────────────────────
-    with st.expander("📉  Satış Yap (Pozisyon Azalt / Kapat)", expanded=False):
-        st.markdown(
-            '<div style="font-size:0.65rem;color:#5a6a7a;margin-bottom:0.8rem;">'
-            'Kısmi satış: Adet gir → pozisyon azalır. '
-            'Tam satış: Tüm adedi gir → pozisyon kapanır.'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-        sell_col1, sell_col2, sell_col3 = st.columns([1.2, 1, 1.2])
-        with sell_col1:
-            s_ticker = st.text_input("Ticker", placeholder="AAPL", key="s_ticker").upper().strip()
-        with sell_col2:
-            s_shares = st.number_input("Satılan Adet", min_value=0.0, step=1.0, key="s_shares")
-        with sell_col3:
-            s_price = st.number_input("Satış Fiyatı ($)", min_value=0.0, step=0.01, key="s_price")
-
-        # Anlık K/Z önizlemesi
-        if s_ticker and s_shares > 0 and s_price > 0:
-            _port_now  = load_portfolio()
-            _pos_match = next((p for p in _port_now if p["ticker"] == s_ticker), None)
-            if _pos_match:
-                _avg_cost = _pos_match.get("avg_cost", 0)
-                if _avg_cost > 0:
-                    _pnl_per = s_price - _avg_cost
-                    _pnl_tot = _pnl_per * s_shares
-                    _pnl_pct = (_pnl_per / _avg_cost) * 100
-                    _sign    = "+" if _pnl_tot >= 0 else ""
-                    _clr     = "#00c48c" if _pnl_tot >= 0 else "#e74c3c"
-                    _emoji   = "✅" if _pnl_tot >= 0 else "🔴"
-                    st.markdown(
-                        f'<div style="background:#0d1117;border:1px solid #1e2833;'
-                        f'border-radius:6px;padding:0.5rem 0.8rem;font-size:0.78rem;margin-top:0.3rem;">'
-                        f'<b style="color:#8a9ab0;">Önizleme:</b> '
-                        f'<span style="color:{_clr};font-weight:600;">{_emoji} {_sign}${_pnl_tot:,.2f}</span>'
-                        f' &nbsp;|&nbsp; '
-                        f'<span style="color:{_clr};">{_sign}{_pnl_pct:.2f}%</span>'
-                        f' &nbsp;|&nbsp; '
-                        f'Maliyet: ${_avg_cost:.2f} → Satış: ${s_price:.2f}'
-                        f'</div>',
-                        unsafe_allow_html=True,
-                    )
-
-        st.markdown('<div style="margin-top:0.5rem;"></div>', unsafe_allow_html=True)
-        if st.button("📉  Satışı Onayla", key="btn_sell"):
-            if s_ticker and s_shares > 0:
-                _, msg = sell_position(s_ticker, s_shares, sell_price=s_price if s_price > 0 else 0.0)
-                st.success(f"✅ {msg}")
-                st.rerun()
-            else:
-                st.error("Ticker ve satılan adet girilmeli.")
-
-    # ── Load & enrich portfolio ─────────────────────────────────────────────
-    positions = load_portfolio()
-
-    if not positions:
-        st.markdown(
-            '<div class="empty-state">'
-            '💼 Henüz portföy pozisyonu yok.<br><br>'
-            'Yukarıdaki formu kullanarak ilk pozisyonunu ekle.'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-    else:
-        # Fetch live prices + yfinance sector for all portfolio tickers
-        import yfinance as _yf_port
-        failed_tickers = []
-        with st.spinner("📊 Canlı fiyatlar ve sektör verileri çekiliyor..."):
-            price_map:  dict[str, float] = {}
-            change_map: dict[str, float] = {}
-            sector_map: dict[str, str]   = {}
-            w52h_map:   dict[str, float] = {}
-            w52l_map:   dict[str, float] = {}
-            for pos in positions:
-                ticker_sym = pos["ticker"]
-                try:
-                    info  = _yf_port.Ticker(ticker_sym).info
-                    price = float(info.get("currentPrice") or info.get("regularMarketPrice") or 0)
-                    prev  = float(info.get("previousClose") or price or 1)
-                    chg   = ((price - prev) / prev * 100) if prev else 0
-                    sec   = info.get("sector") or info.get("industry") or pos.get("sector", "Diğer")
-                    w52h  = float(info.get("fiftyTwoWeekHigh") or 0)
-                    w52l  = float(info.get("fiftyTwoWeekLow") or 0)
-                    if price > 0:
-                        price_map[ticker_sym]  = price
-                        change_map[ticker_sym] = round(chg, 2)
-                    else:
-                        failed_tickers.append(ticker_sym)
-                    sector_map[ticker_sym] = sec
-                    w52h_map[ticker_sym]   = w52h
-                    w52l_map[ticker_sym]   = w52l
-                except Exception:
-                    # fast_info fallback
-                    try:
-                        fi    = _yf_port.Ticker(ticker_sym).fast_info
-                        price = float(getattr(fi, "last_price", 0) or 0)
-                        w52h  = float(getattr(fi, "year_high", 0) or 0)
-                        w52l  = float(getattr(fi, "year_low", 0) or 0)
-                        if price > 0:
-                            price_map[ticker_sym] = price
+            cash_col1, cash_col2, cash_col3 = st.columns([1.5, 1, 2])
+            with cash_col1:
+                cash_op = st.radio(
+                    "İşlem:", ["➕ Nakit Ekle", "➖ Nakit Çıkar", "🔄 Bakiyeyi Ayarla"],
+                    key="cash_op", horizontal=False,
+                )
+            with cash_col2:
+                cash_amount = st.number_input(
+                    "Miktar ($)", min_value=0.0, step=100.0, key="cash_amount"
+                )
+            with cash_col3:
+                cash_note = st.text_input(
+                    "Not (isteğe bağlı)", placeholder="örn: Maaş, Temettü, Para yatırma...",
+                    key="cash_note"
+                )
+                if cash_op == "🔄 Bakiyeyi Ayarla":
+                    st.caption("Nakiti doğrudan girdiğin değere ayarlar (mevcut bakiyeyi ezer).")
+                st.markdown('<div style="margin-top:0.4rem;"></div>', unsafe_allow_html=True)
+                if st.button("✅ Uygula", key="btn_cash", use_container_width=True):
+                    if cash_amount > 0:
+                        if cash_op == "➕ Nakit Ekle":
+                            new_bal, msg = add_cash(cash_amount, cash_note or "Nakit ekleme")
+                        elif cash_op == "➖ Nakit Çıkar":
+                            new_bal, msg = deduct_cash(cash_amount, cash_note or "Nakit çıkarma")
                         else:
-                            failed_tickers.append(ticker_sym)
-                        w52h_map[ticker_sym] = w52h
-                        w52l_map[ticker_sym] = w52l
-                    except Exception:
-                        failed_tickers.append(ticker_sym)
-                    sector_map[ticker_sym] = pos.get("sector", "Diğer")
-
-        if failed_tickers:
-            st.warning(
-                f"⚠️ Şu hisseler için fiyat çekilemedi: **{', '.join(failed_tickers)}**  \n"
-                "Olası nedenler: ETF/yabancı hisse veya yanlış ticker sembolü. "
-                "Bu hisseler $0 olarak gösterilir.",
-                icon="📡",
-            )
-
-        enriched_pos = enrich_portfolio_with_prices(positions, price_map)
-        # yfinance'ten gelen sektör + 52H verilerini yaz
-        for p in enriched_pos:
-            tk = p["ticker"]
-            p["sector"] = sector_map.get(tk, p.get("sector", "Diğer"))
-            p["w52h"]   = w52h_map.get(tk, 0)
-            p["w52l"]   = w52l_map.get(tk, 0)
-            # 52H pozisyon yüzdesi ve alarm durumu
-            price = p.get("current_price", 0)
-            w52h  = p["w52h"]
-            w52l  = p["w52l"]
-            if w52h > 0 and w52l > 0 and (w52h - w52l) > 0:
-                p["w52h_pos_pct"] = round((price - w52l) / (w52h - w52l) * 100, 1)
-            else:
-                p["w52h_pos_pct"] = 0
-            if w52h > 0 and price > 0:
-                if price >= w52h:
-                    p["breakout_status"] = "🔥"
-                elif price >= w52h * 0.995:
-                    p["breakout_status"] = "⚡"
-                else:
-                    p["breakout_status"] = ""
-            else:
-                p["breakout_status"] = ""
-        summary      = portfolio_summary(enriched_pos)
-        st.session_state["enriched_portfolio"] = enriched_pos  # korelasyon analizi için
-
-        # ── Summary KPI Bar ─────────────────────────────────────────────────
-        _cash_now = get_cash()
-        k1, k2, k3, k4, k5, k6 = st.columns(6)
-
-        total_pnl_color = "#00c48c" if summary["total_pnl"] >= 0 else "#e74c3c"
-        pnl_sign        = "+" if summary["total_pnl"] >= 0 else ""
-
-        with k1:
-            st.markdown(
-                f'<div class="kpi-card green">'
-                f'<div class="kpi-score-label">TOPLAM DEĞER</div>'
-                f'<div style="font-size:1.3rem;font-weight:700;color:#e8edf3;">'
-                f'${summary["total_value"]:,.0f}</div>'
-                f'</div>', unsafe_allow_html=True,
-            )
-        with k2:
-            st.markdown(
-                f'<div class="kpi-card {"green" if summary["total_pnl"]>=0 else "red"}">'
-                f'<div class="kpi-score-label">TOPLAM K/Z</div>'
-                f'<div style="font-size:1.3rem;font-weight:700;color:{total_pnl_color};">'
-                f'{pnl_sign}${summary["total_pnl"]:,.0f}</div>'
-                f'</div>', unsafe_allow_html=True,
-            )
-        with k3:
-            st.markdown(
-                f'<div class="kpi-card {"green" if summary["total_pnl_pct"]>=0 else "red"}">'
-                f'<div class="kpi-score-label">K/Z %</div>'
-                f'<div style="font-size:1.3rem;font-weight:700;color:{total_pnl_color};">'
-                f'{pnl_sign}{summary["total_pnl_pct"]:.2f}%</div>'
-                f'</div>', unsafe_allow_html=True,
-            )
-        with k4:
-            best = summary.get("best")
-            if best:
-                b_color = "#00c48c" if best["pnl_pct"] >= 0 else "#e74c3c"
-                st.markdown(
-                    f'<div class="kpi-card green">'
-                    f'<div class="kpi-score-label">EN İYİ POZİSYON</div>'
-                    f'<div style="font-size:1.1rem;font-weight:700;color:#e8edf3;">{best["ticker"]}</div>'
-                    f'<div style="color:{b_color};font-size:0.8rem;">+{best["pnl_pct"]:.1f}%</div>'
-                    f'</div>', unsafe_allow_html=True,
-                )
-        with k5:
-            worst = summary.get("worst")
-            if worst:
-                w_color = "#e74c3c" if worst["pnl_pct"] < 0 else "#00c48c"
-                st.markdown(
-                    f'<div class="kpi-card red">'
-                    f'<div class="kpi-score-label">EN KÖTÜ POZİSYON</div>'
-                    f'<div style="font-size:1.1rem;font-weight:700;color:#e8edf3;">{worst["ticker"]}</div>'
-                    f'<div style="color:{w_color};font-size:0.8rem;">{worst["pnl_pct"]:.1f}%</div>'
-                    f'</div>', unsafe_allow_html=True,
-                )
-        with k6:
-            _total_with_cash = summary["total_value"] + _cash_now
-            st.markdown(
-                f'<div class="kpi-card" style="border-color:#1e6a9e;">'
-                f'<div class="kpi-score-label">NAKİT</div>'
-                f'<div style="font-size:1.3rem;font-weight:700;color:#4fc3f7;">${_cash_now:,.0f}</div>'
-                f'<div style="font-size:0.7rem;color:#5a6a7a;">Toplam: ${_total_with_cash:,.0f}</div>'
-                f'</div>', unsafe_allow_html=True,
-            )
-
-        st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
-
-        # ── Portfolio Table ─────────────────────────────────────────────────
-        col_tbl, col_pie = st.columns([2.2, 1])
-
-        with col_tbl:
-            st.markdown(
-                '<div style="font-size:0.6rem;color:#5a6a7a;text-transform:uppercase;'
-                'letter-spacing:0.1em;margin-bottom:0.5rem;">📋 POZİSYONLAR</div>',
-                unsafe_allow_html=True,
-            )
-
-            rows = []
-            for p in enriched_pos:
-                sign = "+" if p["pnl_dollar"] >= 0 else ""
-                w52h_pos = p.get("w52h_pos_pct", 0)
-                alarm    = p.get("breakout_status", "")
-                rows.append({
-                    "Ticker":        p["ticker"],
-                    "Şirket":        p.get("notes", "")[:20] or p["ticker"],
-                    "Sektör":        p.get("sector", "Diğer"),
-                    "Adet":          f'{p["shares"]:.2f}',
-                    "Maliyet ($)":   f'${p["avg_cost"]:.2f}',
-                    "Fiyat ($)":     f'${p["current_price"]:.2f}',
-                    "Değer ($)":     f'${p["current_value"]:,.0f}',
-                    "K/Z ($)":       f'{sign}${abs(p["pnl_dollar"]):,.0f}',
-                    "K/Z (%)":       f'{sign}{p["pnl_pct"]:.2f}%',
-                    "Ağırlık (%)":   f'{p["weight_pct"]:.1f}%',
-                    "52H Pos.":      f'%{w52h_pos:.0f}',
-                    "🔔":            alarm,
-                })
-
-            df_port = pd.DataFrame(rows)
-
-            def color_pnl(val):
-                if isinstance(val, str) and val.startswith("+"):
-                    return "color: #00c48c; font-weight: 600"
-                if isinstance(val, str) and val.startswith("-"):
-                    return "color: #e74c3c; font-weight: 600"
-                return ""
-
-            def color_52h(val):
-                if isinstance(val, str):
-                    pct = val.replace("%", "").strip()
-                    try:
-                        v = float(pct)
-                        if v >= 99:   return "color: #e74c3c; font-weight: 600"
-                        if v >= 90:   return "color: #ffb300; font-weight: 600"
-                        if v >= 75:   return "color: #00c48c"
-                    except Exception:
-                        pass
-                return ""
-
-            st.dataframe(
-                df_port.style
-                    .map(color_pnl, subset=["K/Z ($)", "K/Z (%)"])
-                    .map(color_52h, subset=["52H Pos."]),
-                use_container_width=True,
-                hide_index=True,
-            )
-
-            # Delete position
-            st.markdown('<div style="margin-top:0.8rem;"></div>', unsafe_allow_html=True)
-            del_col1, del_col2 = st.columns([1.5, 3])
-            with del_col1:
-                del_ticker = st.text_input("Pozisyon Sil (Ticker)", key="del_ticker", placeholder="AAPL")
-            with del_col2:
-                st.markdown('<div style="margin-top:1.65rem;"></div>', unsafe_allow_html=True)
-                if st.button("🗑  Sil", key="btn_del"):
-                    if del_ticker:
-                        remove_position(del_ticker.upper())
-                        st.success(f"✅ {del_ticker.upper()} silindi.")
+                            set_cash(cash_amount)
+                            new_bal = cash_amount
+                            msg = f"Bakiye ${cash_amount:,.2f} olarak ayarlandı."
+                        st.success(f"✅ {msg}")
                         st.rerun()
-
-        with col_pie:
+                    else:
+                        st.error("Miktar 0'dan büyük olmalı.")
+    
+        # ── Sell Position Form ──────────────────────────────────────────────────
+        with st.expander("📉  Satış Yap (Pozisyon Azalt / Kapat)", expanded=False):
             st.markdown(
-                '<div style="font-size:0.6rem;color:#5a6a7a;text-transform:uppercase;'
-                'letter-spacing:0.1em;margin-bottom:0.5rem;">🥧 AĞIRLIK DAĞILIMI</div>',
+                '<div style="font-size:0.65rem;color:#5a6a7a;margin-bottom:0.8rem;">'
+                'Kısmi satış: Adet gir → pozisyon azalır. '
+                'Tam satış: Tüm adedi gir → pozisyon kapanır.'
+                '</div>',
                 unsafe_allow_html=True,
             )
-            labels  = [p["ticker"] for p in enriched_pos]
-            values  = [p["current_value"] for p in enriched_pos]
-            colors  = ["#00c48c", "#0099ff", "#f5a623", "#e74c3c",
-                       "#aa55ff", "#ff6688", "#55ddff", "#ffdd55",
-                       "#88ff88", "#ff8855", "#aabbcc"]
-
-            fig_pie = go.Figure(go.Pie(
-                labels=labels,
-                values=values,
-                hole=0.55,
-                marker=dict(colors=colors[:len(labels)], line=dict(color="#080c10", width=2)),
-                textfont=dict(family="JetBrains Mono", size=10, color="#e8edf3"),
-                hovertemplate="<b>%{label}</b><br>$%{value:,.0f}<br>%{percent}<extra></extra>",
-            ))
-            fig_pie.update_layout(
-                height=280,
-                margin=dict(l=0, r=0, t=10, b=0),
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                showlegend=True,
-                legend=dict(
-                    font=dict(family="JetBrains Mono", size=9, color="#5a6a7a"),
-                    bgcolor="rgba(0,0,0,0)",
-                ),
-            )
-            st.plotly_chart(fig_pie, use_container_width=True, key="portfolio_pie")
-
-        st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
-
-        # ── Claude Analysis for Portfolio ───────────────────────────────────
-        st.markdown(
-            '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
-            'letter-spacing:0.12em;margin-bottom:0.8rem;">'
-            '▶ PORTFÖY HİSSELERİ İÇİN CLAUDE ANALİZİ</div>',
-            unsafe_allow_html=True,
-        )
-
-        if st.button("🤖  Portföyü Analiz Et (Claude)", key="btn_port_analyze"):
-            port_tickers = [p["ticker"] for p in positions]
-
-            with st.status("🔄 Portföy analizi yapılıyor...", expanded=True) as port_status:
-                st.write(f"📊 {len(port_tickers)} hisse için FMP verisi çekiliyor...")
-                port_enriched = batch_enrich(port_tickers)
-
-                for stock in port_enriched:
-                    stock["kategori"] = categorise_stock(
-                        stock.get("_profile", {}),
-                        stock.get("_financials", {}),
-                    )
-
-                st.write("📰 Haberler çekiliyor ve filtreleniyor...")
-                port_news = fetch_news_batch(port_enriched, days_back=7)
-
-                st.write("🤖 Claude analiz yapıyor...")
-                p_bar  = st.progress(0)
-                p_text = st.empty()
-
-                def port_progress(ticker, idx, total):
-                    p_bar.progress(idx / total)
-                    p_text.markdown(
-                        f'<div class="progress-label">Analiz: '
-                        f'<span style="color:#00c48c;">{ticker}</span> ({idx}/{total})</div>',
-                        unsafe_allow_html=True,
-                    )
-
-                port_results = analyse_batch(port_enriched, port_news, progress_callback=port_progress)
-                for res in port_results:
-                    meta = res.get("_stock_meta", {})
-                    if meta:
-                        res["kategori"] = determine_category(meta)
-                p_bar.progress(1.0)
-                p_text.empty()
-
-                st.session_state["portfolio_analysis"] = port_results
-                port_status.update(label="✅ Portföy analizi tamamlandı!", state="complete", expanded=False)
-
-        # Show portfolio analysis results if available
-        port_results = st.session_state.get("portfolio_analysis", [])
-        if port_results:
-            st.markdown(
-                '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
-                'letter-spacing:0.12em;margin:1rem 0 0.8rem;">▶ ANALİZ SONUÇLARI</div>',
-                unsafe_allow_html=True,
-            )
-            for result in port_results:
-                score   = result.get("nihai_guven_skoru", 0)
-                ticker  = result.get("hisse_sembolu", "?")
-                meta    = result.get("_stock_meta", {})
-                tavsiye = result.get("tavsiye", "Tut")
-                ozet    = result.get("analiz_ozeti", "")
-                riskler = result.get("kritik_riskler", {})
-
-                with st.expander(
-                    f"{ticker}  ·  Skor: {score}/100  ·  {result.get('kategori','')}  ·  {tavsiye}",
-                    expanded=(score >= 70),
-                ):
-                    c1, c2 = st.columns([1, 2])
-                    with c1:
-                        st.plotly_chart(gauge_chart(score, size=190), use_container_width=True, key=f"port_gauge_{ticker}")
-                        st.markdown(recommendation_badge(tavsiye), unsafe_allow_html=True)
-                    with c2:
+            sell_col1, sell_col2, sell_col3 = st.columns([1.2, 1, 1.2])
+            with sell_col1:
+                s_ticker = st.text_input("Ticker", placeholder="AAPL", key="s_ticker").upper().strip()
+            with sell_col2:
+                s_shares = st.number_input("Satılan Adet", min_value=0.0, step=1.0, key="s_shares")
+            with sell_col3:
+                s_price = st.number_input("Satış Fiyatı ($)", min_value=0.0, step=0.01, key="s_price")
+    
+            # Anlık K/Z önizlemesi
+            if s_ticker and s_shares > 0 and s_price > 0:
+                _port_now  = load_portfolio()
+                _pos_match = next((p for p in _port_now if p["ticker"] == s_ticker), None)
+                if _pos_match:
+                    _avg_cost = _pos_match.get("avg_cost", 0)
+                    if _avg_cost > 0:
+                        _pnl_per = s_price - _avg_cost
+                        _pnl_tot = _pnl_per * s_shares
+                        _pnl_pct = (_pnl_per / _avg_cost) * 100
+                        _sign    = "+" if _pnl_tot >= 0 else ""
+                        _clr     = "#00c48c" if _pnl_tot >= 0 else "#e74c3c"
+                        _emoji   = "✅" if _pnl_tot >= 0 else "🔴"
                         st.markdown(
-                            f'<div style="font-size:0.6rem;color:#5a6a7a;text-transform:uppercase;'
-                            f'letter-spacing:0.1em;margin-bottom:0.4rem;">📋 ANALİZ ÖZETİ</div>'
-                            f'<div style="background:#13181f;border:1px solid #1e2833;border-radius:6px;'
-                            f'padding:0.9rem;font-size:0.75rem;line-height:1.7;color:#c0c8d0;">{ozet}</div>'
-                            f'<div style="font-size:0.6rem;color:#5a6a7a;text-transform:uppercase;'
-                            f'letter-spacing:0.1em;margin:0.8rem 0 0.4rem;">⚠️ RİSK HARİTASI</div>'
-                            f'<div style="background:#13181f;border:1px solid #1e2833;border-radius:6px;padding:0.9rem;">'
-                            f'<span class="risk-label">🌍 GLOBAL MAKRO</span><br>'
-                            f'<span style="font-size:0.72rem;color:#c0c8d0;">{riskler.get("global_makro","N/A")}</span><br><br>'
-                            f'<span class="risk-label">🏢 ŞİRKET / FİNANSAL</span><br>'
-                            f'<span style="font-size:0.72rem;color:#c0c8d0;">{riskler.get("finansal_sirket_ozel","N/A")}</span>'
+                            f'<div style="background:#0d1117;border:1px solid #1e2833;'
+                            f'border-radius:6px;padding:0.5rem 0.8rem;font-size:0.78rem;margin-top:0.3rem;">'
+                            f'<b style="color:#8a9ab0;">Önizleme:</b> '
+                            f'<span style="color:{_clr};font-weight:600;">{_emoji} {_sign}${_pnl_tot:,.2f}</span>'
+                            f' &nbsp;|&nbsp; '
+                            f'<span style="color:{_clr};">{_sign}{_pnl_pct:.2f}%</span>'
+                            f' &nbsp;|&nbsp; '
+                            f'Maliyet: ${_avg_cost:.2f} → Satış: ${s_price:.2f}'
                             f'</div>',
                             unsafe_allow_html=True,
                         )
-                    # ── TradingView Grafik ───────────────────────────────
-                    st.markdown(
-                        '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
-                        'letter-spacing:0.1em;margin:1rem 0 0.3rem;">📈 FİYAT GRAFİĞİ</div>',
-                        unsafe_allow_html=True,
-                    )
-                    tradingview_chart(ticker, height=380)
-
-        # CSV Export
-        if enriched_pos:
-            st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
-            csv_port = pd.DataFrame(rows).to_csv(index=False).encode("utf-8")
-            st.download_button(
-                label="⬇  Portföyü CSV Olarak İndir",
-                data=csv_port,
-                file_name="portfolio.csv",
-                mime="text/csv",
-                key="dl_portfolio",
+    
+            st.markdown('<div style="margin-top:0.5rem;"></div>', unsafe_allow_html=True)
+            if st.button("📉  Satışı Onayla", key="btn_sell"):
+                if s_ticker and s_shares > 0:
+                    _, msg = sell_position(s_ticker, s_shares, sell_price=s_price if s_price > 0 else 0.0)
+                    st.success(f"✅ {msg}")
+                    st.rerun()
+                else:
+                    st.error("Ticker ve satılan adet girilmeli.")
+    
+        # ── Load & enrich portfolio ─────────────────────────────────────────────
+        positions = load_portfolio()
+    
+        if not positions:
+            st.markdown(
+                '<div class="empty-state">'
+                '💼 Henüz portföy pozisyonu yok.<br><br>'
+                'Yukarıdaki formu kullanarak ilk pozisyonunu ekle.'
+                '</div>',
+                unsafe_allow_html=True,
             )
+        else:
+            # Çoklu varlık sınıfı fiyat çekme sistemi
+            import yfinance as _yf_port
+            failed_tickers = []
+            with st.spinner("📊 Fiyatlar çekiliyor: ABD hisse, kripto, emtia, TEFAS..."):
+                price_map:  dict[str, float] = {}
+                change_map: dict[str, float] = {}
+                sector_map: dict[str, str]   = {}
+                w52h_map:   dict[str, float] = {}
+                w52l_map:   dict[str, float] = {}
+    
+                # USD/TRY kuru — TEFAS fiyatını USD'ye çevirmek için
+                _usd_try = 32.0
+                try:
+                    _usd_try = float(_yf_port.Ticker("USDTRY=X").fast_info.last_price or 32.0)
+                except Exception:
+                    pass
+    
+                for pos in positions:
+                    ticker_sym  = pos["ticker"]
+                    asset_class = pos.get("asset_class", "us_equity")
+    
+                    try:
+                        if asset_class == "tefas":
+                            try:
+                                from turkey_fetcher import fetch_tefas_fund
+                                _fund = fetch_tefas_fund(ticker_sym)
+                                if _fund and _fund.get("price", 0) > 0:
+                                    _tl_price = float(_fund["price"])
+                                    price_map[ticker_sym]  = _tl_price / _usd_try
+                                    change_map[ticker_sym] = 0
+                                    sector_map[ticker_sym] = "TEFAS"
+                                else:
+                                    failed_tickers.append(ticker_sym)
+                            except Exception:
+                                failed_tickers.append(ticker_sym)
+                        else:
+                            try:
+                                tk   = _yf_port.Ticker(ticker_sym)
+                                info = tk.info
+                                price= float(info.get("currentPrice") or info.get("regularMarketPrice") or 0)
+                                prev = float(info.get("previousClose") or price or 1)
+                                chg  = ((price - prev) / prev * 100) if prev else 0
+                                sec  = info.get("sector") or info.get("industry") or pos.get("sector", "Diğer")
+                                w52h = float(info.get("fiftyTwoWeekHigh") or 0)
+                                w52l = float(info.get("fiftyTwoWeekLow") or 0)
+                            except Exception:
+                                fi   = _yf_port.Ticker(ticker_sym).fast_info
+                                price= float(getattr(fi, "last_price",    0) or 0)
+                                prev = float(getattr(fi, "previous_close",price) or price)
+                                chg  = ((price - prev) / prev * 100) if prev else 0
+                                sec  = pos.get("sector", "Diğer")
+                                w52h = float(getattr(fi, "year_high", 0) or 0)
+                                w52l = float(getattr(fi, "year_low",  0) or 0)
+    
+                            if price > 0:
+                                price_map[ticker_sym]  = price
+                                change_map[ticker_sym] = round(chg, 2)
+                            else:
+                                failed_tickers.append(ticker_sym)
+                            sector_map[ticker_sym] = sec
+                            w52h_map[ticker_sym]   = w52h
+                            w52l_map[ticker_sym]   = w52l
+                    except Exception:
+                        failed_tickers.append(ticker_sym)
+    
+            if failed_tickers:
+                st.warning(
+                    f"⚠️ Fiyat çekilemeyen varlıklar: **{', '.join(failed_tickers)}**  \n"
+                    "TEFAS için fon kodunu kontrol et. Diğerleri $0 gösterilir.",
+                    icon="📡",
+                )
+    
+            enriched_pos = enrich_portfolio_with_prices(positions, price_map)
+            # yfinance'ten gelen sektör + 52H verilerini yaz
+            for p in enriched_pos:
+                tk = p["ticker"]
+                p["sector"] = sector_map.get(tk, p.get("sector", "Diğer"))
+                p["w52h"]   = w52h_map.get(tk, 0)
+                p["w52l"]   = w52l_map.get(tk, 0)
+                # 52H pozisyon yüzdesi ve alarm durumu
+                price = p.get("current_price", 0)
+                w52h  = p["w52h"]
+                w52l  = p["w52l"]
+                if w52h > 0 and w52l > 0 and (w52h - w52l) > 0:
+                    p["w52h_pos_pct"] = round((price - w52l) / (w52h - w52l) * 100, 1)
+                else:
+                    p["w52h_pos_pct"] = 0
+                if w52h > 0 and price > 0:
+                    if price >= w52h:
+                        p["breakout_status"] = "🔥"
+                    elif price >= w52h * 0.995:
+                        p["breakout_status"] = "⚡"
+                    else:
+                        p["breakout_status"] = ""
+                else:
+                    p["breakout_status"] = ""
+            summary      = portfolio_summary(enriched_pos)
+            st.session_state["enriched_portfolio"] = enriched_pos  # korelasyon analizi için
+    
+            # ── Summary KPI Bar ─────────────────────────────────────────────────
+            _cash_now = get_cash()
+            k1, k2, k3, k4, k5, k6 = st.columns(6)
+    
+            total_pnl_color = "#00c48c" if summary["total_pnl"] >= 0 else "#e74c3c"
+            pnl_sign        = "+" if summary["total_pnl"] >= 0 else ""
+    
+            with k1:
+                st.markdown(
+                    f'<div class="kpi-card green">'
+                    f'<div class="kpi-score-label">TOPLAM DEĞER</div>'
+                    f'<div style="font-size:1.3rem;font-weight:700;color:#e8edf3;">'
+                    f'${summary["total_value"]:,.0f}</div>'
+                    f'</div>', unsafe_allow_html=True,
+                )
+            with k2:
+                st.markdown(
+                    f'<div class="kpi-card {"green" if summary["total_pnl"]>=0 else "red"}">'
+                    f'<div class="kpi-score-label">TOPLAM K/Z</div>'
+                    f'<div style="font-size:1.3rem;font-weight:700;color:{total_pnl_color};">'
+                    f'{pnl_sign}${summary["total_pnl"]:,.0f}</div>'
+                    f'</div>', unsafe_allow_html=True,
+                )
+            with k3:
+                st.markdown(
+                    f'<div class="kpi-card {"green" if summary["total_pnl_pct"]>=0 else "red"}">'
+                    f'<div class="kpi-score-label">K/Z %</div>'
+                    f'<div style="font-size:1.3rem;font-weight:700;color:{total_pnl_color};">'
+                    f'{pnl_sign}{summary["total_pnl_pct"]:.2f}%</div>'
+                    f'</div>', unsafe_allow_html=True,
+                )
+            with k4:
+                best = summary.get("best")
+                if best:
+                    b_color = "#00c48c" if best["pnl_pct"] >= 0 else "#e74c3c"
+                    st.markdown(
+                        f'<div class="kpi-card green">'
+                        f'<div class="kpi-score-label">EN İYİ POZİSYON</div>'
+                        f'<div style="font-size:1.1rem;font-weight:700;color:#e8edf3;">{best["ticker"]}</div>'
+                        f'<div style="color:{b_color};font-size:0.8rem;">+{best["pnl_pct"]:.1f}%</div>'
+                        f'</div>', unsafe_allow_html=True,
+                    )
+            with k5:
+                worst = summary.get("worst")
+                if worst:
+                    w_color = "#e74c3c" if worst["pnl_pct"] < 0 else "#00c48c"
+                    st.markdown(
+                        f'<div class="kpi-card red">'
+                        f'<div class="kpi-score-label">EN KÖTÜ POZİSYON</div>'
+                        f'<div style="font-size:1.1rem;font-weight:700;color:#e8edf3;">{worst["ticker"]}</div>'
+                        f'<div style="color:{w_color};font-size:0.8rem;">{worst["pnl_pct"]:.1f}%</div>'
+                        f'</div>', unsafe_allow_html=True,
+                    )
+            with k6:
+                _total_with_cash = summary["total_value"] + _cash_now
+                st.markdown(
+                    f'<div class="kpi-card" style="border-color:#1e6a9e;">'
+                    f'<div class="kpi-score-label">NAKİT</div>'
+                    f'<div style="font-size:1.3rem;font-weight:700;color:#4fc3f7;">${_cash_now:,.0f}</div>'
+                    f'<div style="font-size:0.7rem;color:#5a6a7a;">Toplam: ${_total_with_cash:,.0f}</div>'
+                    f'</div>', unsafe_allow_html=True,
+                )
+    
+            st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
+    
+            # ── Portfolio Table ─────────────────────────────────────────────────
+            col_tbl, col_pie = st.columns([2.2, 1])
+    
+            with col_tbl:
+                st.markdown(
+                    '<div style="font-size:0.6rem;color:#5a6a7a;text-transform:uppercase;'
+                    'letter-spacing:0.1em;margin-bottom:0.5rem;">📋 POZİSYONLAR</div>',
+                    unsafe_allow_html=True,
+                )
+    
+                rows = []
+                for p in enriched_pos:
+                    sign = "+" if p["pnl_dollar"] >= 0 else ""
+                    w52h_pos = p.get("w52h_pos_pct", 0)
+                    alarm    = p.get("breakout_status", "")
+                    rows.append({
+                        "Ticker":        p["ticker"],
+                        "Şirket":        p.get("notes", "")[:20] or p["ticker"],
+                        "Sektör":        p.get("sector", "Diğer"),
+                        "Adet":          f'{p["shares"]:.2f}',
+                        "Maliyet ($)":   f'${p["avg_cost"]:.2f}',
+                        "Fiyat ($)":     f'${p["current_price"]:.2f}',
+                        "Değer ($)":     f'${p["current_value"]:,.0f}',
+                        "K/Z ($)":       f'{sign}${abs(p["pnl_dollar"]):,.0f}',
+                        "K/Z (%)":       f'{sign}{p["pnl_pct"]:.2f}%',
+                        "Ağırlık (%)":   f'{p["weight_pct"]:.1f}%',
+                        "52H Pos.":      f'%{w52h_pos:.0f}',
+                        "🔔":            alarm,
+                    })
+    
+                df_port = pd.DataFrame(rows)
+    
+                def color_pnl(val):
+                    if isinstance(val, str) and val.startswith("+"):
+                        return "color: #00c48c; font-weight: 600"
+                    if isinstance(val, str) and val.startswith("-"):
+                        return "color: #e74c3c; font-weight: 600"
+                    return ""
+    
+                def color_52h(val):
+                    if isinstance(val, str):
+                        pct = val.replace("%", "").strip()
+                        try:
+                            v = float(pct)
+                            if v >= 99:   return "color: #e74c3c; font-weight: 600"
+                            if v >= 90:   return "color: #ffb300; font-weight: 600"
+                            if v >= 75:   return "color: #00c48c"
+                        except Exception:
+                            pass
+                    return ""
+    
+                st.dataframe(
+                    df_port.style
+                        .map(color_pnl, subset=["K/Z ($)", "K/Z (%)"])
+                        .map(color_52h, subset=["52H Pos."]),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+    
+                # Delete position
+                st.markdown('<div style="margin-top:0.8rem;"></div>', unsafe_allow_html=True)
+                del_col1, del_col2 = st.columns([1.5, 3])
+                with del_col1:
+                    del_ticker = st.text_input("Pozisyon Sil (Ticker)", key="del_ticker", placeholder="AAPL")
+                with del_col2:
+                    st.markdown('<div style="margin-top:1.65rem;"></div>', unsafe_allow_html=True)
+                    if st.button("🗑  Sil", key="btn_del"):
+                        if del_ticker:
+                            remove_position(del_ticker.upper())
+                            st.success(f"✅ {del_ticker.upper()} silindi.")
+                            st.rerun()
+    
+            with col_pie:
+                st.markdown(
+                    '<div style="font-size:0.6rem;color:#5a6a7a;text-transform:uppercase;'
+                    'letter-spacing:0.1em;margin-bottom:0.5rem;">🥧 AĞIRLIK DAĞILIMI</div>',
+                    unsafe_allow_html=True,
+                )
+                labels  = [p["ticker"] for p in enriched_pos]
+                values  = [p["current_value"] for p in enriched_pos]
+                colors  = ["#00c48c", "#0099ff", "#f5a623", "#e74c3c",
+                           "#aa55ff", "#ff6688", "#55ddff", "#ffdd55",
+                           "#88ff88", "#ff8855", "#aabbcc"]
+    
+                fig_pie = go.Figure(go.Pie(
+                    labels=labels,
+                    values=values,
+                    hole=0.55,
+                    marker=dict(colors=colors[:len(labels)], line=dict(color="#080c10", width=2)),
+                    textfont=dict(family="JetBrains Mono", size=10, color="#e8edf3"),
+                    hovertemplate="<b>%{label}</b><br>$%{value:,.0f}<br>%{percent}<extra></extra>",
+                ))
+                fig_pie.update_layout(
+                    height=280,
+                    margin=dict(l=0, r=0, t=10, b=0),
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    showlegend=True,
+                    legend=dict(
+                        font=dict(family="JetBrains Mono", size=9, color="#5a6a7a"),
+                        bgcolor="rgba(0,0,0,0)",
+                    ),
+                )
+                st.plotly_chart(fig_pie, use_container_width=True, key="portfolio_pie")
+    
+            st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
+    
+            # ── Claude Analysis for Portfolio ───────────────────────────────────
+            st.markdown(
+                '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+                'letter-spacing:0.12em;margin-bottom:0.8rem;">'
+                '▶ PORTFÖY HİSSELERİ İÇİN CLAUDE ANALİZİ</div>',
+                unsafe_allow_html=True,
+            )
+    
+            if st.button("🤖  Portföyü Analiz Et (Claude)", key="btn_port_analyze"):
+                port_tickers = [p["ticker"] for p in positions]
+    
+                with st.status("🔄 Portföy analizi yapılıyor...", expanded=True) as port_status:
+                    st.write(f"📊 {len(port_tickers)} hisse için FMP verisi çekiliyor...")
+                    port_enriched = batch_enrich(port_tickers)
+    
+                    for stock in port_enriched:
+                        stock["kategori"] = categorise_stock(
+                            stock.get("_profile", {}),
+                            stock.get("_financials", {}),
+                        )
+    
+                    st.write("📰 Haberler çekiliyor ve filtreleniyor...")
+                    port_news = fetch_news_batch(port_enriched, days_back=7)
+    
+                    st.write("🤖 Claude analiz yapıyor...")
+                    p_bar  = st.progress(0)
+                    p_text = st.empty()
+    
+                    def port_progress(ticker, idx, total):
+                        p_bar.progress(idx / total)
+                        p_text.markdown(
+                            f'<div class="progress-label">Analiz: '
+                            f'<span style="color:#00c48c;">{ticker}</span> ({idx}/{total})</div>',
+                            unsafe_allow_html=True,
+                        )
+    
+                    port_results = analyse_batch(port_enriched, port_news, progress_callback=port_progress)
+                    for res in port_results:
+                        meta = res.get("_stock_meta", {})
+                        if meta:
+                            res["kategori"] = determine_category(meta)
+                    p_bar.progress(1.0)
+                    p_text.empty()
+    
+                    st.session_state["portfolio_analysis"] = port_results
+                    port_status.update(label="✅ Portföy analizi tamamlandı!", state="complete", expanded=False)
+    
+            # Show portfolio analysis results if available
+            port_results = st.session_state.get("portfolio_analysis", [])
+            if port_results:
+                st.markdown(
+                    '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+                    'letter-spacing:0.12em;margin:1rem 0 0.8rem;">▶ ANALİZ SONUÇLARI</div>',
+                    unsafe_allow_html=True,
+                )
+                for result in port_results:
+                    score   = result.get("nihai_guven_skoru", 0)
+                    ticker  = result.get("hisse_sembolu", "?")
+                    meta    = result.get("_stock_meta", {})
+                    tavsiye = result.get("tavsiye", "Tut")
+                    ozet    = result.get("analiz_ozeti", "")
+                    riskler = result.get("kritik_riskler", {})
+    
+                    with st.expander(
+                        f"{ticker}  ·  Skor: {score}/100  ·  {result.get('kategori','')}  ·  {tavsiye}",
+                        expanded=(score >= 70),
+                    ):
+                        c1, c2 = st.columns([1, 2])
+                        with c1:
+                            st.plotly_chart(gauge_chart(score, size=190), use_container_width=True, key=f"port_gauge_{ticker}")
+                            st.markdown(recommendation_badge(tavsiye), unsafe_allow_html=True)
+                        with c2:
+                            st.markdown(
+                                f'<div style="font-size:0.6rem;color:#5a6a7a;text-transform:uppercase;'
+                                f'letter-spacing:0.1em;margin-bottom:0.4rem;">📋 ANALİZ ÖZETİ</div>'
+                                f'<div style="background:#13181f;border:1px solid #1e2833;border-radius:6px;'
+                                f'padding:0.9rem;font-size:0.75rem;line-height:1.7;color:#c0c8d0;">{ozet}</div>'
+                                f'<div style="font-size:0.6rem;color:#5a6a7a;text-transform:uppercase;'
+                                f'letter-spacing:0.1em;margin:0.8rem 0 0.4rem;">⚠️ RİSK HARİTASI</div>'
+                                f'<div style="background:#13181f;border:1px solid #1e2833;border-radius:6px;padding:0.9rem;">'
+                                f'<span class="risk-label">🌍 GLOBAL MAKRO</span><br>'
+                                f'<span style="font-size:0.72rem;color:#c0c8d0;">{riskler.get("global_makro","N/A")}</span><br><br>'
+                                f'<span class="risk-label">🏢 ŞİRKET / FİNANSAL</span><br>'
+                                f'<span style="font-size:0.72rem;color:#c0c8d0;">{riskler.get("finansal_sirket_ozel","N/A")}</span>'
+                                f'</div>',
+                                unsafe_allow_html=True,
+                            )
+                        # ── TradingView Grafik ───────────────────────────────
+                        st.markdown(
+                            '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+                            'letter-spacing:0.1em;margin:1rem 0 0.3rem;">📈 FİYAT GRAFİĞİ</div>',
+                            unsafe_allow_html=True,
+                        )
+                        tradingview_chart(ticker, height=380)
+    
+            # CSV Export
+            if enriched_pos:
+                st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
+                csv_port = pd.DataFrame(rows).to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    label="⬇  Portföyü CSV Olarak İndir",
+                    data=csv_port,
+                    file_name="portfolio.csv",
+                    mime="text/csv",
+                    key="dl_portfolio",
+                )
+    
+        # ═══════════════════════════════════════════════════════════════════════
+        # ALT SEKME: KRİPTO
+        # ═══════════════════════════════════════════════════════════════════════
+    with pt_crypto:
+        st.markdown(
+            '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+            'letter-spacing:0.12em;margin-bottom:1rem;">₿ KRİPTO VARLIK YÖNETİMİ</div>',
+            unsafe_allow_html=True,
+        )
+
+        # Kripto pozisyon ekle
+        with st.expander("➕ Kripto Pozisyon Ekle", expanded=False):
+            _cc1, _cc2, _cc3 = st.columns([1, 1, 1])
+            with _cc1:
+                _c_ticker = st.text_input("Ticker", placeholder="BTC-USD, ETH-USD, SOL-USD", key="c_ticker").upper().strip()
+                if _c_ticker and "-" not in _c_ticker:
+                    _c_ticker = f"{_c_ticker}-USD"
+            with _cc2:
+                _c_shares = st.number_input("Miktar (adet)", min_value=0.0, step=0.0001, format="%.4f", key="c_shares")
+            with _cc3:
+                _c_cost = st.number_input("Ort. Maliyet ($/adet)", min_value=0.0, step=0.01, key="c_cost")
+            _c_notes = st.text_input("Not", placeholder="Örn: Long term hold", key="c_notes")
+            if st.button("💾 Kripto Ekle", key="btn_add_crypto"):
+                if _c_ticker and _c_shares > 0 and _c_cost > 0:
+                    add_position(_c_ticker, _c_shares, _c_cost, "Kripto", _c_notes,
+                                deduct_from_cash=True, asset_class="crypto", currency="USD")
+                    st.success(f"✅ {_c_ticker} eklendi!")
+                    st.rerun()
+
+        # Kripto pozisyonları listele
+        _crypto_pos = [p for p in load_portfolio() if p.get("asset_class") == "crypto"]
+        if _crypto_pos:
+            import yfinance as _yf_c
+            _usd_try_c = 32.0
+            _c_rows = []
+            for _cp in _crypto_pos:
+                try:
+                    _fi = _yf_c.Ticker(_cp["ticker"]).fast_info
+                    _cp_price = float(getattr(_fi, "last_price", 0) or 0)
+                    _cp_prev  = float(getattr(_fi, "previous_close", _cp_price) or _cp_price)
+                    _cp_chg   = (_cp_price - _cp_prev) / _cp_prev * 100 if _cp_prev > 0 else 0
+                except Exception:
+                    _cp_price, _cp_chg = float(_cp.get("avg_cost", 0)), 0
+                _cp_val  = _cp["shares"] * _cp_price
+                _cp_cost = _cp["shares"] * float(_cp.get("avg_cost", 0))
+                _cp_pnl  = (_cp_price - float(_cp.get("avg_cost", 0))) / float(_cp.get("avg_cost", 1)) * 100
+                _c_rows.append({
+                    "Ticker": _cp["ticker"],
+                    "Miktar": _cp["shares"],
+                    "Ort. Maliyet": f"${float(_cp.get('avg_cost',0)):,.2f}",
+                    "Güncel Fiyat": f"${_cp_price:,.2f}",
+                    "24s Değ.": f"{_cp_chg:+.1f}%",
+                    "Değer ($)": f"${_cp_val:,.2f}",
+                    "K/Z %": f"{_cp_pnl:+.1f}%",
+                    "Not": _cp.get("notes", ""),
+                })
+            st.dataframe(_c_rows, use_container_width=True)
+
+            # Kripto silme
+            _del_c = st.selectbox("Sil:", ["—"] + [p["ticker"] for p in _crypto_pos], key="del_crypto_sel")
+            if _del_c != "—":
+                if st.button(f"🗑 {_del_c} Sil", key="del_crypto_btn"):
+                    from portfolio_manager import remove_position
+                    remove_position(_del_c)
+                    st.success(f"{_del_c} silindi!")
+                    st.rerun()
+        else:
+            st.info("Henüz kripto pozisyon yok. Yukardaki formla ekleyebilirsin.")
+
+        # Kripto piyasa özeti
+        st.markdown('<hr style="border-color:#1e2833;margin:1rem 0;">', unsafe_allow_html=True)
+        if st.button("📊 Kripto Piyasa Özeti Getir", key="btn_crypto_summary"):
+            with st.spinner("Kripto veriler toplanıyor..."):
+                try:
+                    from crypto_fetcher import fetch_crypto_fear_greed, fetch_bitcoin_dominance, get_halving_cycle, fetch_crypto_prices
+                    _fg   = fetch_crypto_fear_greed()
+                    _dom  = fetch_bitcoin_dominance()
+                    _hal  = get_halving_cycle()
+                    _prc  = fetch_crypto_prices()
+                    _s1, _s2, _s3, _s4 = st.columns(4)
+                    with _s1:
+                        st.metric("Fear & Greed", f"{_fg.get('score',50)}/100", _fg.get('tr_label','—'))
+                    with _s2:
+                        st.metric("BTC Dominance", f"%{_dom.get('btc_dominance',0):.1f}")
+                    with _s3:
+                        st.metric("BTC Fiyat", f"${_prc.get('BTC',{}).get('price',0):,.0f}",
+                                 f"{_prc.get('BTC',{}).get('change_24h',0):+.1f}%")
+                    with _s4:
+                        st.metric("Halving Fazı", _hal.get('phase','—'), f"{_hal.get('days_since',0)} gün")
+                    st.caption(_fg.get('note',''))
+                    st.caption(_hal.get('note',''))
+                except Exception as _e:
+                    st.error(f"Kripto veri hatası: {_e}")
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # ALT SEKME: EMTİA
+    # ═══════════════════════════════════════════════════════════════════════
+    with pt_commodity:
+        st.markdown(
+            '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+            'letter-spacing:0.12em;margin-bottom:1rem;">🥇 EMTİA VARLIK YÖNETİMİ</div>',
+            unsafe_allow_html=True,
+        )
+
+        # Emtia referans listesi
+        st.caption("💡 Sık kullanılan ticker'lar: GC=F (Altın), SI=F (Gümüş), CL=F (Petrol WTI), HG=F (Bakır), GLD, SLV, IAU")
+
+        with st.expander("➕ Emtia Pozisyon Ekle", expanded=False):
+            _em1, _em2, _em3 = st.columns([1, 1, 1])
+            with _em1:
+                _e_ticker = st.text_input("Ticker", placeholder="GC=F, GLD, IAU", key="e_ticker").upper().strip()
+            with _em2:
+                _e_shares = st.number_input("Adet / Kontrat", min_value=0.0, step=0.01, key="e_shares")
+            with _em3:
+                _e_cost = st.number_input("Ort. Maliyet ($)", min_value=0.0, step=0.01, key="e_cost")
+            _e_notes = st.text_input("Not", placeholder="Örn: Altın hedge", key="e_notes")
+            if st.button("💾 Emtia Ekle", key="btn_add_commodity"):
+                if _e_ticker and _e_shares > 0 and _e_cost > 0:
+                    add_position(_e_ticker, _e_shares, _e_cost, "Emtia", _e_notes,
+                                deduct_from_cash=True, asset_class="commodity", currency="USD")
+                    st.success(f"✅ {_e_ticker} eklendi!")
+                    st.rerun()
+
+        # Emtia pozisyonları
+        _comm_pos = [p for p in load_portfolio() if p.get("asset_class") == "commodity"]
+        if _comm_pos:
+            import yfinance as _yf_e
+            _e_rows = []
+            for _ep in _comm_pos:
+                try:
+                    _fi = _yf_e.Ticker(_ep["ticker"]).fast_info
+                    _ep_price = float(getattr(_fi, "last_price", 0) or 0)
+                    _ep_prev  = float(getattr(_fi, "previous_close", _ep_price) or _ep_price)
+                    _ep_chg   = (_ep_price - _ep_prev) / _ep_prev * 100 if _ep_prev > 0 else 0
+                except Exception:
+                    _ep_price, _ep_chg = float(_ep.get("avg_cost", 0)), 0
+                _ep_val = _ep["shares"] * _ep_price
+                _ep_pnl = (_ep_price - float(_ep.get("avg_cost", 0))) / float(_ep.get("avg_cost", 1)) * 100
+                _e_rows.append({
+                    "Ticker":       _ep["ticker"],
+                    "Adet":         _ep["shares"],
+                    "Ort. Maliyet": f"${float(_ep.get('avg_cost',0)):,.2f}",
+                    "Güncel":       f"${_ep_price:,.2f}",
+                    "24s Değ.":     f"{_ep_chg:+.1f}%",
+                    "Değer ($)":    f"${_ep_val:,.2f}",
+                    "K/Z %":        f"{_ep_pnl:+.1f}%",
+                })
+            st.dataframe(_e_rows, use_container_width=True)
+
+            _del_e = st.selectbox("Sil:", ["—"] + [p["ticker"] for p in _comm_pos], key="del_comm_sel")
+            if _del_e != "—":
+                if st.button(f"🗑 {_del_e} Sil", key="del_comm_btn"):
+                    from portfolio_manager import remove_position
+                    remove_position(_del_e)
+                    st.success(f"{_del_e} silindi!")
+                    st.rerun()
+        else:
+            st.info("Henüz emtia pozisyon yok.")
+
+        # Emtia piyasa özeti
+        st.markdown('<hr style="border-color:#1e2833;margin:1rem 0;">', unsafe_allow_html=True)
+        if st.button("📊 Emtia Piyasa Özeti Getir", key="btn_commodity_summary"):
+            with st.spinner("Emtia veriler toplanıyor..."):
+                try:
+                    from commodity_fetcher import fetch_commodity_prices, fetch_gold_real_rate
+                    _cp   = fetch_commodity_prices()
+                    _grr  = fetch_gold_real_rate()
+                    _m1, _m2, _m3, _m4 = st.columns(4)
+                    with _m1:
+                        _gold = _cp.get("GOLD", {})
+                        st.metric("Altın", f"${_gold.get('price',0):,.0f}", f"{_gold.get('change',0):+.1f}%")
+                    with _m2:
+                        _oil = _cp.get("OIL_WTI", {})
+                        st.metric("Petrol WTI", f"${_oil.get('price',0):.1f}", f"{_oil.get('change',0):+.1f}%")
+                    with _m3:
+                        _sil = _cp.get("SILVER", {})
+                        st.metric("Gümüş", f"${_sil.get('price',0):.2f}", f"{_sil.get('change',0):+.1f}%")
+                    with _m4:
+                        _cu = _cp.get("COPPER", {})
+                        st.metric("Bakır", f"${_cu.get('price',0):.2f}", f"{_cu.get('change',0):+.1f}%")
+                    if _grr.get("note"):
+                        st.caption(_grr["note"])
+                except Exception as _e:
+                    st.error(f"Emtia veri hatası: {_e}")
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # ALT SEKME: TEFAS
+    # ═══════════════════════════════════════════════════════════════════════
+    with pt_tefas:
+        st.markdown(
+            '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+            'letter-spacing:0.12em;margin-bottom:1rem;">🇹🇷 TEFAS FON YÖNETİMİ</div>',
+            unsafe_allow_html=True,
+        )
+        st.caption("💡 TEFAS fon kodunu gir (örn: AEY, YAC, MAC). Fiyat TEFAS API'den otomatik çekilir.")
+
+        with st.expander("➕ TEFAS Fon Ekle", expanded=False):
+            _tf1, _tf2, _tf3 = st.columns([1, 1, 1])
+            with _tf1:
+                _t_code = st.text_input("Fon Kodu", placeholder="AEY, YAC, MAC", key="t_code").upper().strip()
+            with _tf2:
+                _t_shares = st.number_input("Adet (pay)", min_value=0.0, step=1.0, key="t_shares")
+            with _tf3:
+                _t_cost = st.number_input("Ort. Maliyet (TL/pay)", min_value=0.0, step=0.0001, format="%.4f", key="t_cost")
+            _t_notes = st.text_input("Not", placeholder="Örn: Hisse senedi fonu", key="t_notes")
+
+            if st.button("💾 Fon Ekle", key="btn_add_tefas"):
+                if _t_code and _t_shares > 0 and _t_cost > 0:
+                    # Önce fon kodunu doğrula
+                    try:
+                        from turkey_fetcher import fetch_tefas_fund
+                        _fund_check = fetch_tefas_fund(_t_code)
+                        if _fund_check:
+                            add_position(_t_code, _t_shares, _t_cost, "TEFAS", _t_notes,
+                                        deduct_from_cash=False, asset_class="tefas", currency="TRY")
+                            st.success(f"✅ {_t_code} eklendi! Güncel fiyat: {_fund_check.get('price',0):.4f} TL")
+                            st.rerun()
+                        else:
+                            st.error(f"❌ '{_t_code}' fon kodu TEFAS'ta bulunamadı. Kodu kontrol et.")
+                    except Exception as _te:
+                        st.error(f"TEFAS bağlantı hatası: {_te}")
+
+        # TEFAS pozisyonları
+        _tefas_pos = [p for p in load_portfolio() if p.get("asset_class") == "tefas"]
+        if _tefas_pos:
+            # USD/TRY kuru
+            try:
+                import yfinance as _yf_t
+                _usd_try_t = float(_yf_t.Ticker("USDTRY=X").fast_info.last_price or 32.0)
+            except Exception:
+                _usd_try_t = 32.0
+
+            _t_rows = []
+            for _tp in _tefas_pos:
+                try:
+                    from turkey_fetcher import fetch_tefas_fund
+                    _fund_data = fetch_tefas_fund(_tp["ticker"])
+                    _t_price  = float(_fund_data.get("price", 0)) if _fund_data else float(_tp.get("avg_cost", 0))
+                    _t_ret_1m = _fund_data.get("ret_1m", 0) if _fund_data else 0
+                    _t_ret_1y = _fund_data.get("ret_1y", 0) if _fund_data else 0
+                except Exception:
+                    _t_price, _t_ret_1m, _t_ret_1y = float(_tp.get("avg_cost", 0)), 0, 0
+
+                _t_val_tl  = _tp["shares"] * _t_price
+                _t_val_usd = _t_val_tl / _usd_try_t
+                _t_cost_tl = _tp["shares"] * float(_tp.get("avg_cost", 0))
+                _t_pnl     = (_t_price - float(_tp.get("avg_cost", 0))) / float(_tp.get("avg_cost", 1)) * 100
+
+                _t_rows.append({
+                    "Fon Kodu":      _tp["ticker"],
+                    "Pay Adedi":     f"{_tp['shares']:,.0f}",
+                    "Ort. Maliyet":  f"{float(_tp.get('avg_cost',0)):.4f} TL",
+                    "Güncel Fiyat":  f"{_t_price:.4f} TL",
+                    "Toplam TL":     f"{_t_val_tl:,.2f} TL",
+                    "Toplam USD":    f"${_t_val_usd:,.2f}",
+                    "K/Z %":         f"{_t_pnl:+.1f}%",
+                    "1A Getiri":     f"{_t_ret_1m:+.1f}%",
+                    "1Y Getiri":     f"{_t_ret_1y:+.1f}%",
+                    "Not":           _tp.get("notes", ""),
+                })
+            st.dataframe(_t_rows, use_container_width=True)
+
+            # Toplam TEFAS değeri
+            _total_tefas_tl  = sum(float(r["Toplam TL"].replace(" TL","").replace(",","")) for r in _t_rows)
+            _total_tefas_usd = sum(float(r["Toplam USD"].replace("$","").replace(",","")) for r in _t_rows)
+            st.markdown(
+                f'<div style="background:var(--color-background-secondary);'
+                f'border-radius:8px;padding:0.6rem 1rem;margin-top:0.5rem;'
+                f'font-size:0.78rem;">'
+                f'<b>Toplam TEFAS Değeri:</b> '
+                f'{_total_tefas_tl:,.2f} TL = ${_total_tefas_usd:,.2f} '
+                f'(1 USD = {_usd_try_t:.2f} TL)</div>',
+                unsafe_allow_html=True,
+            )
+
+            _del_t = st.selectbox("Sil:", ["—"] + [p["ticker"] for p in _tefas_pos], key="del_tefas_sel")
+            if _del_t != "—":
+                if st.button(f"🗑 {_del_t} Sil", key="del_tefas_btn"):
+                    from portfolio_manager import remove_position
+                    remove_position(_del_t)
+                    st.success(f"{_del_t} silindi!")
+                    st.rerun()
+        else:
+            st.info("Henüz TEFAS fonu yok. Fon kodunu girerek ekleyebilirsin.")
+
+        # BIST/Türkiye piyasa özeti
+        st.markdown('<hr style="border-color:#1e2833;margin:1rem 0;">', unsafe_allow_html=True)
+        if st.button("📊 Türkiye Piyasa Özeti Getir", key="btn_turkey_summary"):
+            with st.spinner("Türkiye verileri toplanıyor..."):
+                try:
+                    from turkey_fetcher import fetch_bist_data, fetch_xbank_analysis, fetch_bist_usd_valuation
+                    _bd   = fetch_bist_data()
+                    _xb   = fetch_xbank_analysis()
+                    _bv   = fetch_bist_usd_valuation()
+                    _b100 = _bd.get("BIST100", {})
+                    _utry = _bd.get("USD_TRY", {})
+                    _n1, _n2, _n3, _n4 = st.columns(4)
+                    with _n1:
+                        st.metric("BIST100 (TL)", f"{_b100.get('tl',0):,.0f}", f"{_b100.get('tl_chg',0):+.1f}%")
+                    with _n2:
+                        st.metric("BIST100 (USD)", f"${_b100.get('usd',0):,.0f}", f"{_b100.get('usd_chg',0):+.1f}%")
+                    with _n3:
+                        st.metric("USD/TRY", f"{_utry.get('value',0):.2f}", f"{_utry.get('change',0):+.2f}%")
+                    with _n4:
+                        _xb_data = _bd.get("XBANK", {})
+                        st.metric("XBANK", f"{_xb_data.get('tl',0):,.0f}", f"{_xb_data.get('tl_chg',0):+.1f}%")
+                    if _xb.get("note"):
+                        st.caption(_xb["note"])
+                    if _bv.get("note"):
+                        st.caption(_bv["note"])
+                except Exception as _e:
+                    st.error(f"Türkiye veri hatası: {_e}")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PORTFÖY — KORELASYON & SENARYO & HAFIZA

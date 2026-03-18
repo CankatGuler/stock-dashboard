@@ -164,37 +164,50 @@ def save_portfolio(positions: list[dict]) -> bool:
     return _github_write(positions, sha)
 
 
-def add_position(ticker, shares, avg_cost, sector="Diğer", notes="", deduct_from_cash=True) -> list[dict]:
+def add_position(ticker, shares, avg_cost, sector="Diğer", notes="",
+                 deduct_from_cash=True, asset_class="us_equity",
+                 currency="USD") -> list[dict]:
     """
     Add or update a position (weighted average cost).
+    asset_class: us_equity | crypto | commodity | tefas | other
+    currency:    USD | TRY
     deduct_from_cash=True ise alım tutarı nakitten düşülür.
     """
     positions, cash, sha = _read_full_portfolio()
     ticker = ticker.upper().strip()
     purchase_total = shares * avg_cost
 
+    # TEFAS için nakit düşme — TRY bazlı, USD'ye çevirmeden
+    # Kripto ve emtia için normal USD nakit düşme
+    if currency == "TRY":
+        deduct_from_cash = False  # TRY varlıklar USD nakitten düşülmez
+
     for pos in positions:
         if pos["ticker"] == ticker:
             old_val  = pos["shares"] * pos["avg_cost"]
             new_val  = shares * avg_cost
             total_sh = pos["shares"] + shares
-            pos["avg_cost"] = (old_val + new_val) / total_sh if total_sh else avg_cost
-            pos["shares"]   = total_sh
-            pos["sector"]   = sector
-            pos["notes"]    = notes
-            pos["updated"]  = datetime.now().strftime("%Y-%m-%d %H:%M")
+            pos["avg_cost"]    = (old_val + new_val) / total_sh if total_sh else avg_cost
+            pos["shares"]      = total_sh
+            pos["sector"]      = sector
+            pos["notes"]       = notes
+            pos["asset_class"] = asset_class
+            pos["currency"]    = currency
+            pos["updated"]     = datetime.now().strftime("%Y-%m-%d %H:%M")
             new_cash = (cash - purchase_total) if deduct_from_cash else cash
             _write_full_portfolio(positions, new_cash, sha)
             return positions
 
     positions.append({
-        "ticker":   ticker,
-        "shares":   shares,
-        "avg_cost": avg_cost,
-        "sector":   sector,
-        "notes":    notes,
-        "added":    datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "updated":  datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "ticker":      ticker,
+        "shares":      shares,
+        "avg_cost":    avg_cost,
+        "sector":      sector,
+        "notes":       notes,
+        "asset_class": asset_class,
+        "currency":    currency,
+        "added":       datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "updated":     datetime.now().strftime("%Y-%m-%d %H:%M"),
     })
     new_cash = (cash - purchase_total) if deduct_from_cash else cash
     _write_full_portfolio(positions, new_cash, sha)
