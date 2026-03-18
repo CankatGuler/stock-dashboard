@@ -127,6 +127,17 @@
       "currency": "TRY",
       "added": "2026-03-18 18:25",
       "updated": "2026-03-18 18:25"
+    },
+    {
+      "ticker": "AOY",
+      "shares": 922842.0,
+      "avg_cost": 0.324541,
+      "sector": "TEFAS",
+      "notes": "Alternatif Enerji Yabancı Hisse Senedi Fonu",
+      "asset_class": "tefas",
+      "currency": "TRY",
+      "added": "2026-03-18 18:27",
+      "updated": "2026-03-18 18:27"
     }
   ],
   "cash": 1060.76
