@@ -226,7 +226,18 @@
       "currency": "USD",
       "added": "2026-03-18 19:37",
       "updated": "2026-03-18 19:37"
+    },
+    {
+      "ticker": "SOL-USD",
+      "shares": 4.122873,
+      "avg_cost": 173.28,
+      "sector": "Kripto",
+      "notes": "",
+      "asset_class": "crypto",
+      "currency": "USD",
+      "added": "2026-03-18 19:39",
+      "updated": "2026-03-18 19:39"
     }
   ],
-  "cash": -344323.39
+  "cash": -345037.8
 }
