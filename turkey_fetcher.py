@@ -608,69 +608,104 @@ def fetch_turkey_correlations() -> dict:
 
 def fetch_tefas_fund(fund_code: str) -> dict:
     """
-    TEFAS'tan belirli bir fon kodunun verilerini çek.
-    Fon kodu örnek: "AEY", "YAC", "MAC"
+    TEFAS'tan fon verisi çek.
+    Birden fazla fontip ve endpoint ile dener — maksimum uyumluluk.
 
-    TEFAS API endpoint (public, ücretsiz):
-    https://www.tefas.gov.tr/api/DB/BindHistoryInfo
+    fontip değerleri:
+      ""    → Tüm tipler (en geniş arama)
+      "YAT" → Yatırım fonu
+      "HIS" → Hisse senedi fonu
+      "BOR" → Borçlanma araçları fonu
+      "KAR" → Karma/dengeli fon
     """
-    try:
-        import requests
+    import requests
 
-        end_date   = datetime.now().strftime("%d.%m.%Y")
-        start_date = (datetime.now() - timedelta(days=365)).strftime("%d.%m.%Y")
+    end_date   = datetime.now().strftime("%d.%m.%Y")
+    start_date = (datetime.now() - timedelta(days=365)).strftime("%d.%m.%Y")
+    code       = fund_code.upper().strip()
 
-        resp = requests.post(
-            "https://www.tefas.gov.tr/api/DB/BindHistoryInfo",
-            data={
-                "fontip":    "YAT",
-                "bastarih":  start_date,
-                "bittarih":  end_date,
-                "fonkod":    fund_code.upper(),
-            },
-            headers={
-                "User-Agent":    "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-                "Content-Type":  "application/x-www-form-urlencoded",
-                "Referer":       "https://www.tefas.gov.tr/FonAnaliz.aspx",
-                "X-Requested-With": "XMLHttpRequest",
-            },
-            timeout=15,
-        )
+    HEADERS = {
+        "User-Agent":       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Content-Type":     "application/x-www-form-urlencoded; charset=UTF-8",
+        "Accept":           "application/json, text/javascript, */*; q=0.01",
+        "Referer":          "https://www.tefas.gov.tr/FonAnaliz.aspx",
+        "Origin":           "https://www.tefas.gov.tr",
+        "X-Requested-With": "XMLHttpRequest",
+    }
 
-        if resp.status_code != 200:
-            return {}
+    # Önce BindFundInfo ile anlık fiyat + meta verisi çek (daha hızlı)
+    def _try_bind_info(fontip_val: str) -> dict | None:
+        try:
+            r = requests.post(
+                "https://www.tefas.gov.tr/api/DB/BindHistoryInfo",
+                data={
+                    "fontip":   fontip_val,
+                    "bastarih": start_date,
+                    "bittarih": end_date,
+                    "fonkod":   code,
+                },
+                headers=HEADERS,
+                timeout=15,
+            )
+            if r.status_code != 200:
+                return None
+            records = r.json().get("data", [])
+            if records:
+                return records
+        except Exception as e:
+            logger.debug("TEFAS BindHistoryInfo fontip=%s failed: %s", fontip_val, e)
+        return None
 
-        data = resp.json()
-        records = data.get("data", [])
-        if not records:
-            return {}
+    # fontip değerlerini sırayla dene
+    records = None
+    for fontip in ["", "YAT", "HIS", "BOR", "KAR", "DEG", "PAR"]:
+        records = _try_bind_info(fontip)
+        if records:
+            logger.debug("TEFAS %s bulundu, fontip=%s, %d kayıt", code, fontip, len(records))
+            break
 
-        # Son kayıt
-        latest = records[-1] if records else {}
-        oldest = records[0]  if records else {}
+    if not records:
+        # Son çare: BindFundComparison endpoint
+        try:
+            r2 = requests.post(
+                "https://www.tefas.gov.tr/api/DB/BindFundComparison",
+                data={"fonkod": code, "bastarih": start_date, "bittarih": end_date},
+                headers=HEADERS,
+                timeout=15,
+            )
+            if r2.status_code == 200:
+                records = r2.json().get("data", [])
+        except Exception as e:
+            logger.debug("TEFAS BindFundComparison failed: %s", e)
 
-        price_latest = float(latest.get("FIYAT",  0) or 0)
-        price_oldest = float(oldest.get("FIYAT",  0) or 0)
-        price_1m     = float(records[-22].get("FIYAT", price_oldest) or price_oldest) if len(records) >= 22 else price_oldest
-        price_3m     = float(records[-66].get("FIYAT", price_oldest) or price_oldest) if len(records) >= 66 else price_oldest
-
-        # Getiri hesapla
-        ret_1m  = round((price_latest - price_1m)  / price_1m  * 100, 2) if price_1m  > 0 else 0
-        ret_3m  = round((price_latest - price_3m)  / price_3m  * 100, 2) if price_3m  > 0 else 0
-        ret_1y  = round((price_latest - price_oldest)/ price_oldest * 100, 2) if price_oldest > 0 else 0
-
-        return {
-            "fund_code":    fund_code.upper(),
-            "price":        round(price_latest, 4),
-            "ret_1m":       ret_1m,
-            "ret_3m":       ret_3m,
-            "ret_1y":       ret_1y,
-            "date":         latest.get("TARIH", ""),
-        }
-
-    except Exception as e:
-        logger.debug("TEFAS fetch failed %s: %s", fund_code, e)
+    if not records:
+        logger.warning("TEFAS: %s fonu hiçbir endpoint/fontip ile bulunamadı", code)
         return {}
+
+    # Fiyat hesapla
+    latest = records[-1]
+    oldest = records[0]
+
+    price_latest = float(latest.get("FIYAT") or latest.get("PORTFOYBUYUKLUK") or 0)
+    price_oldest = float(oldest.get("FIYAT") or oldest.get("PORTFOYBUYUKLUK") or 0)
+
+    # 1 ay ve 3 aylık getiri
+    price_1m = float(records[-22].get("FIYAT", price_oldest) or price_oldest) if len(records) >= 22 else price_oldest
+    price_3m = float(records[-66].get("FIYAT", price_oldest) or price_oldest) if len(records) >= 66 else price_oldest
+
+    ret_1m = round((price_latest - price_1m)  / price_1m  * 100, 2) if price_1m  > 0 else 0
+    ret_3m = round((price_latest - price_3m)  / price_3m  * 100, 2) if price_3m  > 0 else 0
+    ret_1y = round((price_latest - price_oldest) / price_oldest * 100, 2) if price_oldest > 0 else 0
+
+    return {
+        "fund_code": code,
+        "price":     round(price_latest, 4),
+        "ret_1m":    ret_1m,
+        "ret_3m":    ret_3m,
+        "ret_1y":    ret_1y,
+        "date":      latest.get("TARIH", ""),
+        "records":   len(records),
+    }
 
 
 def fetch_tefas_portfolio(fund_codes: list) -> dict:
