@@ -1745,45 +1745,47 @@ with tab_portfolio:
         )
 
         # Emtia referans listesi
-        st.caption("💡 Türk altın/gümüş gram için: **XAUTRY=X** (Altın gram TL) veya **XAGTRY=X** (Gümüş gram TL) | USD bazlı: GC=F, GLD, IAU, SI=F")
+        st.caption("💡 Türk altın/gümüş gram için TRY seç. USD bazlı: GC=F, GLD, IAU, SI=F, CL=F")
 
         with st.expander("➕ Emtia Pozisyon Ekle", expanded=False):
-            _em1, _em2, _em3 = st.columns([1, 1, 1])
 
-            # TRY gram ticker'ları
+            # Önce tür seç — etiketler buna göre değişir
+            _e_type = st.radio(
+                "Emtia Türü:",
+                ["🥇 Altın Gram (TL)", "🥈 Gümüş Gram (TL)", "💵 USD Bazlı (Futures/ETF)"],
+                horizontal=True,
+                key="e_type_radio",
+            )
+
             _GRAM_MAP = {
-                "XAUTRY=X": {"label": "Altın",  "unit": "gram", "cost_label": "Ort. Maliyet (TL/gram)", "currency": "TRY"},
-                "XAGTRY=X": {"label": "Gümüş",  "unit": "gram", "cost_label": "Ort. Maliyet (TL/gram)", "currency": "TRY"},
+                "🥇 Altın Gram (TL)": {"ticker": "XAUTRY=X", "label": "Altın", "cost_label": "Ort. Maliyet (TL/gram)", "unit": "gram", "currency": "TRY"},
+                "🥈 Gümüş Gram (TL)": {"ticker": "XAGTRY=X", "label": "Gümüş", "cost_label": "Ort. Maliyet (TL/gram)", "unit": "gram", "currency": "TRY"},
+                "💵 USD Bazlı (Futures/ETF)": {"ticker": "", "label": "", "cost_label": "Ort. Maliyet ($)", "unit": "kontrat/adet", "currency": "USD"},
             }
+            _cfg = _GRAM_MAP[_e_type]
+            _is_try_gram = _cfg["currency"] == "TRY"
 
+            _em1, _em2, _em3 = st.columns([1, 1, 1])
             with _em1:
-                _e_ticker = st.text_input("Ticker", placeholder="XAUTRY=X, GC=F, GLD, IAU", key="e_ticker").upper().strip()
-
-            _is_try_gram  = _e_ticker in _GRAM_MAP
-            _gram_info_e  = _GRAM_MAP.get(_e_ticker, {})
-            _cost_label_e = _gram_info_e.get("cost_label", "Ort. Maliyet ($)")
-            _unit_e       = _gram_info_e.get("unit", "kontrat/adet")
-            _currency_e   = _gram_info_e.get("currency", "USD")
-
+                if _is_try_gram:
+                    # Ticker sabit, göster ama değiştirme
+                    st.text_input("Ticker (otomatik)", value=_cfg["ticker"],
+                                  disabled=True, key="e_ticker_disp")
+                    _e_ticker = _cfg["ticker"]
+                else:
+                    _e_ticker = st.text_input(
+                        "Ticker", placeholder="GC=F, GLD, IAU, SI=F, CL=F",
+                        key="e_ticker"
+                    ).upper().strip()
             with _em2:
                 _e_shares = st.number_input(
-                    f"Miktar ({_unit_e})",
+                    f"Miktar ({_cfg['unit']})",
                     min_value=0.0, step=0.01, key="e_shares"
                 )
             with _em3:
                 _e_cost = st.number_input(
-                    _cost_label_e,
+                    _cfg["cost_label"],
                     min_value=0.0, step=0.01, key="e_cost"
-                )
-
-            # Bilgi notu
-            if _is_try_gram:
-                _label_e = _gram_info_e.get("label", "")
-                st.info(
-                    f"💡 **{_label_e} gram (TL)** — "
-                    f"Miktar: sahip olduğun gram miktarı | "
-                    f"Maliyet: alış anındaki gram başına TL fiyatı. "
-                    f"Sistem ons fiyatını otomatik gram'a çevirir."
                 )
 
             _e_notes = st.text_input("Not", placeholder="Örn: Altın hedge", key="e_notes")
@@ -1791,15 +1793,19 @@ with tab_portfolio:
             if st.button("💾 Emtia Ekle", key="btn_add_commodity"):
                 if _e_ticker and _e_shares > 0 and _e_cost > 0:
                     add_position(
-                        _e_ticker, _e_shares, _e_cost, "Emtia", _e_notes,
-                        deduct_from_cash=False if _is_try_gram else True,
+                        _e_ticker, _e_shares, _e_cost,
+                        _cfg.get("label", "Emtia") or "Emtia",
+                        _e_notes,
+                        deduct_from_cash=not _is_try_gram,
                         asset_class="commodity",
-                        currency=_currency_e,
+                        currency=_cfg["currency"],
                     )
-                    _label_disp = _gram_info_e.get("label", _e_ticker)
-                    _unit_disp  = "TL/gram" if _is_try_gram else "$"
-                    st.success(f"✅ {_label_disp} ({_e_ticker}) eklendi! {_e_shares:.2f} {_unit_e} @ {_e_cost:.4f} {_unit_disp}")
+                    _disp = _cfg.get("label") or _e_ticker
+                    _unit_disp = "TL/gram" if _is_try_gram else "$"
+                    st.success(f"✅ {_disp} eklendi — {_e_shares:.2f} {_cfg['unit']} @ {_e_cost:.4f} {_unit_disp}")
                     st.rerun()
+                else:
+                    st.error("Ticker, miktar ve maliyet zorunludur.")
 
         # Emtia pozisyonları
         # TRY gram emtialar için özel dönüşüm
