@@ -171,6 +171,17 @@
       "currency": "TRY",
       "added": "2026-03-18 18:34",
       "updated": "2026-03-18 18:34"
+    },
+    {
+      "ticker": "TI1",
+      "shares": 96.0,
+      "avg_cost": 1364.348646,
+      "sector": "TEFAS",
+      "notes": "IS Portföy Para Piyasası Fonu",
+      "asset_class": "tefas",
+      "currency": "TRY",
+      "added": "2026-03-18 18:36",
+      "updated": "2026-03-18 18:36"
     }
   ],
   "cash": 1060.76
