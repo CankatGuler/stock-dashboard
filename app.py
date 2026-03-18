@@ -1657,36 +1657,47 @@ with tab_portfolio:
                     st.success(f"✅ {_c_ticker} eklendi!")
                     st.rerun()
 
-        # Kripto pozisyonları listele
+        # Kripto pozisyonları listele — yfinance + CoinGecko fallback
         _crypto_pos = [p for p in load_portfolio() if p.get("asset_class") == "crypto"]
         if _crypto_pos:
-            import yfinance as _yf_c
-            _usd_try_c = 32.0
-            _c_rows = []
-            for _cp in _crypto_pos:
-                try:
-                    _fi = _yf_c.Ticker(_cp["ticker"]).fast_info
-                    _cp_price = float(getattr(_fi, "last_price", 0) or 0)
-                    _cp_prev  = float(getattr(_fi, "previous_close", _cp_price) or _cp_price)
-                    _cp_chg   = (_cp_price - _cp_prev) / _cp_prev * 100 if _cp_prev > 0 else 0
-                except Exception:
-                    _cp_price, _cp_chg = float(_cp.get("avg_cost", 0)), 0
-                _cp_val  = _cp["shares"] * _cp_price
-                _cp_cost = _cp["shares"] * float(_cp.get("avg_cost", 0))
-                _cp_pnl  = (_cp_price - float(_cp.get("avg_cost", 0))) / float(_cp.get("avg_cost", 1)) * 100
-                _c_rows.append({
-                    "Ticker": _cp["ticker"],
-                    "Miktar": _cp["shares"],
-                    "Ort. Maliyet": f"${float(_cp.get('avg_cost',0)):,.2f}",
-                    "Güncel Fiyat": f"${_cp_price:,.2f}",
-                    "24s Değ.": f"{_cp_chg:+.1f}%",
-                    "Değer ($)": f"${_cp_val:,.2f}",
-                    "K/Z %": f"{_cp_pnl:+.1f}%",
-                    "Not": _cp.get("notes", ""),
-                })
+            from crypto_fetcher import fetch_crypto_price_universal
+            _c_rows      = []
+            _c_not_found = []
+
+            with st.spinner("Kripto fiyatları çekiliyor (yfinance → CoinGecko)..."):
+                for _cp in _crypto_pos:
+                    _pd = fetch_crypto_price_universal(_cp["ticker"])
+                    if _pd.get("found") and _pd.get("price", 0) > 0:
+                        _cp_price = _pd["price"]
+                        _cp_chg   = _pd.get("change_24h", 0)
+                        _cp_src   = _pd.get("source", "?")
+                        _cp_name  = _pd.get("name", _cp["ticker"])
+                    else:
+                        _cp_price = float(_cp.get("avg_cost", 0))
+                        _cp_chg   = 0
+                        _cp_src   = "—"
+                        _cp_name  = _cp["ticker"]
+                        _c_not_found.append(_cp["ticker"])
+
+                    _cp_val = _cp["shares"] * _cp_price
+                    _cp_avg = float(_cp.get("avg_cost", 0))
+                    _cp_pnl = (_cp_price - _cp_avg) / _cp_avg * 100 if _cp_avg > 0 else 0
+                    _fmt    = ",.8f" if _cp_price < 0.01 else (",.4f" if _cp_price < 1 else ",.2f")
+                    _c_rows.append({
+                        "Coin":         f"{_cp_name} ({_cp['ticker'].replace('-USD','')})",
+                        "Miktar":       f"{_cp['shares']:.4f}",
+                        "Ort. Maliyet": f"${_cp_avg:{_fmt}}",
+                        "Güncel Fiyat": f"${_cp_price:{_fmt}}",
+                        "24s Değ.":     f"{_cp_chg:+.1f}%",
+                        "Değer ($)":    f"${_cp_val:,.2f}",
+                        "K/Z %":        f"{_cp_pnl:+.1f}%",
+                        "Kaynak":       _cp_src,
+                    })
+
+            if _c_not_found:
+                st.warning(f"⚠️ Fiyat bulunamadı: **{', '.join(_c_not_found)}** — ticker formatını kontrol et (örn: PEPE-USD)")
             st.dataframe(_c_rows, use_container_width=True)
 
-            # Kripto silme
             _del_c = st.selectbox("Sil:", ["—"] + [p["ticker"] for p in _crypto_pos], key="del_crypto_sel")
             if _del_c != "—":
                 if st.button(f"🗑 {_del_c} Sil", key="del_crypto_btn"):
