@@ -383,14 +383,14 @@
     },
     {
       "ticker": "APT21794-USD",
-      "shares": 41.37858,
-      "avg_cost": 5.42,
+      "shares": 104.73558,
+      "avg_cost": 5.0019979514125,
       "sector": "Kripto",
       "notes": "",
       "asset_class": "crypto",
       "currency": "USD",
       "added": "2026-03-18 20:58",
-      "updated": "2026-03-18 20:58"
+      "updated": "2026-03-18 21:27"
     },
     {
       "ticker": "LINK-USD",
@@ -470,5 +470,5 @@
       "updated": "2026-03-18 21:25"
     }
   ],
-  "cash": -366022.06
+  "cash": -366321.68
 }
