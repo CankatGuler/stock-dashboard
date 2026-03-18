@@ -468,7 +468,18 @@
       "currency": "USD",
       "added": "2026-03-18 21:25",
       "updated": "2026-03-18 21:25"
+    },
+    {
+      "ticker": "HGPT-USD",
+      "shares": 8986.3,
+      "avg_cost": 0.04514,
+      "sector": "Kripto",
+      "notes": "",
+      "asset_class": "crypto",
+      "currency": "USD",
+      "added": "2026-03-18 21:29",
+      "updated": "2026-03-18 21:29"
     }
   ],
-  "cash": -366519.34
+  "cash": -366924.98
 }
