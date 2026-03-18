@@ -193,7 +193,18 @@
       "currency": "TRY",
       "added": "2026-03-18 18:39",
       "updated": "2026-03-18 18:39"
+    },
+    {
+      "ticker": "GLD",
+      "shares": 70.9,
+      "avg_cost": 4860.0,
+      "sector": "Emtia",
+      "notes": "ALTIN GRAM",
+      "asset_class": "commodity",
+      "currency": "USD",
+      "added": "2026-03-18 18:46",
+      "updated": "2026-03-18 18:46"
     }
   ],
-  "cash": 1060.76
+  "cash": -343513.24
 }
