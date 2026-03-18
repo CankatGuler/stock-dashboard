@@ -240,14 +240,14 @@
     },
     {
       "ticker": "XRP-USD",
-      "shares": 968.077,
-      "avg_cost": 1.5265601179451636,
+      "shares": 1120.958,
+      "avg_cost": 1.691235883324799,
       "sector": "Kripto",
       "notes": "",
       "asset_class": "crypto",
       "currency": "USD",
       "added": "2026-03-18 19:41",
-      "updated": "2026-03-18 21:02"
+      "updated": "2026-03-18 21:22"
     },
     {
       "ticker": "ETHFI-USD",
@@ -459,5 +459,5 @@
       "updated": "2026-03-18 21:20"
     }
   ],
-  "cash": -364419.61
+  "cash": -364837.59
 }
