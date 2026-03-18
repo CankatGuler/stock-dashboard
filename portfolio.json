@@ -284,14 +284,14 @@
     },
     {
       "ticker": "WLD-USD",
-      "shares": 423.6759,
-      "avg_cost": 2.27,
+      "shares": 598.7869000000001,
+      "avg_cost": 2.104769740286569,
       "sector": "Kripto",
       "notes": "",
       "asset_class": "crypto",
       "currency": "USD",
       "added": "2026-03-18 19:50",
-      "updated": "2026-03-18 19:50"
+      "updated": "2026-03-18 21:26"
     },
     {
       "ticker": "ENA-USD",
@@ -470,5 +470,5 @@
       "updated": "2026-03-18 21:25"
     }
   ],
-  "cash": -365723.5
+  "cash": -366022.06
 }
