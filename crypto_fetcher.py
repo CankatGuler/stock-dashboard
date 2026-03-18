@@ -1,3 +1,4 @@
+import streamlit as st
 # crypto_fetcher.py — Kripto Varlık Sınıfı Veri Modülü
 #
 # Katman 3 metrikleri:
@@ -34,6 +35,7 @@ HALVING_DATES = [
 
 # ─── 1. Kripto Fear & Greed ──────────────────────────────────────────────────
 
+@st.cache_data(ttl=3600, show_spinner=False)
 def fetch_crypto_fear_greed() -> dict:
     """
     alternative.me'den kripto spesifik Fear & Greed endeksi.
@@ -102,6 +104,7 @@ def fetch_crypto_fear_greed() -> dict:
 
 # ─── 2. Bitcoin Dominance & Market Data ─────────────────────────────────────
 
+@st.cache_data(ttl=3600, show_spinner=False)
 def fetch_bitcoin_dominance() -> dict:
     """
     CoinGecko'dan Bitcoin dominance ve top coin verileri.
@@ -154,6 +157,7 @@ def fetch_bitcoin_dominance() -> dict:
 
 # ─── 3. Fiyat Verileri (yfinance) ───────────────────────────────────────────
 
+@st.cache_data(ttl=600, show_spinner=False)
 def fetch_crypto_prices() -> dict:
     """
     BTC, ETH ve diğer major kripto fiyatları yfinance'ten.
@@ -475,7 +479,8 @@ def fetch_crypto_portfolio_data(crypto_positions: list) -> dict:
 
 # ─── Ana Toplayıcı ───────────────────────────────────────────────────────────
 
-def fetch_all_crypto_data(crypto_positions: list = None) -> dict:
+@st.cache_data(ttl=600, show_spinner=False)
+def fetch_all_crypto_data(crypto_positions: tuple = None) -> dict:
     """
     Tüm Katman 3 verilerini tek seferde topla.
     Her metrik: değer + sinyal + not
@@ -1098,48 +1103,63 @@ def fetch_price_coingecko(symbol: str) -> dict:
 def fetch_crypto_price_universal(symbol: str) -> dict:
     """
     Evrensel kripto fiyat çekici.
-    1. yfinance dene (hızlı, major coinler)
-    2. CoinGecko dene (yavaş ama kapsamlı, 10K+ coin)
+    1. yfinance dene — fiyatı CoinGecko ile çapraz doğrula
+    2. Şüpheli/yanlış fiyat varsa CoinGecko'yu tercih et
     3. Hata döndür
-
-    Returns: {price, change_24h, source, found, name}
     """
     symbol_clean = symbol.replace("-USD", "").upper()
     yf_ticker    = f"{symbol_clean}-USD"
 
-    # ── 1. yfinance ──────────────────────────────────────────────────────
-    try:
-        import yfinance as yf
-        fi    = yf.Ticker(yf_ticker).fast_info
-        price = float(getattr(fi, "last_price",     0) or 0)
-        prev  = float(getattr(fi, "previous_close", price) or price)
-        chg   = (price - prev) / prev * 100 if prev > 0 else 0
-
-        if price > 0:
-            return {
-                "found":      True,
-                "symbol":     symbol_clean,
-                "name":       symbol_clean,
-                "price":      round(price, 8),
-                "change_24h": round(chg,   2),
-                "source":     "yfinance",
-            }
-    except Exception:
-        pass
-
-    # ── 2. CoinGecko fallback ────────────────────────────────────────────
-    time.sleep(0.3)  # Rate limit için bekle
-    cg_result = fetch_price_coingecko(symbol_clean)
-    if cg_result.get("found"):
-        return cg_result
-
-    # ── 3. Bulunamadı ────────────────────────────────────────────────────
-    return {
-        "found":  False,
-        "symbol": symbol_clean,
-        "price":  0,
-        "error":  cg_result.get("error", f"{symbol_clean} bulunamadı"),
+    # yfinance'te sorunlu bilinen coinler — direkt CoinGecko
+    CG_PREFERRED = {
+        "JUP", "WIF", "BONK", "PEPE", "FLOKI", "NOT", "HMSTR",
+        "PYTH", "TIA", "SEI", "WEN", "RNDR", "FET", "AGIX",
+        "JTO", "BOME", "POPCAT", "MEW", "SLERF", "PONKE",
     }
+
+    yf_price = 0.0
+    yf_chg   = 0.0
+
+    # ── 1. yfinance ──────────────────────────────────────────────────────
+    if symbol_clean not in CG_PREFERRED:
+        try:
+            import yfinance as yf
+            fi       = yf.Ticker(yf_ticker).fast_info
+            yf_price = float(getattr(fi, "last_price",     0) or 0)
+            yf_prev  = float(getattr(fi, "previous_close", yf_price) or yf_price)
+            yf_chg   = (yf_price - yf_prev) / yf_prev * 100 if yf_prev > 0 else 0
+        except Exception:
+            yf_price = 0.0
+
+    # ── 2. CoinGecko ile doğrula / fallback ──────────────────────────────
+    need_cg = (yf_price <= 0 or symbol_clean in CG_PREFERRED
+               or symbol_clean in COINGECKO_ID_MAP)
+
+    if need_cg:
+        time.sleep(0.2)
+        cg_result = fetch_price_coingecko(symbol_clean)
+        if cg_result.get("found") and cg_result.get("price", 0) > 0:
+            cg_price = float(cg_result["price"])
+            if yf_price > 0 and cg_price > 0:
+                ratio = yf_price / cg_price
+                if 0.5 <= ratio <= 2.0:
+                    # yfinance tutarlı — güvenilir
+                    return {"found": True, "symbol": symbol_clean, "name": symbol_clean,
+                            "price": round(yf_price, 8), "change_24h": round(yf_chg, 2),
+                            "source": "yfinance"}
+                else:
+                    # yfinance sapıyor — CoinGecko kullan
+                    logger.debug("%s yfinance %.8f vs CG %.8f — CoinGecko tercih edildi",
+                                 symbol_clean, yf_price, cg_price)
+            return cg_result
+
+    if yf_price > 0:
+        return {"found": True, "symbol": symbol_clean, "name": symbol_clean,
+                "price": round(yf_price, 8), "change_24h": round(yf_chg, 2),
+                "source": "yfinance"}
+
+    return {"found": False, "symbol": symbol_clean, "price": 0,
+            "error": f"{symbol_clean} bulunamadı"}
 
 
 def fetch_crypto_portfolio_prices(positions: list) -> dict:
