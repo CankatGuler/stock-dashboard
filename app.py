@@ -1309,6 +1309,18 @@ with tab_portfolio:
                                     failed_tickers.append(ticker_sym)
                             except Exception:
                                 failed_tickers.append(ticker_sym)
+                        elif asset_class == "crypto":
+                            try:
+                                from crypto_fetcher import fetch_crypto_price_universal
+                                _pd = fetch_crypto_price_universal(ticker_sym)
+                                if _pd.get("found") and _pd.get("price", 0) > 0:
+                                    price_map[ticker_sym]  = float(_pd["price"])
+                                    change_map[ticker_sym] = float(_pd.get("change_24h", 0))
+                                    sector_map[ticker_sym] = "Kripto"
+                                else:
+                                    failed_tickers.append(ticker_sym)
+                            except Exception:
+                                failed_tickers.append(ticker_sym)
                         else:
                             try:
                                 tk   = _yf_port.Ticker(ticker_sym)

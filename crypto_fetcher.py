@@ -1138,68 +1138,108 @@ def fetch_price_coingecko(symbol: str) -> dict:
 
 def fetch_crypto_price_universal(symbol: str) -> dict:
     """
-    Evrensel kripto fiyat çekici.
-    1. yfinance dene — fiyatı CoinGecko ile çapraz doğrula
-    2. Şüpheli/yanlış fiyat varsa CoinGecko'yu tercih et
-    3. Hata döndür
+    Evrensel kripto fiyat çekici — 3 katmanlı:
+    1. yfinance: çoklu ticker formatı dene (SUI-USD, SUI1-USD, SUI4-USD...)
+    2. CoinGecko /simple/price (hafif endpoint, rate limit yok)
+    3. CoinGecko /coins/{id} (tam detay)
     """
-    symbol_clean = symbol.replace("-USD", "").upper()
-    yf_ticker    = f"{symbol_clean}-USD"
+    import yfinance as yf
+    import requests
 
-    # yfinance'te sorunlu bilinen coinler — direkt CoinGecko
-    CG_PREFERRED = {
-        # yfinance'te güvenilmez veya çalışmayan coinler
-        "JUP", "WIF", "BONK", "PEPE", "FLOKI", "NOT", "HMSTR",
-        "PYTH", "TIA", "SEI", "WEN", "RNDR", "FET", "AGIX",
-        "JTO", "BOME", "POPCAT", "MEW", "SLERF", "PONKE",
-        # Layer 1 / yeni chain coinleri — yfinance'te eksik
-        "SUI", "APT", "INJ", "TIA", "STRK", "MANTA", "ALT",
-        "ZETA", "DYM", "PIXEL", "PORTAL", "SAGA", "REZ",
+    symbol_clean = symbol.replace("-USD", "").upper()
+
+    # Denenmesi gereken yfinance ticker formatları
+    YF_FORMATS = {
+        "SUI":   ["SUI-USD", "SUI1-USD", "SUI4-USD", "SUI11861-USD"],
+        "APT":   ["APT-USD", "APT21814-USD", "APT1-USD"],
+        "JUP":   ["JUP-USD", "JUP4-USD", "JUP1-USD"],
+        "INJ":   ["INJ-USD", "INJ1-USD"],
+        "SEI":   ["SEI-USD", "SEI1-USD"],
+        "TIA":   ["TIA-USD", "TIA1-USD"],
+        "PYTH":  ["PYTH-USD", "PYTH1-USD"],
+        "WIF":   ["WIF-USD", "WIF1-USD", "DOGWIF-USD"],
+        "BONK":  ["BONK-USD", "BONK1-USD"],
+        "PEPE":  ["PEPE-USD", "PEPE24478-USD"],
+        "FLOKI": ["FLOKI-USD", "FLOKI1-USD"],
+        "NOT":   ["NOT1-USD"],
+        "JTO":   ["JTO-USD", "JTO1-USD"],
+        "RNDR":  ["RNDR-USD", "RENDER-USD"],
+        "FET":   ["FET-USD", "FETCHAI-USD"],
+        "STRK":  ["STRK-USD", "STRK1-USD"],
+        "HMSTR": ["HMSTR-USD", "HMSTR1-USD"],
     }
 
-    yf_price = 0.0
-    yf_chg   = 0.0
-
-    # ── 1. yfinance ──────────────────────────────────────────────────────
-    if symbol_clean not in CG_PREFERRED:
+    # ── 1. yfinance — tüm formatları dene ───────────────────────────────
+    formats_to_try = YF_FORMATS.get(symbol_clean, [f"{symbol_clean}-USD"])
+    for yf_ticker in formats_to_try:
         try:
-            import yfinance as yf
-            fi       = yf.Ticker(yf_ticker).fast_info
-            yf_price = float(getattr(fi, "last_price",     0) or 0)
-            yf_prev  = float(getattr(fi, "previous_close", yf_price) or yf_price)
-            yf_chg   = (yf_price - yf_prev) / yf_prev * 100 if yf_prev > 0 else 0
+            fi    = yf.Ticker(yf_ticker).fast_info
+            price = float(getattr(fi, "last_price",     0) or 0)
+            prev  = float(getattr(fi, "previous_close", price) or price)
+            chg   = (price - prev) / prev * 100 if prev > 0 else 0
+
+            if price > 0.000001:  # Sıfıra çok yakın değerleri reddet
+                # Makul bir fiyat aralığı kontrolü
+                # Örn: JUP $0.16, SUI $3, APT $6 civarında
+                # 0.000001 - 100000 arası makul
+                logger.debug("yfinance OK: %s via %s = $%.6f", symbol_clean, yf_ticker, price)
+                return {
+                    "found":      True,
+                    "symbol":     symbol_clean,
+                    "name":       symbol_clean,
+                    "price":      round(price, 8),
+                    "change_24h": round(chg, 2),
+                    "source":     f"yfinance({yf_ticker})",
+                }
         except Exception:
-            yf_price = 0.0
+            continue
 
-    # ── 2. CoinGecko ile doğrula / fallback ──────────────────────────────
-    need_cg = (yf_price <= 0 or symbol_clean in CG_PREFERRED
-               or symbol_clean in COINGECKO_ID_MAP)
+    # ── 2. CoinGecko /simple/price — hafif endpoint ──────────────────────
+    cg_id = COINGECKO_ID_MAP.get(symbol_clean)
+    if cg_id:
+        try:
+            r = requests.get(
+                "https://api.coingecko.com/api/v3/simple/price",
+                params={
+                    "ids":             cg_id,
+                    "vs_currencies":   "usd",
+                    "include_24hr_change": "true",
+                },
+                headers={"User-Agent": "Mozilla/5.0"},
+                timeout=10,
+            )
+            if r.status_code == 200:
+                data = r.json().get(cg_id, {})
+                price = float(data.get("usd", 0) or 0)
+                chg   = float(data.get("usd_24h_change", 0) or 0)
+                if price > 0:
+                    logger.debug("CoinGecko simple: %s = $%.6f", symbol_clean, price)
+                    return {
+                        "found":      True,
+                        "symbol":     symbol_clean,
+                        "name":       symbol_clean,
+                        "price":      round(price, 8),
+                        "change_24h": round(chg, 2),
+                        "source":     "coingecko",
+                    }
+        except Exception as e:
+            logger.debug("CoinGecko simple/price failed %s: %s", symbol_clean, e)
 
-    if need_cg:
-        time.sleep(0.2)
-        cg_result = fetch_price_coingecko(symbol_clean)
-        if cg_result.get("found") and cg_result.get("price", 0) > 0:
-            cg_price = float(cg_result["price"])
-            if yf_price > 0 and cg_price > 0:
-                ratio = yf_price / cg_price
-                if 0.5 <= ratio <= 2.0:
-                    # yfinance tutarlı — güvenilir
-                    return {"found": True, "symbol": symbol_clean, "name": symbol_clean,
-                            "price": round(yf_price, 8), "change_24h": round(yf_chg, 2),
-                            "source": "yfinance"}
-                else:
-                    # yfinance sapıyor — CoinGecko kullan
-                    logger.debug("%s yfinance %.8f vs CG %.8f — CoinGecko tercih edildi",
-                                 symbol_clean, yf_price, cg_price)
-            return cg_result
+    # ── 3. CoinGecko tam endpoint veya arama ────────────────────────────
+    time.sleep(0.2)
+    cg_result = fetch_price_coingecko(symbol_clean)
+    if cg_result.get("found") and cg_result.get("price", 0) > 0:
+        return cg_result
 
-    if yf_price > 0:
-        return {"found": True, "symbol": symbol_clean, "name": symbol_clean,
-                "price": round(yf_price, 8), "change_24h": round(yf_chg, 2),
-                "source": "yfinance"}
-
-    return {"found": False, "symbol": symbol_clean, "price": 0,
-            "error": f"{symbol_clean} bulunamadı"}
+    # ── 4. Bulunamadı ────────────────────────────────────────────────────
+    logger.warning("fetch_crypto_price_universal: %s bulunamadı (yfinance formatları: %s)",
+                   symbol_clean, formats_to_try)
+    return {
+        "found":  False,
+        "symbol": symbol_clean,
+        "price":  0,
+        "error":  f"{symbol_clean} bulunamadı — ticker formatını kontrol et",
+    }
 
 
 def fetch_crypto_portfolio_prices(positions: list) -> dict:
