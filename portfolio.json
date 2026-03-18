@@ -369,7 +369,18 @@
       "currency": "USD",
       "added": "2026-03-18 19:58",
       "updated": "2026-03-18 19:58"
+    },
+    {
+      "ticker": "XAI-USD",
+      "shares": 698.4009,
+      "avg_cost": 0.3583,
+      "sector": "Kripto",
+      "notes": "",
+      "asset_class": "crypto",
+      "currency": "USD",
+      "added": "2026-03-18 20:00",
+      "updated": "2026-03-18 20:00"
     }
   ],
-  "cash": -350533.74
+  "cash": -350783.98
 }
