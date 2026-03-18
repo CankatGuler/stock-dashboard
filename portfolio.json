@@ -479,7 +479,18 @@
       "currency": "USD",
       "added": "2026-03-18 21:29",
       "updated": "2026-03-18 21:29"
+    },
+    {
+      "ticker": "HONEY22850-USD",
+      "shares": 3939.91,
+      "avg_cost": 0.09792,
+      "sector": "Kripto",
+      "notes": "",
+      "asset_class": "crypto",
+      "currency": "USD",
+      "added": "2026-03-18 21:31",
+      "updated": "2026-03-18 21:31"
     }
   ],
-  "cash": -366924.98
+  "cash": -367310.78
 }
