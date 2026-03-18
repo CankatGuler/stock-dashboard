@@ -457,7 +457,18 @@
       "currency": "USD",
       "added": "2026-03-18 21:20",
       "updated": "2026-03-18 21:20"
+    },
+    {
+      "ticker": "FET-USD",
+      "shares": 492.582,
+      "avg_cost": 1.063,
+      "sector": "Kripto",
+      "notes": "",
+      "asset_class": "crypto",
+      "currency": "USD",
+      "added": "2026-03-18 21:25",
+      "updated": "2026-03-18 21:25"
     }
   ],
-  "cash": -365199.89
+  "cash": -365723.5
 }
