@@ -292,7 +292,18 @@
       "currency": "USD",
       "added": "2026-03-18 19:46",
       "updated": "2026-03-18 19:46"
+    },
+    {
+      "ticker": "WLD-USD",
+      "shares": 423.6759,
+      "avg_cost": 2.27,
+      "sector": "Kripto",
+      "notes": "",
+      "asset_class": "crypto",
+      "currency": "USD",
+      "added": "2026-03-18 19:50",
+      "updated": "2026-03-18 19:50"
     }
   ],
-  "cash": -346925.65
+  "cash": -347887.39
 }
