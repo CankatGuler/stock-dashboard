@@ -4268,6 +4268,259 @@ with tab_targets:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+
+def _generate_strategy_html(director: dict, analyst_reports: dict, 
+                              portfolio_value: float, generated_at: str) -> str:
+    """Strateji raporunu güzel HTML formatında üret."""
+    
+    sig_colors = {
+        "AL": "#00c48c", "GÜÇLÜ AL": "#00c48c", "ARTIR": "#4fc3f7",
+        "TUT": "#8a9ab0", "BEKLE": "#ffb300",
+        "AZALT": "#ff8c00", "SAT": "#e74c3c", "GÜÇLÜ SAT": "#c0392b",
+    }
+    
+    def sig_badge(sinyal):
+        color = sig_colors.get(sinyal, "#8a9ab0")
+        return f'<span style="background:{color};color:#fff;padding:2px 10px;border-radius:12px;font-size:0.75rem;font-weight:700;">{sinyal}</span>'
+    
+    d = director
+    ar = analyst_reports
+
+    # Analist özeti
+    analist_html = ""
+    as_data = d.get("analist_sentezi", {})
+    for key, label in [("makro","🌍 Makro"), ("abd_hisse","🇺🇸 ABD Hisse"),
+                        ("kripto","₿ Kripto"), ("emtia","🥇 Emtia"), ("turkiye","🇹🇷 Türkiye")]:
+        item = as_data.get(key, {})
+        if not item:
+            # Fallback: analyst_reports'tan al
+            raw = ar.get(key, ar.get(key.replace("_hisse",""), {}))
+            item = {"sinyal": raw.get("sinyal","—"), "gerekce": raw.get("ana_gerekcce", raw.get("ana_gerekce",""))}
+        sinyal  = item.get("sinyal", "—")
+        gerekce = item.get("gerekce", item.get("gerekcce",""))
+        analist_html += f"""
+        <div style="background:#1a2332;border-left:3px solid {sig_colors.get(sinyal,'#8a9ab0')};
+             padding:0.7rem 1rem;margin-bottom:0.5rem;border-radius:0 6px 6px 0;">
+          <div style="display:flex;align-items:center;gap:0.7rem;margin-bottom:0.3rem;">
+            <span style="font-weight:600;color:#e8edf3;">{label}</span>
+            {sig_badge(sinyal)}
+          </div>
+          <div style="font-size:0.8rem;color:#b0bec5;">{gerekce}</div>
+        </div>"""
+
+    # Çelişkiler
+    celiski_html = ""
+    for c in d.get("celiskiler", []):
+        celiski_html += f"""
+        <div style="background:#1e2a1e;border:1px solid #ffb300;border-radius:6px;padding:0.7rem 1rem;margin-bottom:0.5rem;">
+          <div style="font-weight:600;color:#ffb300;">⚡ {c.get('baslik','')}</div>
+          <div style="font-size:0.8rem;color:#b0bec5;margin:0.3rem 0;">{c.get('aciklama','')}</div>
+          <div style="font-size:0.8rem;color:#00c48c;font-weight:600;">→ Karar: {c.get('karar','')} (Kazanan: {c.get('kazanan','')})</div>
+        </div>"""
+    if not celiski_html:
+        celiski_html = '<p style="color:#5a6a7a;font-size:0.85rem;">Analistler arasında büyük çelişki tespit edilmedi.</p>'
+
+    # Aksiyonlar
+    pa = d.get("portfoy_aksiyonlari", {})
+    
+    def aksiyon_list(items, border_color):
+        if not items: return '<p style="color:#5a6a7a;font-size:0.85rem;">—</p>'
+        html = ""
+        for a in items:
+            ticker = a.get("ticker","") or a.get("varlik","")
+            eylem  = a.get("eylem","") or a.get("kosul","") or a.get("izlenecek","")
+            neden  = a.get("neden","")
+            stop   = a.get("stop_loss")
+            hedef  = a.get("hedef")
+            extra  = ""
+            if stop:  extra += f' | Stop: <span style="color:#e74c3c;">{stop}</span>'
+            if hedef: extra += f' | Hedef: <span style="color:#00c48c;">{hedef}</span>'
+            html += f"""
+            <div style="background:#1a2332;border-left:3px solid {border_color};
+                 padding:0.5rem 0.8rem;margin-bottom:0.4rem;border-radius:0 4px 4px 0;font-size:0.82rem;">
+              {'<b style="color:#e8edf3;">'+ticker+'</b> — ' if ticker else ''}{eylem}{extra}
+              {'<div style="color:#8a9ab0;font-size:0.75rem;margin-top:2px;">'+neden+'</div>' if neden else ''}
+            </div>"""
+        return html
+
+    nakit = pa.get("nakit_orani", {})
+    nakit_html = f"""
+    <div style="background:#1a2332;border:1px solid #4fc3f7;border-radius:6px;padding:0.7rem 1rem;margin-top:0.7rem;">
+      <span style="color:#4fc3f7;font-weight:600;">💵 Nakit Oranı</span>
+      <span style="color:#e8edf3;margin-left:1rem;">Önerilen: <b>%{nakit.get('onerilen_pct',0)}</b> | 
+      Mevcut: %{nakit.get('mevcut_pct',0)}</span>
+      <div style="color:#8a9ab0;font-size:0.8rem;margin-top:3px;">{nakit.get('neden','')}</div>
+    </div>"""
+
+    # Risk senaryosu
+    rs = d.get("risk_senaryosu", {})
+    rs_items = ""
+    for item in rs.get("ilk_24_saat", []):
+        rs_items += f'<li style="margin-bottom:3px;">{item}</li>'
+    for item in rs.get("savunma", []):
+        rs_items += f'<li style="margin-bottom:3px;color:#ffb300;">{item}</li>'
+    
+    firsat_html = ""
+    for f_item in rs.get("firsat_listesi", []):
+        firsat_html += f"""<span style="background:#1a3a1a;border:1px solid #00c48c;border-radius:4px;
+        padding:2px 8px;margin-right:6px;font-size:0.78rem;">
+        {f_item.get('ticker','')} @ {f_item.get('seviye','')} — {f_item.get('neden','')}</span>"""
+
+    # Vade planları
+    vp = d.get("vade_planlari", {})
+    vade_html = ""
+    for vkey, vlabel, vcolor in [("kisa","📅 Kısa Vade (1-3 ay)","#4fc3f7"),
+                                   ("orta","📆 Orta Vade (3-12 ay)","#00c48c"),
+                                   ("uzun","🗓 Uzun Vade (1-3 yıl)","#ce93d8")]:
+        vd = vp.get(vkey, {})
+        aksiyonlar = ""
+        for ax in vd.get("aksiyonlar", []):
+            aksiyonlar += f'<li style="font-size:0.8rem;color:#b0bec5;">{ax}</li>'
+        
+        tema = vd.get("tema","") or vd.get("pozisyonlama","") or vd.get("baz_senaryo","")
+        vade_html += f"""
+        <div style="background:#1a2332;border-top:3px solid {vcolor};border-radius:6px;
+             padding:0.8rem 1rem;flex:1;min-width:200px;">
+          <div style="font-weight:600;color:{vcolor};margin-bottom:0.5rem;">{vlabel}</div>
+          <div style="font-size:0.8rem;color:#b0bec5;">{tema}</div>
+          {('<ul style="margin:0.4rem 0 0 1rem;padding:0;">' + aksiyonlar + '</ul>') if aksiyonlar else ''}
+        </div>"""
+
+    # Yıl sonu
+    yt = d.get("yil_sonu_hedefi", {})
+    hedef_pct = yt.get("hedef_pct", 0)
+    mevcut_pct = yt.get("mevcut_pct", 0)
+    kalan = yt.get("kalan_pct", hedef_pct - mevcut_pct)
+    
+    # Bir sonraki kontrol
+    snk = d.get("bir_sonraki_kontrol", {})
+    tetik_html = ""
+    for t in snk.get("tetikleyiciler", []):
+        tip_color = {"fiyat": "#4fc3f7", "takvim": "#ffb300", "durum": "#ce93d8"}.get(t.get("tip",""), "#8a9ab0")
+        tetik_html += f"""
+        <div style="display:flex;gap:0.5rem;align-items:flex-start;margin-bottom:0.3rem;font-size:0.8rem;">
+          <span style="background:{tip_color};color:#0d1117;padding:1px 6px;border-radius:3px;
+          font-size:0.68rem;font-weight:700;white-space:nowrap;">{t.get('tip','').upper()}</span>
+          <span style="color:#b0bec5;">{t.get('aciklama','')} — <b style="color:#e8edf3;">{t.get('esik','')}</b></span>
+        </div>"""
+
+    html = f"""<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Strateji Raporu — {generated_at}</title>
+<style>
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+          background: #0d1117; color: #e8edf3; padding: 2rem; line-height: 1.6; }}
+  .container {{ max-width: 900px; margin: 0 auto; }}
+  h1 {{ font-size: 1.4rem; color: #4fc3f7; margin-bottom: 0.2rem; }}
+  h2 {{ font-size: 1rem; color: #8a9ab0; text-transform: uppercase;
+        letter-spacing: 0.08em; margin-bottom: 1rem; border-bottom: 1px solid #1e2833;
+        padding-bottom: 0.4rem; }}
+  .section {{ background: #111927; border-radius: 8px; padding: 1.2rem 1.5rem;
+              margin-bottom: 1.2rem; border: 0.5px solid #1e2833; }}
+  .meta {{ color: #5a6a7a; font-size: 0.78rem; margin-bottom: 1.5rem; }}
+  .flex {{ display: flex; gap: 1rem; flex-wrap: wrap; }}
+  @media print {{ body {{ background: #fff; color: #000; }}
+                  .section {{ border: 1px solid #ccc; }} }}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div style="margin-bottom:1.5rem;">
+    <h1>🧭 Strateji Raporu</h1>
+    <div class="meta">Üretildi: {generated_at} | Portföy: ${portfolio_value:,.0f}</div>
+  </div>
+
+  <!-- 1. Piyasa Özeti -->
+  <div class="section">
+    <h2>📊 Piyasa Özeti</h2>
+    <p style="font-size:1rem;color:#e8edf3;line-height:1.8;">{d.get('piyasa_ozeti','')}</p>
+  </div>
+
+  <!-- 2. Analist Sentezi -->
+  <div class="section">
+    <h2>🔬 Analist Sinyalleri</h2>
+    {analist_html}
+  </div>
+
+  <!-- 3. Çelişkiler -->
+  <div class="section">
+    <h2>⚡ Çelişki Çözümü</h2>
+    {celiski_html}
+  </div>
+
+  <!-- 4. Aksiyon Planı -->
+  <div class="section">
+    <h2>🎯 Aksiyon Planı</h2>
+    <div style="margin-bottom:0.8rem;">
+      <div style="font-size:0.75rem;color:#e74c3c;font-weight:700;letter-spacing:0.05em;margin-bottom:0.4rem;">🔴 HEMEN YAP</div>
+      {aksiyon_list(pa.get('hemen_yap',[]), '#e74c3c')}
+    </div>
+    <div style="margin-bottom:0.8rem;">
+      <div style="font-size:0.75rem;color:#ffb300;font-weight:700;letter-spacing:0.05em;margin-bottom:0.4rem;">🟡 KOŞULLU YAP</div>
+      {aksiyon_list(pa.get('kosullu_yap',[]), '#ffb300')}
+    </div>
+    <div style="margin-bottom:0.8rem;">
+      <div style="font-size:0.75rem;color:#4fc3f7;font-weight:700;letter-spacing:0.05em;margin-bottom:0.4rem;">🔵 İZLE / KARAR VER</div>
+      {aksiyon_list(pa.get('izle_karar_ver',[]), '#4fc3f7')}
+    </div>
+    {nakit_html}
+  </div>
+
+  <!-- 5. Risk Senaryosu -->
+  <div class="section">
+    <h2>⚠️ Risk Senaryosu</h2>
+    <div style="color:#e74c3c;font-weight:600;margin-bottom:0.7rem;">Tetikleyici: {rs.get('tetikleyici','')}</div>
+    <ul style="margin-left:1.2rem;margin-bottom:0.7rem;">{rs_items}</ul>
+    {'<div style="margin-top:0.7rem;"><span style="color:#8a9ab0;font-size:0.8rem;">Fırsat Listesi: </span>' + firsat_html + '</div>' if firsat_html else ''}
+    <div style="margin-top:0.7rem;color:#00c48c;font-size:0.85rem;">
+      ✅ Toparlanma sinyali: {rs.get('toparlanma_sinyali','')}
+    </div>
+  </div>
+
+  <!-- 6. Vade Planları -->
+  <div class="section">
+    <h2>📅 Vade Planları</h2>
+    <div class="flex">{vade_html}</div>
+  </div>
+
+  <!-- 7. Yıl Sonu Hedefi -->
+  <div class="section">
+    <h2>🏆 Yıl Sonu Hedefi</h2>
+    <div style="display:flex;gap:2rem;margin-bottom:0.7rem;flex-wrap:wrap;">
+      <div><span style="color:#8a9ab0;font-size:0.8rem;">Hedef</span><br>
+           <span style="font-size:1.3rem;font-weight:700;color:#4fc3f7;">%{hedef_pct:.0f}</span></div>
+      <div><span style="color:#8a9ab0;font-size:0.8rem;">Mevcut</span><br>
+           <span style="font-size:1.3rem;font-weight:700;color:#{'00c48c' if mevcut_pct>=0 else 'e74c3c'};">{'+' if mevcut_pct>=0 else ''}%{mevcut_pct:.1f}</span></div>
+      <div><span style="color:#8a9ab0;font-size:0.8rem;">Kalan</span><br>
+           <span style="font-size:1.3rem;font-weight:700;color:#ffb300;">%{kalan:.1f}</span></div>
+    </div>
+    <div style="color:#8a9ab0;font-size:0.85rem;margin-bottom:0.4rem;">{yt.get('risk_degerlendirmesi','')}</div>
+    <div style="color:#4fc3f7;font-size:0.85rem;font-weight:600;">{yt.get('tavsiye','')}</div>
+  </div>
+
+  <!-- 8. Bir Sonraki Kontrol -->
+  <div class="section">
+    <h2>📌 Bir Sonraki Kontrol</h2>
+    <div style="font-size:1.1rem;font-weight:700;color:#ce93d8;margin-bottom:0.3rem;">{snk.get('tarih','')}</div>
+    <div style="color:#b0bec5;font-size:0.85rem;margin-bottom:0.7rem;">{snk.get('neden','')}</div>
+    {tetik_html}
+  </div>
+
+  <div style="text-align:center;color:#2a3a4a;font-size:0.75rem;margin-top:2rem;">
+    AI Strateji Direktörü — {generated_at}
+  </div>
+
+</div>
+</body>
+</html>"""
+    return html
+
+
 # TAB 10 — STRATEJİ MERKEZİ
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -4995,13 +5248,19 @@ with tab_strategy:
         # ── HTML Export ───────────────────────────────────────────────────
         st.markdown('<div style="margin-top:1rem;"></div>', unsafe_allow_html=True)
         from datetime import datetime as _dt_strat2
-        _export_ts = _dt_strat2.now().strftime("%Y-%m-%d")
+        _export_ts = _dt_strat2.now().strftime("%Y-%m-%d %H:%M")
+        _html_report = _generate_strategy_html(
+            director        = _dir,
+            analyst_reports = _ar,
+            portfolio_value = _port_val_now,
+            generated_at    = _export_ts,
+        )
         st.download_button(
             label="📄 Raporu İndir (HTML)",
-            data=json.dumps(_dir, ensure_ascii=False, indent=2).encode("utf-8"),
-            file_name=f"strateji_{_export_ts}.json",
-            mime="application/json",
-            key="dl_strategy_json",
+            data=_html_report.encode("utf-8"),
+            file_name=f"strateji_{_dt_strat2.now().strftime('%Y-%m-%d')}.html",
+            mime="text/html",
+            key="dl_strategy_html",
             use_container_width=False,
         )
 
