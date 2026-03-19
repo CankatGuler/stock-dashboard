@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 CLAUDE_MODEL   = "claude-opus-4-5"
 MAX_TOKENS_ANALYST  = 800    # Her analist raporu için — özlü ama derin
-MAX_TOKENS_DIRECTOR = 3000   # Direktör için — kapsamlı sentez
+MAX_TOKENS_DIRECTOR = 8000   # Direktör için — kapsamlı sentez
 
 
 # ─── Claude API Yardımcı Fonksiyonu ──────────────────────────────────────────
@@ -54,30 +54,57 @@ def _call_claude(system_prompt: str, user_message: str,
 def _safe_json(text: str, fallback: dict = None) -> dict:
     """
     Claude çıktısından JSON parse et.
-    Başarısız olursa fallback döndür.
+    Kısmi JSON bile olsa kurtarmaya çalış.
     """
     if not text:
+        logger.warning("_safe_json: boş metin")
         return fallback or {}
-    # Markdown code block varsa temizle
+
+    original = text
     text = text.strip()
+
+    # Markdown kod bloğu temizle
     if "```json" in text:
         text = text.split("```json")[1].split("```")[0].strip()
     elif "```" in text:
         text = text.split("```")[1].split("```")[0].strip()
-    # Brace recovery — JSON eksik kapanıyorsa kapat
+
+    # İlk { ile son } arasını al
+    first = text.find("{")
+    last  = text.rfind("}")
+    if first >= 0 and last > first:
+        text = text[first:last+1]
+
+    # Doğrudan parse dene
     try:
         return json.loads(text)
     except json.JSONDecodeError:
-        # Parantez sayısını dengele
-        open_b  = text.count("{")
-        close_b = text.count("}")
-        if open_b > close_b:
-            text += "}" * (open_b - close_b)
-        try:
-            return json.loads(text)
-        except Exception:
-            logger.warning("JSON parse failed even after recovery")
-            return fallback or {}
+        pass
+
+    # Brace recovery — JSON eksik kapanıyorsa kapat
+    open_b  = text.count("{")
+    close_b = text.count("}")
+    if open_b > close_b:
+        text += "}" * (open_b - close_b)
+    try:
+        return json.loads(text)
+    except Exception:
+        pass
+
+    # Son çare: sadece piyasa_ozeti çıkarmaya çalış
+    try:
+        import re
+        match = re.search(r'"piyasa_ozeti"\s*:\s*"([^"]+)"', original)
+        if match and fallback:
+            result = dict(fallback)
+            result["piyasa_ozeti"] = match.group(1)
+            logger.warning("JSON tam parse edilemedi, sadece piyasa_ozeti kurtarıldı")
+            return result
+    except Exception:
+        pass
+
+    logger.warning("JSON parse tamamen başarısız. İlk 500 karakter: %s", original[:500])
+    return fallback or {}
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -500,7 +527,41 @@ bir_sonraki_kontrol: Tarih + tetikleyiciler (max 3)
 • Nakit oranı her zaman belirtilmeli
 • Stop-loss ve hedef fiyat mümkün olduğunda verilmeli
 • Türkçe yaz
-• JSON formatında yanıt ver"""
+• JSON formatında yanıt ver — aşağıdaki şemayı kullan:
+
+{
+  "piyasa_ozeti": "2-3 cümle — dominant tema",
+  "analist_sentezi": {
+    "makro": {"sinyal": "AL|SAT|BEKLE|TUT|AZALT|ARTIR", "gerekce": "tek cümle"},
+    "abd_hisse": {"sinyal": "...", "gerekce": "..."},
+    "kripto": {"sinyal": "...", "gerekce": "..."},
+    "emtia": {"sinyal": "...", "gerekce": "..."},
+    "turkiye": {"sinyal": "...", "gerekce": "..."}
+  },
+  "celiskiler": [{"baslik": "...", "aciklama": "...", "karar": "...", "kazanan": "..."}],
+  "portfoy_aksiyonlari": {
+    "hemen_yap": [{"varlik_sinifi": "...", "ticker": "...", "eylem": "...", "miktar_pct": 0, "kaynak": "nakit", "neden": "...", "stop_loss": null, "hedef": null}],
+    "kosullu_yap": [{"kosul": "...", "eylem": "...", "ticker": "...", "neden": "..."}],
+    "izle_karar_ver": [{"varlik": "...", "izlenecek": "...", "eylem": "..."}],
+    "nakit_orani": {"onerilen_pct": 0, "mevcut_pct": 0, "neden": "..."}
+  },
+  "risk_senaryosu": {
+    "tetikleyici": "...", "ilk_24_saat": ["..."],
+    "savunma": ["..."],
+    "firsat_listesi": [{"ticker": "...", "seviye": 0, "islem": "AL", "neden": "..."}],
+    "toparlanma_sinyali": "..."
+  },
+  "vade_planlari": {
+    "kisa": {"sure": "1-3 ay", "baz_senaryo": "...", "risk_senaryosu": "...", "aksiyonlar": ["..."]},
+    "orta": {"sure": "3-12 ay", "baz_senaryo": "...", "risk_senaryosu": "...", "aksiyonlar": ["..."]},
+    "uzun": {"sure": "1-3 yil", "tema": "...", "pozisyonlama": "..."}
+  },
+  "yil_sonu_hedefi": {"hedef_pct": 0, "mevcut_pct": 0, "kalan_pct": 0, "gerekan_aylik_pct": 0, "risk_degerlendirmesi": "...", "tavsiye": "..."},
+  "bir_sonraki_kontrol": {
+    "tarih": "YYYY-MM-DD", "neden": "...",
+    "tetikleyiciler": [{"tip": "fiyat|takvim|durum", "aciklama": "...", "esik": "..."}]
+  }
+}"""
 
 
 def _build_director_message(
@@ -533,33 +594,31 @@ def _build_director_message(
     ]
 
     for title, rep in reports:
-        if not rep or not rep.get("ana_gerekcce"):
+        # ana_gerekcce veya ana_gerekce — her iki yazım da kabul edilir
+        _ana_key = "ana_gerekcce" if rep.get("ana_gerekcce") else "ana_gerekce"
+        if not rep or not rep.get(_ana_key):
             lines.append(f"[{title}] — Veri alınamadı\n")
             continue
         sinyal = rep.get("sinyal", "?")
         guven  = rep.get("guven",  "?")
-        lines.append(f"[{title}] Sinyal: {sinyal} (Güven: {guven}/10)")
-        lines.append(f"Gerekçe: {rep.get('ana_gerekcce','')}")
-
-        # Alan bazlı ekstralar
-        for extra_key in ["sektor_gorusu", "deger_leme", "dongu_pozisyonu",
-                          "onchain_ozet", "btc_vs_altcoin", "altin_gorusu",
-                          "dolar_bazli_degerleme", "xbank_gorusu"]:
-            if rep.get(extra_key):
-                lines.append(f"  → {rep[extra_key]}")
-
-        for d in rep.get("destekleyen", [])[:2]:
-            lines.append(f"  ✅ {d}")
-        for r in rep.get("riskler", [])[:2]:
-            lines.append(f"  ⚠️ {r}")
-        lines.append(f"Öneri: {rep.get('oneri','')}")
-        lines.append(f"İzle: {rep.get('izle','')}\n")
+        ana    = rep.get(_ana_key, "")
+        oneri  = rep.get("oneri", "")
+        izle   = rep.get("izle",  "")
+        # Her analist için özlü format — token tasarrufu
+        lines.append(f"[{title}] {sinyal} ({guven}/10): {ana}")
+        dest = rep.get("destekleyen", [])[:2]
+        risk = rep.get("riskler", [])[:2]
+        if dest: lines.append("  ✅ " + " | ".join(dest))
+        if risk: lines.append("  ⚠️ " + " | ".join(risk))
+        if oneri: lines.append(f"  → Öneri: {oneri[:150]}")
+        if izle:  lines.append(f"  → İzle: {izle[:100]}")
+        lines.append("")
 
     # ── Korelasyon Özeti ─────────────────────────────────────────────────
     corr_prompt = correlations.get("prompt", "") if correlations else ""
     if corr_prompt:
-        lines.append("═══ KORElASYON ANALİZİ ═══")
-        lines.append(corr_prompt[:800])  # Özlü tut
+        lines.append("═══ KORELASYON ÖZETİ ═══")
+        lines.append(corr_prompt[:400])  # Çok özlü tut
         lines.append("")
 
     # ── Portföy Mevcut Durumu ────────────────────────────────────────────
@@ -607,59 +666,11 @@ def _build_director_message(
 
 Yanıtını aşağıdaki JSON formatında ver:""")
 
-    lines.append("""{
-  "piyasa_ozeti": "...",
-  "analist_sentezi": {
-    "makro": {"sinyal": "...", "gerekcce": "..."},
-    "abd_hisse": {"sinyal": "...", "gerekcce": "..."},
-    "kripto": {"sinyal": "...", "gerekcce": "..."},
-    "emtia": {"sinyal": "...", "gerekcce": "..."},
-    "turkiye": {"sinyal": "...", "gerekcce": "..."}
-  },
-  "celiskiler": [
-    {"baslik": "...", "aciklama": "...", "karar": "...", "kazanan": "..."}
-  ],
-  "portfoy_aksiyonlari": {
-    "hemen_yap": [
-      {"varlik_sinifi": "...", "ticker": "...", "eylem": "...", "miktar_pct": 0,
-       "kaynak": "nakit|sat_gelen", "neden": "...", "stop_loss": null, "hedef": null}
-    ],
-    "kosullu_yap": [
-      {"kosul": "...", "eylem": "...", "ticker": "...", "neden": "..."}
-    ],
-    "izle_karar_ver": [
-      {"varlik": "...", "izlenecek": "...", "eylem": "..."}
-    ],
-    "nakit_orani": {"onerilen_pct": 0, "mevcut_pct": 0, "neden": "..."}
-  },
-  "risk_senaryosu": {
-    "tetikleyici": "...",
-    "ilk_24_saat": ["...", "..."],
-    "savunma": ["...", "..."],
-    "firsat_listesi": [{"ticker": "...", "seviye": 0, "islem": "AL", "neden": "..."}],
-    "toparlanma_sinyali": "..."
-  },
-  "vade_planlari": {
-    "kisa": {"sure": "1-3 ay", "baz_senaryo": "...", "risk_senaryosu": "...", "aksiyonlar": ["..."]},
-    "orta": {"sure": "3-12 ay", "baz_senaryo": "...", "risk_senaryosu": "...", "aksiyonlar": ["..."]},
-    "uzun": {"sure": "1-3 yıl", "tema": "...", "pozisyonlama": "..."}
-  },
-  "yil_sonu_hedefi": {
-    "hedef_pct": 0, "mevcut_pct": 0, "kalan_pct": 0,
-    "gerekan_aylik_pct": 0,
-    "risk_degerlendirmesi": "...",
-    "tavsiye": "..."
-  },
-  "bir_sonraki_kontrol": {
-    "tarih": "YYYY-MM-DD",
-    "neden": "...",
-    "tetikleyiciler": [
-      {"tip": "fiyat|takvim|durum", "aciklama": "...", "esik": "..."},
-      {"tip": "fiyat|takvim|durum", "aciklama": "...", "esik": "..."}
-    ]
-  }
-}""")
-
+    lines.append("""
+════════════════════════════════════
+Yukarıdaki analist raporlarını sentezle ve sistem promptundaki JSON formatında yanıt ver.
+Tüm alanları doldur, hiçbirini boş bırakma. Sadece JSON döndür, açıklama ekleme.
+""")
     return "\n".join(lines)
 
 
