@@ -1047,19 +1047,139 @@ with tab_portfolio:
     # ABD HİSSELER — Mevcut özet ve korelasyon analizi
     # ═══════════════════════════════════════════════════════════════════════
     with pt_us:
-        # Özet bar — enriched_portfolio session state'den
-        _enriched_us = st.session_state.get("enriched_portfolio", [])
-        _us_positions = [p for p in _enriched_us
-                         if p.get("asset_class", "us_equity") == "us_equity"]
-        if _us_positions:
-            # current_price_usd yoksa current_value/shares'ten hesapla
-            for _p in _us_positions:
-                if "current_price_usd" not in _p:
-                    _shares = float(_p.get("shares", 1))
-                    _p["current_price_usd"] = float(_p.get("current_value", 0)) / _shares if _shares > 0 else 0
-            _render_asset_summary(_us_positions, "ABD HİSSE")
+        st.markdown(
+            '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+            'letter-spacing:0.12em;margin-bottom:0.5rem;">🇺🇸 ABD HİSSE YÖNETİMİ</div>',
+            unsafe_allow_html=True)
+
+        _us_all = [p for p in load_portfolio()
+                   if p.get("asset_class", "us_equity") == "us_equity"
+                   and float(p.get("shares", 0)) > 0]
+
+        if _us_all:
+            import yfinance as _yf_us
+            # 5 dk session state cache
+            import time as _t_us
+            _us_cache_key = "us_price_cache"
+            _us_ts_key    = "us_price_cache_ts"
+            _us_tk_key    = str(sorted([p["ticker"] for p in _us_all]))
+            _us_cached    = st.session_state.get(_us_cache_key, {})
+            _us_last_ts   = st.session_state.get(_us_ts_key, 0)
+
+            if (_us_cached and
+                (_t_us.time() - _us_last_ts) < 300 and
+                _us_cached.get("_tk_key") == _us_tk_key):
+                _us_price_map  = _us_cached["price_map"]
+                _us_change_map = _us_cached["change_map"]
+                _us_usd_try    = _us_cached.get("usd_try", 32.0)
+            else:
+                with st.spinner("ABD hisse fiyatları çekiliyor..."):
+                    _us_price_map  = {}
+                    _us_change_map = {}
+                    for _p in _us_all:
+                        try:
+                            _fi  = _yf_us.Ticker(_p["ticker"]).fast_info
+                            _pr  = float(getattr(_fi, "last_price",     0) or 0)
+                            _pv  = float(getattr(_fi, "previous_close", _pr) or _pr)
+                            _ch  = (_pr - _pv) / _pv * 100 if _pv > 0 else 0
+                            if _pr > 0:
+                                _us_price_map[_p["ticker"]]  = _pr
+                                _us_change_map[_p["ticker"]] = round(_ch, 2)
+                        except Exception:
+                            pass
+                    _us_usd_try = 32.0
+                    st.session_state[_us_cache_key] = {
+                        "price_map":  _us_price_map,
+                        "change_map": _us_change_map,
+                        "usd_try":    _us_usd_try,
+                        "_tk_key":    _us_tk_key,
+                    }
+                    st.session_state[_us_ts_key] = _t_us.time()
+
+            # Enriched liste + özet bar
+            _us_enriched = []
+            _us_rows     = []
+            for _p in _us_all:
+                _cur = _us_price_map.get(_p["ticker"], float(_p.get("avg_cost", 0)))
+                _chg = _us_change_map.get(_p["ticker"], 0.0)
+                _avg = float(_p.get("avg_cost", 0))
+                _val = float(_p.get("shares", 0)) * _cur
+                _pnl = (_cur - _avg) / _avg * 100 if _avg > 0 else 0
+                _p2  = dict(_p)
+                _p2["current_price_usd"] = _cur
+                _p2["currency"] = "USD"
+                _us_enriched.append(_p2)
+                _us_rows.append({
+                    "Ticker":   _p["ticker"],
+                    "Adet":     f"{float(_p['shares']):.2f}",
+                    "Maliyet":  f"${_avg:,.2f}",
+                    "Güncel":   f"${_cur:,.2f}",
+                    "24s %":    f"{_chg:+.1f}%",
+                    "Değer":    f"${_val:,.2f}",
+                    "K/Z %":    f"{_pnl:+.1f}%",
+                    "Sektör":   _p.get("sector", "—"),
+                })
+
+            # Session state'i de güncelle (korelasyon analizi için)
+            st.session_state["enriched_portfolio"] = [
+                {**p, "current_value": float(p.get("shares",0)) * _us_price_map.get(p["ticker"], float(p.get("avg_cost",0))),
+                 "current_price": _us_price_map.get(p["ticker"], float(p.get("avg_cost",0)))}
+                for p in _us_all
+            ]
+
+            # Özet bar
+            _render_asset_summary(_us_enriched, "ABD HİSSE")
+
+            # Tablo
+            st.dataframe(_us_rows, use_container_width=True)
+
+            # Hisse ekle
+            with st.expander("➕ ABD Hisse Ekle"):
+                _u1, _u2, _u3 = st.columns(3)
+                with _u1:
+                    _u_tk = st.text_input("Ticker", placeholder="AAPL, NVDA, AVGO", key="u_tk").upper().strip()
+                with _u2:
+                    _u_sh = st.number_input("Adet", min_value=0.0, step=1.0, key="u_sh")
+                with _u3:
+                    _u_co = st.number_input("Maliyet ($)", min_value=0.0, step=0.01, key="u_co")
+                _u_nt = st.text_input("Not", key="u_nt")
+                if st.button("💾 Ekle", key="btn_add_us"):
+                    if _u_tk and _u_sh > 0 and _u_co > 0:
+                        _sec = "Diğer"
+                        try:
+                            _sec = _yf_us.Ticker(_u_tk).info.get("sector", "Diğer") or "Diğer"
+                        except Exception:
+                            pass
+                        add_position(_u_tk, _u_sh, _u_co, _sec, _u_nt,
+                                    deduct_from_cash=True, asset_class="us_equity", currency="USD")
+                        st.success(f"✅ {_u_tk} eklendi!")
+                        st.session_state.pop(_us_cache_key, None)  # cache temizle
+                        st.rerun()
+
+            # Sil
+            _del_u = st.selectbox("Sil:", ["—"] + [p["ticker"] for p in _us_all], key="del_us_sel")
+            if _del_u != "—":
+                if st.button(f"🗑 {_del_u} Sil", key="del_us_btn"):
+                    from portfolio_manager import remove_position
+                    remove_position(_del_u)
+                    st.session_state.pop(_us_cache_key, None)
+                    st.rerun()
         else:
-            st.caption("💡 Portföy verisi yükleniyor... Portföy sekmesine gidin ve bekleyin.")
+            st.info("Henüz ABD hisse pozisyonu yok.")
+            with st.expander("➕ ABD Hisse Ekle"):
+                _u1b, _u2b, _u3b = st.columns(3)
+                with _u1b:
+                    _u_tkb = st.text_input("Ticker", placeholder="AAPL, NVDA", key="u_tk_b").upper().strip()
+                with _u2b:
+                    _u_shb = st.number_input("Adet", min_value=0.0, step=1.0, key="u_sh_b")
+                with _u3b:
+                    _u_cob = st.number_input("Maliyet ($)", min_value=0.0, step=0.01, key="u_co_b")
+                if st.button("💾 Ekle", key="btn_add_us_b"):
+                    if _u_tkb and _u_shb > 0 and _u_cob > 0:
+                        add_position(_u_tkb, _u_shb, _u_cob, "Diğer", "",
+                                    deduct_from_cash=True, asset_class="us_equity", currency="USD")
+                        st.success(f"✅ {_u_tkb} eklendi!")
+                        st.rerun()
 
     # ═══════════════════════════════════════════════════════════════════════
     # KRİPTO
