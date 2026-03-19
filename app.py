@@ -4701,6 +4701,13 @@ with tab_strategy:
         _dir = _tpr.get("director", {})
         _ar  = _tpr.get("analyst_reports", {})
 
+        # Sinyal renk haritası — tüm bölümlerde kullanılır
+        _sig_colors = {
+            "AL": "#00c48c", "GÜÇLÜ AL": "#00c48c", "ARTIR": "#4fc3f7",
+            "TUT": "#8a9ab0", "BEKLE": "#ffb300",
+            "AZALT": "#ff8c00", "SAT": "#e74c3c", "GÜÇLÜ SAT": "#c0392b",
+        }
+
         # ── BÖLÜM 1: PİYASA ÖZETİ + ANALİST SENTEZİ ─────────────────────
         # Kullanıcı buraya önce bakıyor — en büyük, en net kısım
         _poz = _dir.get("piyasa_ozeti", "")
@@ -4724,11 +4731,6 @@ with tab_strategy:
                 '📊 ANALİST SENTEZİ</div>',
                 unsafe_allow_html=True,
             )
-            _sig_colors = {
-                "AL": "#00c48c", "GÜÇLÜ AL": "#00c48c", "ARTIR": "#4fc3f7",
-                "TUT": "#8a9ab0", "BEKLE": "#ffb300",
-                "AZALT": "#ff8c00", "SAT": "#e74c3c", "GÜÇLÜ SAT": "#c0392b",
-            }
             _as_cols = st.columns(5)
             _as_items = [
                 ("🌍 Makro",        _as.get("makro",     {})),
