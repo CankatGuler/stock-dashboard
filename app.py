@@ -1179,44 +1179,7 @@ with tab_portfolio:
                     st.rerun()
 
 
-                    # ── ABD / USD Nakit ─────────────────────────────────────────────────────
-                    st.markdown('<hr style="border-color:var(--color-border-tertiary);margin:0.5rem 0;">',
-                                unsafe_allow_html=True)
-                    _accts_usd = get_cash_accounts()
-                    _bal_usd   = _accts_usd.get("usd", 0.0)
-                    st.markdown(
-                        f'<div style="font-size:0.65rem;color:#5a6a7a;font-weight:600;">$ ABD / USD Nakit</div>'
-                        f'<div style="font-size:1.1rem;font-weight:700;color:#00c48c;">{_bal_usd:,.0f} $</div>',
-                        unsafe_allow_html=True)
-        
-                    _inp_usd, _b1_usd, _b2_usd, _b3_usd = st.columns([2,1,1,1])
-                    with _inp_usd:
-                        _new_usd = st.number_input(
-                            "Miktar ($)", min_value=0.0, value=0.0, step=100.0,
-                            key="cash_us_inp", label_visibility="collapsed",
-                            placeholder="Miktar gir"
-                        )
-                    with _b1_usd:
-                        if st.button("➕ Ekle", key="btn_us_add", use_container_width=True,
-                                    help="Mevcut bakiyenin üzerine ekle"):
-                            if _new_usd > 0:
-                                add_to_cash_account("usd", _new_usd)
-                                st.success(f"✅ {_new_usd:,.0f} $ eklendi! Yeni bakiye: {_bal_usd+_new_usd:,.0f} $")
-                                st.rerun()
-                    with _b2_usd:
-                        if st.button("✏️ Ayarla", key="btn_us_set", use_container_width=True,
-                                    help="Bakiyeyi tam olarak bu değere ayarla"):
-                            set_cash_account("usd", _new_usd)
-                            st.success(f"✅ Bakiye {_new_usd:,.0f} $ olarak ayarlandı!")
-                            st.rerun()
-                    with _b3_usd:
-                        if st.button("🗑 Sıfırla", key="btn_us_reset", use_container_width=True,
-                                    help="Bakiyeyi sıfırla"):
-                            set_cash_account("usd", 0.0)
-                            st.success("Bakiye sıfırlandı.")
-                            st.rerun()
-        else:
-            st.info("Henüz ABD hisse pozisyonu yok.")
+
             with st.expander("➕ ABD Hisse Ekle"):
                 _u1b, _u2b, _u3b = st.columns(3)
                 with _u1b:
@@ -1232,20 +1195,40 @@ with tab_portfolio:
                         st.success(f"✅ {_u_tkb} eklendi!")
                         st.rerun()
 
+
+        # ── ABD / USD Nakit ──────────────────────────────────────────────────
+        st.markdown('<hr style="border-color:var(--color-border-tertiary);margin:0.5rem 0;">',
+                    unsafe_allow_html=True)
+        _bal_usd_now = get_cash_accounts().get("usd", 0.0)
+        st.markdown(
+            f'<div style="font-size:0.65rem;color:#5a6a7a;font-weight:600;">💵 ABD / USD Nakit</div>'
+            f'<div style="font-size:1.1rem;font-weight:700;color:#00c48c;">{_bal_usd_now:,.0f} $</div>',
+            unsafe_allow_html=True)
+        _ui1, _ui2, _ui3, _ui4 = st.columns([2,1,1,1])
+        with _ui1:
+            _usd_inp = st.number_input("Miktar ($)", min_value=0.0, value=0.0,
+                                       step=100.0, key="cash_us_final", label_visibility="collapsed")
+        with _ui2:
+            if st.button("➕ Ekle", key="btn_usd_add", use_container_width=True, help="Üstüne ekle"):
+                if _usd_inp > 0:
+                    add_to_cash_account("usd", _usd_inp)
+                    st.success(f"✅ {_usd_inp:,.0f} $ eklendi!")
+                    st.rerun()
+        with _ui3:
+            if st.button("✏️ Ayarla", key="btn_usd_set", use_container_width=True, help="Tam değere ayarla"):
+                set_cash_account("usd", _usd_inp)
+                st.success(f"✅ {_usd_inp:,.0f} $ olarak ayarlandı!")
+                st.rerun()
+        with _ui4:
+            if st.button("🗑 Sıfırla", key="btn_usd_rst", use_container_width=True):
+                set_cash_account("usd", 0.0)
+                st.success("Sıfırlandı.")
+                st.rerun()
+
     # ═══════════════════════════════════════════════════════════════════════
     # KRİPTO
     # ═══════════════════════════════════════════════════════════════════════
-    with pt_crypto:
-        st.markdown(
-            '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
-            'letter-spacing:0.12em;margin-bottom:0.5rem;">₿ KRİPTO VARLIK YÖNETİMİ</div>',
-            unsafe_allow_html=True)
 
-        # Kripto pozisyonları
-        _crypto_all = [p for p in load_portfolio() if p.get("asset_class") == "crypto"
-                       and float(p.get("shares", 0)) > 0]
-
-        if _crypto_all:
             # Fiyat çek
             from crypto_fetcher import fetch_crypto_price_universal
             _c_rows = []
