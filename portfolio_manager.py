@@ -314,7 +314,17 @@ def _read_full_portfolio() -> tuple[list[dict], float, str]:
 def _write_full_portfolio(positions: list[dict], cash: float, sha: str = "") -> bool:
     """Positions + cash birlikte yaz."""
     token, repo = _get_github_config()
-    full_data = {"positions": positions, "cash": round(float(cash), 2)}
+    # Mevcut cash_accounts'ı koru
+    try:
+        _existing = _read_raw_portfolio()
+        _accounts = _existing.get("cash_accounts", {}) if isinstance(_existing, dict) else {}
+    except Exception:
+        _accounts = {}
+    full_data = {
+        "positions":     positions,
+        "cash":          round(float(cash), 2),
+        "cash_accounts": _accounts,
+    }
 
     if not token or not repo:
         return _local_write_full(full_data)
@@ -368,6 +378,112 @@ def set_cash(amount: float) -> bool:
     """Nakiti doğrudan belirli bir değere ayarla."""
     positions, _, sha = _read_full_portfolio()
     return _write_full_portfolio(positions, max(0.0, amount), sha)
+
+def _read_raw_portfolio() -> dict:
+    """Ham portfolio.json içeriğini dict olarak döndür."""
+    token, repo = _get_github_config()
+    if token and repo:
+        try:
+            url  = f"https://api.github.com/repos/{repo}/contents/{GITHUB_PATH}"
+            hdrs = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
+            resp = requests.get(url, headers=hdrs, timeout=10)
+            if resp.status_code == 200:
+                raw = json.loads(base64.b64decode(resp.json()["content"]).decode("utf-8"))
+                return raw if isinstance(raw, dict) else {}
+        except Exception:
+            pass
+    # Local fallback
+    try:
+        with open("portfolio.json") as f:
+            raw = json.load(f)
+            return raw if isinstance(raw, dict) else {}
+    except Exception:
+        return {}
+
+
+def get_cash_accounts() -> dict:
+    """
+    Tüm nakit hesaplarını döndür.
+    {
+      "usd":           float,  # ABD hisse / genel USD nakit
+      "crypto_usd":    float,  # Kripto borsa nakiti (USD)
+      "commodity_usd": float,  # Emtia hesabı (USD)
+      "tefas_try":     float,  # TEFAS / Türkiye TL nakiti
+    }
+    """
+    raw = _read_raw_portfolio()
+    accounts = raw.get("cash_accounts", {})
+    return {
+        "usd":           float(accounts.get("usd",           raw.get("cash", 0.0))),
+        "crypto_usd":    float(accounts.get("crypto_usd",    0.0)),
+        "commodity_usd": float(accounts.get("commodity_usd", 0.0)),
+        "tefas_try":     float(accounts.get("tefas_try",     0.0)),
+    }
+
+
+def set_cash_account(account: str, amount: float) -> bool:
+    """
+    Belirli bir nakit hesabını güncelle.
+    account: "usd" | "crypto_usd" | "commodity_usd" | "tefas_try"
+    """
+    amount = max(0.0, float(amount))
+    token, repo = _get_github_config()
+
+    raw = _read_raw_portfolio()
+    accounts = raw.get("cash_accounts", {})
+    accounts[account] = round(amount, 2)
+
+    # usd değişirse eski cash alanını da güncelle (geriye uyumluluk)
+    if account == "usd":
+        raw["cash"] = round(amount, 2)
+
+    raw["cash_accounts"] = accounts
+    encoded = base64.b64encode(
+        json.dumps(raw, indent=2, ensure_ascii=False).encode()
+    ).decode()
+
+    if token and repo:
+        try:
+            url  = f"https://api.github.com/repos/{repo}/contents/{GITHUB_PATH}"
+            hdrs = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
+            sha  = requests.get(url, headers=hdrs, timeout=10).json().get("sha", "")
+            payload = {"message": f"Cash update: {account}={amount:.2f}",
+                       "content": encoded, "sha": sha}
+            resp = requests.put(url, headers=hdrs, json=payload, timeout=15)
+            return resp.status_code in (200, 201)
+        except Exception as e:
+            logger.warning("set_cash_account GitHub write failed: %s", e)
+
+    # Local fallback
+    try:
+        with open("portfolio.json", "w") as f:
+            json.dump(raw, f, indent=2, ensure_ascii=False)
+        return True
+    except Exception:
+        return False
+
+
+def get_total_cash_usd(usd_try: float = 32.0) -> dict:
+    """
+    Tüm nakit hesaplarını USD bazında topla.
+    Returns: {total_usd, breakdown, usd_try}
+    """
+    accts = get_cash_accounts()
+    breakdown = {
+        "ABD / USD":  accts["usd"],
+        "Kripto":     accts["crypto_usd"],
+        "Emtia":      accts["commodity_usd"],
+        "TEFAS (TL)": accts["tefas_try"] / usd_try,
+    }
+    total = sum(breakdown.values())
+    return {
+        "total_usd":   round(total, 2),
+        "breakdown":   breakdown,
+        "raw_accounts": accts,
+        "usd_try":     usd_try,
+    }
+
+
 
 
 def add_cash(amount: float, reason: str = "") -> tuple[float, str]:

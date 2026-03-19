@@ -54,6 +54,7 @@ from portfolio_manager import (
     sell_position, enrich_portfolio_with_prices, portfolio_summary,
     import_from_csv, export_to_csv, generate_csv_template,
     get_cash, add_cash, deduct_cash, set_cash,
+    get_cash_accounts, set_cash_account, get_total_cash_usd,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -1164,6 +1165,27 @@ with tab_portfolio:
                     remove_position(_del_u)
                     st.session_state.pop(_us_cache_key, None)
                     st.rerun()
+
+            # ── Nakit / Birikim ─────────────────────────────────────────────
+            st.markdown('<hr style="border-color:var(--color-border-tertiary);margin:0.5rem 0;">',
+                        unsafe_allow_html=True)
+            _accts_us = get_cash_accounts()
+            _cash_us_val = _accts_us.get("usd", 0.0)
+            _cu1, _cu2, _cu3 = st.columns([2, 1, 1])
+            with _cu1:
+                st.markdown(
+                    f'<div style="font-size:0.65rem;color:#5a6a7a;font-weight:600;">💵 ABD / USD NAKİT</div>'
+                    f'<div style="font-size:1.1rem;font-weight:700;color:#00c48c;">${_cash_us_val:,.0f}</div>',
+                    unsafe_allow_html=True)
+            with _cu2:
+                _new_cash_us = st.number_input("Nakit güncelle ($)", min_value=0.0,
+                                               value=float(_cash_us_val), step=100.0, key="cash_us_input",
+                                               label_visibility="collapsed")
+            with _cu3:
+                if st.button("💾 Nakit Kaydet", key="btn_cash_us", use_container_width=True):
+                    set_cash_account("usd", _new_cash_us)
+                    st.success(f"✅ ABD nakiti ${_new_cash_us:,.0f} kaydedildi!")
+                    st.rerun()
         else:
             st.info("Henüz ABD hisse pozisyonu yok.")
             with st.expander("➕ ABD Hisse Ekle"):
@@ -1246,7 +1268,30 @@ with tab_portfolio:
                     from portfolio_manager import remove_position
                     remove_position(_del_c)
                     st.rerun()
-        else:
+
+
+        # ── Kripto Nakit (her zaman göster) ─────────────────────────────────
+        st.markdown('<hr style="border-color:var(--color-border-tertiary);margin:0.5rem 0;">',
+                    unsafe_allow_html=True)
+        _accts_cr2 = get_cash_accounts()
+        _cash_cr2  = _accts_cr2.get("crypto_usd", 0.0)
+        _cr1b, _cr2b, _cr3b = st.columns([2, 1, 1])
+        with _cr1b:
+            st.markdown(
+                f'<div style="font-size:0.65rem;color:#5a6a7a;font-weight:600;">₿ KRİPTO BORSA NAKİT (USD)</div>'
+                f'<div style="font-size:1.1rem;font-weight:700;color:#00c48c;">${_cash_cr2:,.0f}</div>',
+                unsafe_allow_html=True)
+            st.caption("Binance, Coinbase vb. borsalardaki USD/USDT bakiyeniz")
+        with _cr2b:
+            _new_cr2 = st.number_input("Kripto nakit", min_value=0.0, value=_cash_cr2,
+                                       step=100.0, key="cash_cr2", label_visibility="collapsed")
+        with _cr3b:
+            if st.button("💾 Kaydet", key="btn_cr2", use_container_width=True):
+                set_cash_account("crypto_usd", _new_cr2)
+                st.success(f"✅ ${_new_cr2:,.0f} kaydedildi!")
+                st.rerun()
+
+        if not _crypto_all:
             st.info("Henüz kripto pozisyon yok.")
 
         # Ekle formu
@@ -1359,7 +1404,49 @@ with tab_portfolio:
                     from portfolio_manager import remove_position
                     remove_position(_del_e)
                     st.rerun()
-        else:
+
+        # ── Emtia Nakit ──────────────────────────────────────────────────────
+        st.markdown('<hr style="border-color:var(--color-border-tertiary);margin:0.5rem 0;">',
+                    unsafe_allow_html=True)
+        _accts_em = get_cash_accounts()
+        _cash_em_val = _accts_em.get("commodity_usd", 0.0)
+        _em1, _em2, _em3 = st.columns([2, 1, 1])
+        with _em1:
+            st.markdown(
+                f'<div style="font-size:0.65rem;color:#5a6a7a;font-weight:600;">🥇 EMTİA HESAP NAKİT (USD)</div>'
+                f'<div style="font-size:1.1rem;font-weight:700;color:#00c48c;">${_cash_em_val:,.0f}</div>',
+                unsafe_allow_html=True)
+        with _em2:
+            _new_cash_em = st.number_input("Emtia nakit ($)", min_value=0.0,
+                                           value=float(_cash_em_val), step=100.0, key="cash_em_input",
+                                           label_visibility="collapsed")
+        with _em3:
+            if st.button("💾 Kaydet", key="btn_cash_em", use_container_width=True):
+                set_cash_account("commodity_usd", _new_cash_em)
+                st.success(f"✅ Emtia nakiti ${_new_cash_em:,.0f} kaydedildi!")
+                st.rerun()
+
+        # ── Emtia Nakit (her zaman göster) ──────────────────────────────────
+        st.markdown('<hr style="border-color:var(--color-border-tertiary);margin:0.5rem 0;">',
+                    unsafe_allow_html=True)
+        _accts_em2 = get_cash_accounts()
+        _cash_em2  = _accts_em2.get("commodity_usd", 0.0)
+        _em1b, _em2b, _em3b = st.columns([2, 1, 1])
+        with _em1b:
+            st.markdown(
+                f'<div style="font-size:0.65rem;color:#5a6a7a;font-weight:600;">🥇 EMTİA HESAP NAKİT (USD)</div>'
+                f'<div style="font-size:1.1rem;font-weight:700;color:#00c48c;">${_cash_em2:,.0f}</div>',
+                unsafe_allow_html=True)
+        with _em2b:
+            _new_em2 = st.number_input("Emtia nakit", min_value=0.0, value=_cash_em2,
+                                       step=100.0, key="cash_em2", label_visibility="collapsed")
+        with _em3b:
+            if st.button("💾 Kaydet", key="btn_em2", use_container_width=True):
+                set_cash_account("commodity_usd", _new_em2)
+                st.success(f"✅ ${_new_em2:,.0f} kaydedildi!")
+                st.rerun()
+
+        if not _comm_all:
             st.info("Henüz emtia pozisyon yok.")
 
         with st.expander("➕ Emtia Pozisyon Ekle"):
@@ -1461,7 +1548,51 @@ with tab_portfolio:
                     from portfolio_manager import remove_position
                     remove_position(_del_t)
                     st.rerun()
-        else:
+
+        # ── TEFAS / TL Nakit ─────────────────────────────────────────────────
+        st.markdown('<hr style="border-color:var(--color-border-tertiary);margin:0.5rem 0;">',
+                    unsafe_allow_html=True)
+        _accts_tf = get_cash_accounts()
+        _cash_tf_val = _accts_tf.get("tefas_try", 0.0)
+        _tf1, _tf2, _tf3 = st.columns([2, 1, 1])
+        with _tf1:
+            st.markdown(
+                f'<div style="font-size:0.65rem;color:#5a6a7a;font-weight:600;">🇹🇷 TEFAS / TL NAKİT</div>'
+                f'<div style="font-size:1.1rem;font-weight:700;color:#00c48c;">{_cash_tf_val:,.0f} TL</div>',
+                unsafe_allow_html=True)
+            st.caption("Borsada veya bankada bekleyen TL birikiminiz")
+        with _tf2:
+            _new_cash_tf = st.number_input("TL nakit", min_value=0.0,
+                                           value=float(_cash_tf_val), step=1000.0, key="cash_tf_input",
+                                           label_visibility="collapsed")
+        with _tf3:
+            if st.button("💾 Kaydet", key="btn_cash_tf", use_container_width=True):
+                set_cash_account("tefas_try", _new_cash_tf)
+                st.success(f"✅ TL nakit {_new_cash_tf:,.0f} TL kaydedildi!")
+                st.rerun()
+
+        # ── TEFAS / TL Nakit (her zaman göster) ─────────────────────────────
+        st.markdown('<hr style="border-color:var(--color-border-tertiary);margin:0.5rem 0;">',
+                    unsafe_allow_html=True)
+        _accts_tf2 = get_cash_accounts()
+        _cash_tf2  = _accts_tf2.get("tefas_try", 0.0)
+        _tf1b, _tf2b, _tf3b = st.columns([2, 1, 1])
+        with _tf1b:
+            st.markdown(
+                f'<div style="font-size:0.65rem;color:#5a6a7a;font-weight:600;">🇹🇷 TEFAS / TL NAKİT</div>'
+                f'<div style="font-size:1.1rem;font-weight:700;color:#00c48c;">{_cash_tf2:,.0f} TL</div>',
+                unsafe_allow_html=True)
+            st.caption("Borsada veya bankada bekleyen TL birikiminiz")
+        with _tf2b:
+            _new_tf2 = st.number_input("TL nakit", min_value=0.0, value=_cash_tf2,
+                                       step=1000.0, key="cash_tf2", label_visibility="collapsed")
+        with _tf3b:
+            if st.button("💾 Kaydet", key="btn_tf2", use_container_width=True):
+                set_cash_account("tefas_try", _new_tf2)
+                st.success(f"✅ {_new_tf2:,.0f} TL kaydedildi!")
+                st.rerun()
+
+        if not _tefas_all:
             st.info("Henüz TEFAS fonu yok.")
 
         with st.expander("➕ TEFAS Fon Ekle"):
@@ -4141,26 +4272,6 @@ with tab_strategy:
 
     # ── Katman 1: Anlık Durum Panosu ─────────────────────────────────────
     _port_now     = [p for p in load_portfolio() if float(p.get("shares", 0)) > 0]
-    _raw_cash     = get_cash()
-    _cash_now     = max(0.0, _raw_cash)
-
-    # Nakit negatifse uyar ve düzelt
-    if _raw_cash < -10:
-        _nc1, _nc2 = st.columns([3, 1])
-        with _nc1:
-            st.warning(
-                f"⚠️ Nakit ${_raw_cash:,.0f} görünüyor. "
-                f"Kripto/emtia alımları USD nakitten düşüldüğü için oluştu. "
-                f"Gerçek USD nakitinizi girin:"
-            )
-        with _nc2:
-            _fix_cash = st.number_input("Gerçek Nakit ($)",
-                                        min_value=0.0, value=0.0, step=100.0,
-                                        key="fix_cash_input")
-            if st.button("💾 Düzelt", key="btn_fix_cash"):
-                set_cash(_fix_cash)
-                st.success(f"✅ Nakit ${_fix_cash:,.0f} ayarlandı!")
-                st.rerun()
 
     # USD/TRY kuru — TRY varlıkları dönüştürmek için
     _usd_try_strat = 32.0
@@ -4169,6 +4280,11 @@ with tab_strategy:
         _usd_try_strat = float(_yf_strat.Ticker("USDTRY=X").fast_info.last_price or 32.0)
     except Exception:
         pass
+
+    # Çok sınıflı nakit — portföy sekmesinden girilen değerler
+    _cash_info  = get_total_cash_usd(usd_try=_usd_try_strat)
+    _cash_now   = _cash_info["total_usd"]
+    _cash_break = _cash_info["breakdown"]   # {"ABD / USD": x, "Kripto": y, ...}
 
     # Varlık sınıfına göre doğru USD değeri hesapla
     _GRAM_MAP_STRAT = {
@@ -4179,44 +4295,35 @@ with tab_strategy:
     }
 
     def _pos_value_usd(pos):
-        """Pozisyonun güncel USD değerini hesapla."""
         shares   = float(pos.get("shares", 0))
         avg_cost = float(pos.get("avg_cost", 0))
         currency = pos.get("currency", "USD")
-        asset_class = pos.get("asset_class", "us_equity")
         ticker   = pos.get("ticker", "")
-
-        # Önce mevcut fiyatı bul
         cur_price = float(pos.get("current_price", 0) or 0)
-
         if cur_price <= 0:
-            # avg_cost kullan — para birimine göre dönüştür
-            if currency == "TRY":
-                return shares * avg_cost / _usd_try_strat
-            else:
-                return shares * avg_cost
-
-        # Para birimine göre USD'ye çevir
+            return shares * avg_cost / _usd_try_strat if currency == "TRY" else shares * avg_cost
         if currency == "TRY":
-            # TRY gram emtia: current_price zaten TRY/gram olabilir
-            # veya ons fiyatı (USD) olabilir — kontrol et
-            if ticker in _GRAM_MAP_STRAT:
-                # Gram emtia — avg_cost TL/gram, fiyat da TL/gram olmalı
-                # Eğer current_price çok büyükse (>1000) muhtemelen USD/oz
-                if cur_price > 500:
-                    # USD/oz → TRY/gram dönüştür
-                    cur_price_tl = cur_price * _usd_try_strat / 31.1035
-                    return shares * cur_price_tl / _usd_try_strat
-                else:
-                    return shares * cur_price / _usd_try_strat
-            else:
-                return shares * cur_price / _usd_try_strat
-        else:
-            return shares * cur_price
+            if ticker in _GRAM_MAP_STRAT and cur_price > 500:
+                cur_price_tl = cur_price * _usd_try_strat / 31.1035
+                return shares * cur_price_tl / _usd_try_strat
+            return shares * cur_price / _usd_try_strat
+        return shares * cur_price
 
-    _port_val_now = sum(_pos_value_usd(p) for p in _port_now)
-    _total_now    = _port_val_now + _cash_now
-    _cash_ratio   = (_cash_now / _total_now * 100) if _total_now > 0 else 0
+    def _pos_cost_usd(pos):
+        """Pozisyonun maliyet bazını USD olarak hesapla."""
+        shares   = float(pos.get("shares", 0))
+        avg_cost = float(pos.get("avg_cost", 0))
+        currency = pos.get("currency", "USD")
+        if currency == "TRY":
+            return shares * avg_cost / _usd_try_strat
+        return shares * avg_cost
+
+    _port_val_now  = sum(_pos_value_usd(p) for p in _port_now)
+    _port_cost_now = sum(_pos_cost_usd(p)  for p in _port_now)
+    _total_pnl     = _port_val_now - _port_cost_now
+    _total_pnl_pct = (_total_pnl / _port_cost_now * 100) if _port_cost_now > 0 else 0
+    _total_now     = _port_val_now + _cash_now
+    _cash_ratio    = (_cash_now / _total_now * 100) if _total_now > 0 else 0
 
     # Makro hızlı özet
     try:
@@ -4241,14 +4348,23 @@ with tab_strategy:
     except Exception:
         _fg_score, _fg_rating, _fg_color, _fomc_days = 50, "—", "#ffb300", "—"
 
-    # KPI bar
-    _kpi_cols = st.columns(5)
+    # KPI bar — 6 kolon
+    _kpi_cols = st.columns(6)
+    _pnl_color = "#00c48c" if _total_pnl >= 0 else "#e74c3c"
+    _pnl_sign  = "+" if _total_pnl >= 0 else ""
+    # Nakit dökümü tooltip
+    _cash_sub = " | ".join(
+        f"{k}: ${v:,.0f}" if "TL" not in k else f"{k}: {v*_usd_try_strat:,.0f}₺"
+        for k, v in _cash_break.items() if v > 0
+    ) or f"%{_cash_ratio:.0f} oran"
+
     for _col, _label, _val, _clr, _sub in [
         (_kpi_cols[0], "Portföy Değeri",  f"${_port_val_now:,.0f}", "#4fc3f7", f"{len(_port_now)} pozisyon"),
-        (_kpi_cols[1], "Nakit",           f"${_cash_now:,.0f}",     "#00c48c" if _cash_now >= 0 else "#e74c3c", f"%{_cash_ratio:.0f} oran"),
-        (_kpi_cols[2], "Makro Rejim",     _regime_label,            _regime_color, f"VIX {_vix_val:.0f}"),
-        (_kpi_cols[3], "Fear & Greed",    f"{_fg_score:.0f}/100",   _fg_color, _fg_rating),
-        (_kpi_cols[4], "FOMC'a Kalan",    f"{_fomc_days} gün",      "#ce93d8", "Fed toplantısı"),
+        (_kpi_cols[1], "Toplam K/Z",      f"{_pnl_sign}${_total_pnl:,.0f}", _pnl_color, f"{_pnl_sign}{_total_pnl_pct:.1f}%"),
+        (_kpi_cols[2], "Nakit (Toplam)",  f"${_cash_now:,.0f}", "#00c48c", f"%{_cash_ratio:.0f} oran"),
+        (_kpi_cols[3], "Makro Rejim",     _regime_label,            _regime_color, f"VIX {_vix_val:.0f}"),
+        (_kpi_cols[4], "Fear & Greed",    f"{_fg_score:.0f}/100",   _fg_color, _fg_rating),
+        (_kpi_cols[5], "FOMC'a Kalan",    f"{_fomc_days} gün",      "#ce93d8", "Fed toplantısı"),
     ]:
         _col.markdown(
             f'<div style="background:var(--color-background-secondary);'
@@ -4262,6 +4378,15 @@ with tab_strategy:
             f'</div>',
             unsafe_allow_html=True,
         )
+
+    # Nakit dökümü (portföy sekmesinden girilen değerler)
+    if any(v > 0 for v in _cash_break.values()):
+        _cash_parts = []
+        for _k, _v in _cash_break.items():
+            if _v > 0:
+                _cash_parts.append(f"**{_k}:** ${_v:,.0f}")
+        st.caption("💵 Nakit dökümü: " + " | ".join(_cash_parts) +
+                   " — Portföy sekmesinden güncelle")
 
     st.markdown('<div style="margin-top:1rem;"></div>', unsafe_allow_html=True)
 
