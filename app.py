@@ -4348,17 +4348,28 @@ with tab_strategy:
     except Exception:
         _vix_val, _regime_label, _regime_color = 0, "—", "#8a9ab0"
 
-    # Fear & Greed hızlı
+    # Fear & Greed hızlı — ABD (CNN/VIX proxy) + Kripto (alternative.me)
     try:
         from strategy_data import fetch_fear_greed, fetch_fed_calendar
         _fg_quick  = fetch_fear_greed()
         _fed_quick = fetch_fed_calendar()
         _fg_score  = _fg_quick.get("score", 50)
         _fg_rating = _fg_quick.get("tr_rating", "—")
+        _fg_source = _fg_quick.get("source", "")
         _fg_color  = "#00c48c" if _fg_score <= 30 else ("#e74c3c" if _fg_score >= 70 else "#ffb300")
         _fomc_days = _fed_quick.get("days_until", "—")
     except Exception:
-        _fg_score, _fg_rating, _fg_color, _fomc_days = 50, "—", "#ffb300", "—"
+        _fg_score, _fg_rating, _fg_color, _fomc_days, _fg_source = 50, "—", "#ffb300", "—", ""
+
+    # Kripto Fear & Greed (alternative.me)
+    _crypto_fg_score = None
+    try:
+        from crypto_fetcher import fetch_crypto_fear_greed
+        _cfg = fetch_crypto_fear_greed()
+        _crypto_fg_score = _cfg.get("score", None)
+        _crypto_fg_label = _cfg.get("tr_label", _cfg.get("label", ""))
+    except Exception:
+        pass
 
     # KPI bar — 6 kolon
     _kpi_cols = st.columns(6)
@@ -4375,7 +4386,8 @@ with tab_strategy:
         (_kpi_cols[1], "Toplam K/Z",      f"{_pnl_sign}${_total_pnl:,.0f}", _pnl_color, f"{_pnl_sign}{_total_pnl_pct:.1f}%"),
         (_kpi_cols[2], "Nakit (Toplam)",  f"${_cash_now:,.0f}", "#00c48c", f"%{_cash_ratio:.0f} oran"),
         (_kpi_cols[3], "Makro Rejim",     _regime_label,            _regime_color, f"VIX {_vix_val:.0f}"),
-        (_kpi_cols[4], "Fear & Greed",    f"{_fg_score:.0f}/100",   _fg_color, _fg_rating),
+        (_kpi_cols[4], "Fear & Greed",    f"{_fg_score:.0f}/100",   _fg_color,
+         f"{_fg_rating} | {_fg_source}" if _fg_source else _fg_rating),
         (_kpi_cols[5], "FOMC'a Kalan",    f"{_fomc_days} gün",      "#ce93d8", "Fed toplantısı"),
     ]:
         _col.markdown(
@@ -4399,6 +4411,14 @@ with tab_strategy:
                 _cash_parts.append(f"**{_k}:** ${_v:,.0f}")
         st.caption("💵 Nakit dökümü: " + " | ".join(_cash_parts) +
                    " — Portföy sekmesinden güncelle")
+
+    # Kripto Fear & Greed (ayrı göster)
+    if _crypto_fg_score is not None:
+        _cfg_color = "#00c48c" if _crypto_fg_score <= 30 else ("#e74c3c" if _crypto_fg_score >= 70 else "#ffb300")
+        st.caption(
+            f"₿ Kripto Fear & Greed: **{_crypto_fg_score:.0f}/100** — {_crypto_fg_label} "
+            f"(alternative.me) | 🇺🇸 ABD F&G: **{_fg_score:.0f}/100** — {_fg_rating} ({_fg_source})"
+        )
 
     st.markdown('<div style="margin-top:1rem;"></div>', unsafe_allow_html=True)
 

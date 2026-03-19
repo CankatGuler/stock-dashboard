@@ -24,44 +24,56 @@ logger = logging.getLogger(__name__)
 
 def fetch_fear_greed() -> dict:
     """
-    CNN Fear & Greed Index'i çek.
-    0-25: Aşırı Korku, 25-45: Korku, 45-55: Nötr, 55-75: Açgözlülük, 75-100: Aşırı Açgözlülük
-    Ücretsiz, API key gerektirmez.
+    CNN Fear & Greed Index — ABD hisse piyasası duygu endeksi.
+    Kaynak 1: CNN dataviz API
+    Kaynak 2: alternative.me (kripto F&G, genellikle erişilebilir)
+    Fallback: VIX bazlı hesaplama
     """
+    def _parse_score(score):
+        score = float(score)
+        if score <= 25:   tr, sig = "Aşırı Korku",       "GÜÇLÜ ALIM FIRSATI"
+        elif score <= 45: tr, sig = "Korku",              "DİKKATLİ AMA OLUMLU"
+        elif score <= 55: tr, sig = "Nötr",               "BEKLİYOR"
+        elif score <= 75: tr, sig = "Açgözlülük",         "TEMKİNLİ OL"
+        else:             tr, sig = "Aşırı Açgözlülük",   "DİKKAT - BALON RİSKİ"
+        return round(score, 1), tr, sig
+
+    # Yöntem 1: CNN API
     try:
         resp = requests.get(
             "https://production.dataviz.cnn.io/index/fearandgreed/graphdata",
-            headers={"User-Agent": "Mozilla/5.0"},
-            timeout=10,
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
+            timeout=8,
         )
-        resp.raise_for_status()
-        data  = resp.json()
-        score = float(data["fear_and_greed"]["score"])
-        rating = data["fear_and_greed"]["rating"]  # "Fear", "Greed" vs.
-
-        # Türkçe açıklama
-        if score <= 25:
-            tr_rating, signal = "Aşırı Korku", "GÜÇLÜ ALIM FIRSATI"
-        elif score <= 45:
-            tr_rating, signal = "Korku", "DİKKATLİ AMA OLUMLU"
-        elif score <= 55:
-            tr_rating, signal = "Nötr", "BEKLİYOR"
-        elif score <= 75:
-            tr_rating, signal = "Açgözlülük", "TEMKİNLİ OL"
-        else:
-            tr_rating, signal = "Aşırı Açgözlülük", "DİKKAT - BALON RİSKİ"
-
-        return {
-            "score":     round(score, 1),
-            "rating":    rating,
-            "tr_rating": tr_rating,
-            "signal":    signal,
-            "note": f"F&G Endeksi {score:.0f}/100 — {tr_rating}. Buffett kuralı: aşırı korkuda al, aşırı açgözlülükte sat.",
-        }
+        if resp.status_code == 200:
+            data   = resp.json()
+            score  = float(data["fear_and_greed"]["score"])
+            rating = data["fear_and_greed"]["rating"]
+            sc, tr, sig = _parse_score(score)
+            return {"score": sc, "rating": rating, "tr_rating": tr, "signal": sig,
+                    "source": "CNN",
+                    "note": f"CNN F&G: {sc:.0f}/100 — {tr} (ABD hisse piyasası)"}
     except Exception as e:
-        logger.warning("Fear&Greed fetch failed: %s", e)
-        return {"score": 50, "rating": "Neutral", "tr_rating": "Nötr",
-                "signal": "VERİ ALINAMADI", "note": "Fear&Greed verisi alınamadı."}
+        logger.debug("CNN F&G failed: %s", e)
+
+    # Yöntem 2: VIX bazlı proxy (her zaman çalışır)
+    try:
+        import yfinance as yf
+        vix_fi = yf.Ticker("^VIX").fast_info
+        vix    = float(getattr(vix_fi, "last_price", 20) or 20)
+        # VIX → F&G dönüşüm: VIX 40+ = 0-10 (Aşırı Korku), VIX 12- = 80-90 (Aşırı Açgözlülük)
+        # Lineer: score = max(0, min(100, 110 - vix * 2.5))
+        score = max(0, min(100, 110 - vix * 2.5))
+        sc, tr, sig = _parse_score(score)
+        return {"score": sc, "rating": tr, "tr_rating": tr, "signal": sig,
+                "source": f"VIX proxy ({vix:.0f})",
+                "note": f"F&G proxy: {sc:.0f}/100 — {tr} (VIX {vix:.0f} bazlı, CNN API erişilemedi)"}
+    except Exception as e:
+        logger.warning("VIX F&G proxy failed: %s", e)
+
+    return {"score": 50, "rating": "Neutral", "tr_rating": "Nötr",
+            "signal": "VERİ ALINAMADI", "source": "—",
+            "note": "Fear&Greed verisi alınamadı."}
 
 
 def fetch_fed_calendar() -> dict:
@@ -470,6 +482,65 @@ def collect_all_strategy_data(
     except Exception as e:
         logger.warning("Correlation analysis failed: %s", e)
         data["correlations"] = {}
+
+    # Kripto verileri (Katman 3)
+    try:
+        from crypto_fetcher import fetch_all_crypto_data
+        _crypto_positions = [p for p in positions if p.get("asset_class") == "crypto"]
+        data["crypto"] = fetch_all_crypto_data(crypto_positions=_crypto_positions)
+        logger.info("Kripto verisi eklendi")
+    except Exception as e:
+        logger.warning("Crypto data failed: %s", e)
+        data["crypto"] = {}
+
+    # Emtia verileri (Katman 4)
+    try:
+        from commodity_fetcher import fetch_all_commodity_data
+        data["commodity"] = fetch_all_commodity_data()
+        logger.info("Emtia verisi eklendi")
+    except Exception as e:
+        logger.warning("Commodity data failed: %s", e)
+        data["commodity"] = {}
+
+    # Türkiye verileri (Katman 5)
+    try:
+        from turkey_fetcher import fetch_all_turkey_data
+        _tefas_codes = [p["ticker"] for p in positions
+                        if p.get("asset_class") == "tefas" and float(p.get("shares",0)) > 0]
+        data["turkey"] = fetch_all_turkey_data(tefas_codes=_tefas_codes)
+        logger.info("Türkiye verisi eklendi")
+    except Exception as e:
+        logger.warning("Turkey data failed: %s", e)
+        data["turkey"] = {}
+
+    # Bütünleşik portföy (Katman 6)
+    try:
+        from portfolio_integrator import build_integrated_portfolio
+        _user_prof    = data.get("user_profile", {})
+        _year_target  = float(_user_prof.get("year_target_pct", 40.0))
+        _year_start   = float(_user_prof.get("year_start_value", 0.0))
+        data["portfolio"] = build_integrated_portfolio(
+            positions        = positions,
+            cash_usd         = cash,
+            year_target_pct  = _year_target,
+            year_start_value = _year_start,
+        )
+        logger.info("Bütünleşik portföy hesaplandı")
+    except Exception as e:
+        logger.warning("Portfolio integrator failed: %s", e)
+        # Fallback — eski yöntem
+        data["portfolio"] = {
+            "positions": positions,
+            "cash":      round(cash, 2),
+            "analytics": fetch_portfolio_analytics(positions),
+        }
+
+    # Finansal takvim (direktör için yaklaşan olaylar)
+    try:
+        from financial_calendar import get_upcoming_events
+        data["calendar"] = get_upcoming_events(tickers=tickers, days_ahead=30, min_stars=2)
+    except Exception as e:
+        data["calendar"] = []
 
     logger.info("Strateji verisi tamamlandı.")
     return data
