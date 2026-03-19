@@ -147,5 +147,170 @@
         "Portföyde henüz kayıp yok, manevra alanı mevcut"
       ]
     }
+  },
+  {
+    "id": "2026-03-19_001",
+    "date": "2026-03-19",
+    "generated_at": "2026-03-19T20:14:49.377109+00:00",
+    "portfolio_value": 71513.32,
+    "cash": 1060.57,
+    "summary": "Direktör analizi alınamadı.",
+    "strategy": {
+      "piyasa_ozeti": "Direktör analizi alınamadı.",
+      "analist_sentezi": {},
+      "celiskiler": [],
+      "portfoy_aksiyonlari": {
+        "hemen_yap": [],
+        "kosullu_yap": [],
+        "izle_karar_ver": [],
+        "nakit_orani": {
+          "onerilen_pct": 15,
+          "mevcut_pct": 0,
+          "neden": "Varsayılan"
+        }
+      },
+      "risk_senaryosu": {
+        "tetikleyici": "VIX 30+ veya S&P %8 düşüş",
+        "ilk_24_saat": [
+          "Spekülatif pozisyonları %50 küçült"
+        ],
+        "savunma": [
+          "Nakidi %30'a çıkar"
+        ],
+        "firsat_listesi": [],
+        "toparlanma_sinyali": "VIX 20 altına düşünce"
+      },
+      "vade_planlari": {
+        "kisa": {
+          "sure": "1-3 ay",
+          "baz_senaryo": "",
+          "risk_senaryosu": "",
+          "aksiyonlar": []
+        },
+        "orta": {
+          "sure": "3-12 ay",
+          "baz_senaryo": "",
+          "risk_senaryosu": "",
+          "aksiyonlar": []
+        },
+        "uzun": {
+          "sure": "1-3 yıl",
+          "tema": "",
+          "pozisyonlama": ""
+        }
+      },
+      "yil_sonu_hedefi": {
+        "hedef_pct": 40.0,
+        "mevcut_pct": 0,
+        "kalan_pct": 40.0,
+        "gerekan_aylik_pct": 0,
+        "risk_degerlendirmesi": "",
+        "tavsiye": ""
+      },
+      "bir_sonraki_kontrol": {
+        "tarih": "",
+        "neden": "",
+        "tetikleyiciler": []
+      },
+      "_generated_at": "2026-03-19T20:14:49.148140+00:00",
+      "_analyst_reports": {
+        "makro": {
+          "sinyal": "AZALT",
+          "guven": 7,
+          "ana_gerekcce": "Likidite daralması ve yen güçlenmesi küresel risk-off ortamını teyit ediyor, pozisyon hafifletilmeli.",
+          "destekleyen": [
+            "Likidite göstergesi risk-off moduna geçiş sinyali veriyor - tahviller yükseliyor, hisse ve altın düşüyor",
+            "USDJPY 157.6 ile yen güçleniyor - carry trade pozisyonları çözülüyor, bu tarihsel olarak küresel risk varlıklarında satış baskısı yaratır",
+            "Verim eğrisi normal (+0.67%) olsa da OVX 92 seviyesi jeopolitik/arz şoku riskini işaret ediyor"
+          ],
+          "riskler": [
+            "Fed beklentileri sabit kalıyor - beklenenden güvercin bir sinyal risk iştahını hızla canlandırabilir",
+            "Zayıf dolar ve düşen altın çelişkili sinyal veriyor - altındaki düşüş geçici bir pozisyon boşaltması olabilir",
+            "VIX yüksek ama SPX yatay - bu kısa vadeli bir dip oluşumu sinyali olabilir"
+          ],
+          "oneri": "Riskli varlıklarda pozisyonu %15-20 azalt, nakit oranını artır. Enerji sektörü dışında döngüsel hisselerden çık. Kaliteli tahvil ve defansif sektörlere yönel.",
+          "izle": "USDJPY ve BOJ politika açıklamaları - carry trade çözülmesi hızlanırsa küresel satış dalgası derinleşir, 155 altı kritik eşik.",
+          "_source": "claude_macro"
+        },
+        "abd": {
+          "sinyal": "BEKLE",
+          "guven": 6,
+          "ana_gerekcce": "Portföy ağırlıklı olarak yarı iletken ve yapay zeka odaklı hisselerden oluşuyor; sektör güçlü ancak değerleme yüksek, kazanç sezonu öncesi temkinli olmak gerekiyor.",
+          "sektor_gorusu": "Teknoloji ve yarı iletkenler (AMD, AVGO, CRWD) momentum açısından güçlü; ancak enerji/uranyum (CCJ, IREN) ve savunma (PPA) sektörleri makro belirsizlikten etkileniyor.",
+          "deger_leme": "S&P 500 forward P/E 20x üzerinde, tarihsel ortalamanın üstünde; AI temalı hisseler premium fiyatlanıyor, kısa vadede düzeltme riski mevcut.",
+          "destekleyen": [
+            "AI yatırım döngüsü devam ediyor, AVGO ve AMD veri merkezi talebinden faydalanıyor",
+            "CRWD siber güvenlik harcamaları artış trendinde, savunmacı büyüme hikayesi sağlam"
+          ],
+          "riskler": [
+            "Fed faiz indirim beklentileri ötelendi, yüksek değerlemeli growth hisseleri baskı altında kalabilir",
+            "Portföyde sektör konsantrasyonu yüksek; tek bir olumsuz haber tüm portföyü etkileyebilir"
+          ],
+          "oneri": "Mevcut pozisyonları koru ancak yeni alım için kazanç açıklamalarını bekle; portföyde diversifikasyon eksikliği var, sağlık veya tüketici sektöründen savunmacı hisse eklemeyi değerlendir.",
+          "izle": "Nvidia (NVDA) kazanç raporu ve Fed toplantı tutanakları; bu iki olay yarı iletken sektörünün kısa vadeli yönünü belirleyecek.",
+          "_source": "claude_us_equity"
+        },
+        "kripto": {
+          "sinyal": "TUT",
+          "guven": 7,
+          "ana_gerekcce": "On-chain metrikleri dip sinyali verse de halving döngüsünün geç boğa fazında olması ve yüksek RSI dikkatli olmayı gerektiriyor.",
+          "dongu_pozisyonu": "Halving'den 699 gün sonra — geç boğa fazındayız. Tarihsel olarak bu dönem 300-400 gün içinde döngü tepelerinin oluştuğu bölge, ancak volatilite ve ani düzeltme riski de yüksek.",
+          "onchain_ozet": "MVRV 0.70 tarihsel dip bölgesinde (güçlü birikim sinyali), SOPR 0.97 zayıf ellerin zarar satışı yaptığını gösteriyor, NVT 30 ile ağ kullanımına göre fiyat cazip. Ancak bu proxy değerler, gerçek Glassnode verilerinden sapma gösterebilir.",
+          "btc_vs_altcoin": "Mevcut portföy ağırlıklı altcoin. Fear 23 ortamında BTC dominansı artma eğiliminde. Yeni alımlarda BTC ağırlığını artırmak, riskli altcoinleri azaltmak mantıklı.",
+          "destekleyen": [
+            "MVRV ve NVT dip bölgesi sinyalleri — uzun vadeli değer yatırımcıları için cazip",
+            "Fear 23 — aşırı korku genelde orta vadeli alım fırsatı yaratır",
+            "BTC 52 hafta zirvesine %15 mesafede — henüz aşırı fomo yok"
+          ],
+          "riskler": [
+            "Halving döngüsünün 699. günü — tarihsel tepeler yaklaşıyor, stop loss şart",
+            "RSI 57 nötr-yüksek — kısa vadeli düzeltme olası",
+            "Altcoin ağırlıklı portföy — risk altı piyasada BTC'den fazla düşer"
+          ],
+          "oneri": "Mevcut pozisyonları koru, yeni nakit girişinde BTC tercih et. HGPT, SOULS, HONEY gibi düşük likiditeli tokenlerde %15-20 stop loss belirle. Portföyün %30'unu BTC'ye çekmeyi hedefle.",
+          "izle": "BTC'nin $68,000 desteğini koruması ve Fear & Greed'in 30 üzerine çıkması — bu ikisi olursa kademeli alım devam.",
+          "_source": "claude_crypto"
+        },
+        "emtia": {
+          "sinyal": "BEKLE",
+          "guven": 5,
+          "ana_gerekcce": "Reel faizler yükselirken altın %4 düzeltme yaşıyor; jeopolitik riskler fiyatlanmış, yeni katalizör bekle.",
+          "altin_gorusu": "Uzun vadeli yapısal boğa trendi (MB alımları, ABD borç sorunu, de-dolarizasyon) sağlam ancak kısa vadede reel faiz yükselişi ve teknik aşırı alım sonrası sağlıklı konsolidasyon yaşanıyor — $4,400-4,500 desteği test edilebilir.",
+          "petrol_gorusu": "WTI $94.6 seviyesi Fed'in elini bağlıyor; İran gerginliği fiyatlarda zaten mevcut, yeni tırmanma olmadan $90-95 bandında sıkışık seyir beklenir — enerji hisselerine pozitif ancak geniş piyasaya olumsuz.",
+          "destekleyen": [
+            "ABD borç spirali ($36T) ve altın rezerv değerlemesi arasındaki $1.2T fark uzun vadeli yeniden değerleme potansiyeli taşıyor",
+            "Altın/Bakır oranı 843 ile resesyon sinyali veriyor — risk-off ortamında altın görece güçlü kalır"
+          ],
+          "riskler": [
+            "Reel faiz proxy yükseliş trendinde — 10Y reel getiri pozitife dönerse altında %5-8 düzeltme potansiyeli",
+            "52 haftalık zirvenin %65 üzerinde seyir; teknik olarak aşırı gerilmiş, kar satışları hızlanabilir"
+          ],
+          "oneri": "Mevcut altın pozisyonunu tut, yeni alım için $4,400 altı seviyelerde kademeli biriktime geç; TL bazlı ALTIN_GRAM_TRY pozisyonunda TL zayıflığı hedge'i olarak pasif tut.",
+          "izle": "Bu hafta ABD PCE enflasyonu ve Fed konuşmaları — reel faiz beklentisi değişirse altın yönü netleşir; İran-İsrail geriliminde askeri tırmanma haberleri petrolü $100 üzerine taşıyabilir.",
+          "_source": "claude_commodity"
+        },
+        "turkiye": {
+          "sinyal": "TUT",
+          "guven": 6,
+          "ana_gerekcce": "BIST dolar bazlı $295 tarihsel ucuzluk bölgesinde ancak bankacılık sektörü zayıflığı ve TEFAS fonlarının dolar bazlı %-20 kaybı temkinli olmayı gerektiriyor.",
+          "dolar_bazli_degerleme": "BIST $295 seviyesi 2020 dip bölgelerine denk geliyor - uzun vadeli perspektifle değerleme cazip. Ancak TL'nin yıllık %20+ değer kaybı, TL bazlı nominal getirilerin yanıltıcı olduğunu gösteriyor.",
+          "xbank_gorusu": "XBANK'ın BIST'in %11 gerisinde kalması ciddi uyarı sinyali. Bankacılık sektöründe kredi kalitesi endişeleri veya yüksek fonlama maliyeti baskısı var. Sektör toparlanmadan endekste sürdürülebilir yükseliş zor.",
+          "kur_riski": "USD/TRY 44.27 ile stabil görünse de TEFAS fonlarının yıllık dolar bazlı %-20 kaybı, kur riskinin portföy üzerindeki yıkıcı etkisini net ortaya koyuyor. Reel getiri için kur istikrarı şart.",
+          "destekleyen": [
+            "TUR ETF hacminde %111 artış - yabancı yatırımcı ilgisi canlanıyor",
+            "Dolar bazlı BIST tarihsel ucuzluk bölgesinde ($295)",
+            "Risk primi stabil, gelişen piyasalarla uyumlu hareket"
+          ],
+          "riskler": [
+            "XBANK'ın %11 düşük performansı bankacılık sektöründe yapısal sorun işareti",
+            "TEFAS portföyü dolar bazında yıllık %20 eridi - TL nominal getiriler yanıltıcı",
+            "TCMB faiz politikası belirsizliği ve enflasyon riski devam ediyor"
+          ],
+          "oneri": "Mevcut pozisyonları koruyun, yeni alım için XBANK/BIST oranının düzelmesini bekleyin. TTE ve TSI'da maliyet altı pozisyonlar karlı, NNF ve URA'da zarar kesimi değerlendirilebilir. Dolar bazlı getiriyi önceliklendirin.",
+          "izle": "Önümüzdeki 2 haftada XBANK/BIST100 oranı ve TCMB faiz kararı - bankacılık sektörü toparlanması olmadan endeks rallisi sürdürülebilir olmaz",
+          "_source": "claude_turkey"
+        }
+      }
+    }
   }
 ]
