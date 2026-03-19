@@ -403,7 +403,7 @@ def _read_raw_portfolio() -> dict:
 
 def get_cash_accounts() -> dict:
     """
-    Tüm nakit hesaplarını döndür.
+    Tüm nakit hesaplarını döndür. Negatif değerler sıfıra yuvarlanır.
     {
       "usd":           float,  # ABD hisse / genel USD nakit
       "crypto_usd":    float,  # Kripto borsa nakiti (USD)
@@ -413,11 +413,13 @@ def get_cash_accounts() -> dict:
     """
     raw = _read_raw_portfolio()
     accounts = raw.get("cash_accounts", {})
+    # Eski "cash" alanı negatifse 0 kullan (kripto alımları düşüyordu)
+    legacy_cash = max(0.0, float(raw.get("cash", 0.0)))
     return {
-        "usd":           float(accounts.get("usd",           raw.get("cash", 0.0))),
-        "crypto_usd":    float(accounts.get("crypto_usd",    0.0)),
-        "commodity_usd": float(accounts.get("commodity_usd", 0.0)),
-        "tefas_try":     float(accounts.get("tefas_try",     0.0)),
+        "usd":           max(0.0, float(accounts.get("usd",           legacy_cash))),
+        "crypto_usd":    max(0.0, float(accounts.get("crypto_usd",    0.0))),
+        "commodity_usd": max(0.0, float(accounts.get("commodity_usd", 0.0))),
+        "tefas_try":     max(0.0, float(accounts.get("tefas_try",     0.0))),
     }
 
 

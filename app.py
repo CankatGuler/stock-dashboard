@@ -1179,7 +1179,7 @@ with tab_portfolio:
                     unsafe_allow_html=True)
             with _cu2:
                 _new_cash_us = st.number_input("Nakit güncelle ($)", min_value=0.0,
-                                               value=float(_cash_us_val), step=100.0, key="cash_us_input",
+                                               value=max(0.0, float(_cash_us_val)), step=100.0, key="cash_us_input",
                                                label_visibility="collapsed")
             with _cu3:
                 if st.button("💾 Nakit Kaydet", key="btn_cash_us", use_container_width=True):
@@ -1283,7 +1283,7 @@ with tab_portfolio:
                 unsafe_allow_html=True)
             st.caption("Binance, Coinbase vb. borsalardaki USD/USDT bakiyeniz")
         with _cr2b:
-            _new_cr2 = st.number_input("Kripto nakit", min_value=0.0, value=_cash_cr2,
+            _new_cr2 = st.number_input("Kripto nakit", min_value=0.0, value=max(0.0, float(_cash_cr2)),
                                        step=100.0, key="cash_cr2", label_visibility="collapsed")
         with _cr3b:
             if st.button("💾 Kaydet", key="btn_cr2", use_container_width=True):
@@ -1418,7 +1418,7 @@ with tab_portfolio:
                 unsafe_allow_html=True)
         with _em2:
             _new_cash_em = st.number_input("Emtia nakit ($)", min_value=0.0,
-                                           value=float(_cash_em_val), step=100.0, key="cash_em_input",
+                                           value=max(0.0, float(_cash_em_val)), step=100.0, key="cash_em_input",
                                            label_visibility="collapsed")
         with _em3:
             if st.button("💾 Kaydet", key="btn_cash_em", use_container_width=True):
@@ -1438,7 +1438,7 @@ with tab_portfolio:
                 f'<div style="font-size:1.1rem;font-weight:700;color:#00c48c;">${_cash_em2:,.0f}</div>',
                 unsafe_allow_html=True)
         with _em2b:
-            _new_em2 = st.number_input("Emtia nakit", min_value=0.0, value=_cash_em2,
+            _new_em2 = st.number_input("Emtia nakit", min_value=0.0, value=max(0.0, float(_cash_em2)),
                                        step=100.0, key="cash_em2", label_visibility="collapsed")
         with _em3b:
             if st.button("💾 Kaydet", key="btn_em2", use_container_width=True):
@@ -1563,7 +1563,7 @@ with tab_portfolio:
             st.caption("Borsada veya bankada bekleyen TL birikiminiz")
         with _tf2:
             _new_cash_tf = st.number_input("TL nakit", min_value=0.0,
-                                           value=float(_cash_tf_val), step=1000.0, key="cash_tf_input",
+                                           value=max(0.0, float(_cash_tf_val)), step=1000.0, key="cash_tf_input",
                                            label_visibility="collapsed")
         with _tf3:
             if st.button("💾 Kaydet", key="btn_cash_tf", use_container_width=True):
@@ -1584,7 +1584,7 @@ with tab_portfolio:
                 unsafe_allow_html=True)
             st.caption("Borsada veya bankada bekleyen TL birikiminiz")
         with _tf2b:
-            _new_tf2 = st.number_input("TL nakit", min_value=0.0, value=_cash_tf2,
+            _new_tf2 = st.number_input("TL nakit", min_value=0.0, value=max(0.0, float(_cash_tf2)),
                                        step=1000.0, key="cash_tf2", label_visibility="collapsed")
         with _tf3b:
             if st.button("💾 Kaydet", key="btn_tf2", use_container_width=True):
