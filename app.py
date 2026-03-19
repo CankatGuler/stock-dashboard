@@ -1059,7 +1059,6 @@ with tab_portfolio:
 
         if _us_all:
             import yfinance as _yf_us
-            # 5 dk session state cache
             import time as _t_us
             _us_cache_key = "us_price_cache"
             _us_ts_key    = "us_price_cache_ts"
@@ -1072,32 +1071,28 @@ with tab_portfolio:
                 _us_cached.get("_tk_key") == _us_tk_key):
                 _us_price_map  = _us_cached["price_map"]
                 _us_change_map = _us_cached["change_map"]
-                _us_usd_try    = _us_cached.get("usd_try", 32.0)
             else:
                 with st.spinner("ABD hisse fiyatları çekiliyor..."):
                     _us_price_map  = {}
                     _us_change_map = {}
                     for _p in _us_all:
                         try:
-                            _fi  = _yf_us.Ticker(_p["ticker"]).fast_info
-                            _pr  = float(getattr(_fi, "last_price",     0) or 0)
-                            _pv  = float(getattr(_fi, "previous_close", _pr) or _pr)
-                            _ch  = (_pr - _pv) / _pv * 100 if _pv > 0 else 0
+                            _fi = _yf_us.Ticker(_p["ticker"]).fast_info
+                            _pr = float(getattr(_fi, "last_price",     0) or 0)
+                            _pv = float(getattr(_fi, "previous_close", _pr) or _pr)
+                            _ch = (_pr - _pv) / _pv * 100 if _pv > 0 else 0
                             if _pr > 0:
                                 _us_price_map[_p["ticker"]]  = _pr
                                 _us_change_map[_p["ticker"]] = round(_ch, 2)
                         except Exception:
                             pass
-                    _us_usd_try = 32.0
                     st.session_state[_us_cache_key] = {
                         "price_map":  _us_price_map,
                         "change_map": _us_change_map,
-                        "usd_try":    _us_usd_try,
                         "_tk_key":    _us_tk_key,
                     }
                     st.session_state[_us_ts_key] = _t_us.time()
 
-            # Enriched liste + özet bar
             _us_enriched = []
             _us_rows     = []
             for _p in _us_all:
@@ -1111,46 +1106,41 @@ with tab_portfolio:
                 _p2["currency"] = "USD"
                 _us_enriched.append(_p2)
                 _us_rows.append({
-                    "Ticker":   _p["ticker"],
-                    "Adet":     f"{float(_p['shares']):.2f}",
-                    "Maliyet":  f"${_avg:,.2f}",
-                    "Güncel":   f"${_cur:,.2f}",
-                    "24s %":    f"{_chg:+.1f}%",
-                    "Değer":    f"${_val:,.2f}",
-                    "K/Z %":    f"{_pnl:+.1f}%",
-                    "Sektör":   _p.get("sector", "—"),
+                    "Ticker":  _p["ticker"],
+                    "Adet":    f"{float(_p['shares']):.2f}",
+                    "Maliyet": f"${_avg:,.2f}",
+                    "Güncel":  f"${_cur:,.2f}",
+                    "24s %":   f"{_chg:+.1f}%",
+                    "Değer":   f"${_val:,.2f}",
+                    "K/Z %":   f"{_pnl:+.1f}%",
+                    "Sektör":  _p.get("sector", "—"),
                 })
 
-            # Session state'i de güncelle (korelasyon analizi için)
             st.session_state["enriched_portfolio"] = [
                 {**p, "current_value": float(p.get("shares",0)) * _us_price_map.get(p["ticker"], float(p.get("avg_cost",0))),
                  "current_price": _us_price_map.get(p["ticker"], float(p.get("avg_cost",0)))}
                 for p in _us_all
             ]
 
-            # Özet bar
             _render_asset_summary(_us_enriched, "ABD HİSSE")
 
-        # Nakit özet satırı
-        _nakit_ozet_usd = get_cash_accounts().get("usd", 0.0)
-        if _nakit_ozet_usd > 0:
-            st.markdown(
-                f'<div style="display:flex;align-items:center;gap:1rem;'
-                f'background:var(--color-background-secondary);border-radius:6px;'
-                f'padding:0.4rem 0.8rem;margin-bottom:0.5rem;font-size:0.75rem;">'
-                f'<span style="color:#5a6a7a;">💵 ABD/USD Nakit:</span>'
-                f'<span style="font-weight:700;color:#00c48c;">{_nakit_ozet_usd:,.0f} $</span>'
-                f'</div>',
-                unsafe_allow_html=True)
+            # Nakit özet
+            _nakit_ozet_usd = get_cash_accounts().get("usd", 0.0)
+            if _nakit_ozet_usd > 0:
+                st.markdown(
+                    f'<div style="display:flex;align-items:center;gap:1rem;background:var(--color-background-secondary);'
+                    f'border-radius:6px;padding:0.4rem 0.8rem;margin-bottom:0.5rem;font-size:0.75rem;">'
+                    f'<span style="color:#5a6a7a;">💵 ABD/USD Nakit:</span>'
+                    f'<span style="font-weight:700;color:#00c48c;">{_nakit_ozet_usd:,.0f} $</span>'
+                    f'</div>',
+                    unsafe_allow_html=True)
 
-            # Tablo
             st.dataframe(_us_rows, use_container_width=True)
 
-            # Hisse ekle
             with st.expander("➕ ABD Hisse Ekle"):
                 _u1, _u2, _u3 = st.columns(3)
                 with _u1:
-                    _u_tk = st.text_input("Ticker", placeholder="AAPL, NVDA, AVGO", key="u_tk").upper().strip()
+                    _u_tk = st.text_input("Ticker", placeholder="AAPL, NVDA", key="u_tk").upper().strip()
                 with _u2:
                     _u_sh = st.number_input("Adet", min_value=0.0, step=1.0, key="u_sh")
                 with _u3:
@@ -1166,10 +1156,9 @@ with tab_portfolio:
                         add_position(_u_tk, _u_sh, _u_co, _sec, _u_nt,
                                     deduct_from_cash=True, asset_class="us_equity", currency="USD")
                         st.success(f"✅ {_u_tk} eklendi!")
-                        st.session_state.pop(_us_cache_key, None)  # cache temizle
+                        st.session_state.pop(_us_cache_key, None)
                         st.rerun()
 
-            # Sil
             _del_u = st.selectbox("Sil:", ["—"] + [p["ticker"] for p in _us_all], key="del_us_sel")
             if _del_u != "—":
                 if st.button(f"🗑 {_del_u} Sil", key="del_us_btn"):
@@ -1177,9 +1166,8 @@ with tab_portfolio:
                     remove_position(_del_u)
                     st.session_state.pop(_us_cache_key, None)
                     st.rerun()
-
-
-
+        else:
+            st.info("Henüz ABD hisse pozisyonu yok.")
             with st.expander("➕ ABD Hisse Ekle"):
                 _u1b, _u2b, _u3b = st.columns(3)
                 with _u1b:
@@ -1195,7 +1183,6 @@ with tab_portfolio:
                         st.success(f"✅ {_u_tkb} eklendi!")
                         st.rerun()
 
-
         # ── ABD / USD Nakit ──────────────────────────────────────────────────
         st.markdown('<hr style="border-color:var(--color-border-tertiary);margin:0.5rem 0;">',
                     unsafe_allow_html=True)
@@ -1206,7 +1193,7 @@ with tab_portfolio:
             unsafe_allow_html=True)
         _ui1, _ui2, _ui3, _ui4 = st.columns([2,1,1,1])
         with _ui1:
-            _usd_inp = st.number_input("Miktar ($)", min_value=0.0, value=0.0,
+            _usd_inp = st.number_input("Miktar", min_value=0.0, value=0.0,
                                        step=100.0, key="cash_us_final", label_visibility="collapsed")
         with _ui2:
             if st.button("➕ Ekle", key="btn_usd_add", use_container_width=True, help="Üstüne ekle"):
@@ -1228,11 +1215,19 @@ with tab_portfolio:
     # ═══════════════════════════════════════════════════════════════════════
     # KRİPTO
     # ═══════════════════════════════════════════════════════════════════════
+    with pt_crypto:
+        st.markdown(
+            '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+            'letter-spacing:0.12em;margin-bottom:0.5rem;">₿ KRİPTO VARLIK YÖNETİMİ</div>',
+            unsafe_allow_html=True)
 
-            # Fiyat çek
+        _crypto_all = [p for p in load_portfolio() if p.get("asset_class") == "crypto"
+                       and float(p.get("shares", 0)) > 0]
+
+        if _crypto_all:
             from crypto_fetcher import fetch_crypto_price_universal
-            _c_rows = []
-            _c_enriched = []
+            _c_rows      = []
+            _c_enriched  = []
             _c_not_found = []
             with st.spinner("Kripto fiyatları çekiliyor..."):
                 for _cp in _crypto_all:
@@ -1254,38 +1249,33 @@ with tab_portfolio:
                     _pnl = (_cur - _avg) / _avg * 100 if _avg > 0 else 0
                     _fmt = ",.8f" if _cur < 0.01 else (",.4f" if _cur < 1 else ",.2f")
                     _c_rows.append({
-                        "Coin":     _cp["ticker"].replace("-USD",""),
-                        "Miktar":   f"{_cp['shares']:.4f}",
-                        "Maliyet":  f"${_avg:{_fmt}}",
-                        "Güncel":   f"${_cur:{_fmt}}",
-                        "24s %":    f"{_chg:+.1f}%",
-                        "Değer":    f"${_val:,.2f}",
-                        "K/Z %":    f"{_pnl:+.1f}%",
-                        "Kaynak":   _src,
+                        "Coin":    _cp["ticker"].replace("-USD",""),
+                        "Miktar":  f"{_cp['shares']:.4f}",
+                        "Maliyet": f"${_avg:{_fmt}}",
+                        "Güncel":  f"${_cur:{_fmt}}",
+                        "24s %":   f"{_chg:+.1f}%",
+                        "Değer":   f"${_val:,.2f}",
+                        "K/Z %":   f"{_pnl:+.1f}%",
+                        "Kaynak":  _src,
                     })
 
             if _c_not_found:
                 st.warning(f"⚠️ Fiyat bulunamadı: **{', '.join(_c_not_found)}**")
 
-            # Özet bar
             _render_asset_summary(_c_enriched, "KRİPTO")
 
-        # Nakit özet satırı
-        _nakit_ozet_crypto_usd = get_cash_accounts().get("crypto_usd", 0.0)
-        if _nakit_ozet_crypto_usd > 0:
-            st.markdown(
-                f'<div style="display:flex;align-items:center;gap:1rem;'
-                f'background:var(--color-background-secondary);border-radius:6px;'
-                f'padding:0.4rem 0.8rem;margin-bottom:0.5rem;font-size:0.75rem;">'
-                f'<span style="color:#5a6a7a;">💵 Kripto Borsa Nakiti:</span>'
-                f'<span style="font-weight:700;color:#00c48c;">{_nakit_ozet_crypto_usd:,.0f} $</span>'
-                f'</div>',
-                unsafe_allow_html=True)
+            _nakit_ozet_crypto_usd = get_cash_accounts().get("crypto_usd", 0.0)
+            if _nakit_ozet_crypto_usd > 0:
+                st.markdown(
+                    f'<div style="display:flex;align-items:center;gap:1rem;background:var(--color-background-secondary);'
+                    f'border-radius:6px;padding:0.4rem 0.8rem;margin-bottom:0.5rem;font-size:0.75rem;">'
+                    f'<span style="color:#5a6a7a;">💵 Kripto Borsa Nakiti:</span>'
+                    f'<span style="font-weight:700;color:#00c48c;">{_nakit_ozet_crypto_usd:,.0f} $</span>'
+                    f'</div>',
+                    unsafe_allow_html=True)
 
-            # Tablo
             st.dataframe(_c_rows, use_container_width=True)
 
-            # Sil
             _del_c = st.selectbox("Sil:", ["—"] + [p["ticker"] for p in _crypto_all], key="del_crypto_sel2")
             if _del_c != "—":
                 if st.button(f"🗑 {_del_c} Sil", key="del_crypto_btn2"):
@@ -1293,46 +1283,10 @@ with tab_portfolio:
                     remove_position(_del_c)
                     st.rerun()
 
-
-
-        # ── ₿ Kripto Borsa Nakiti (USD) ──────────────────────────────────────────
-        st.markdown('<hr style="border-color:var(--color-border-tertiary);margin:0.5rem 0;">',
-                    unsafe_allow_html=True)
-        _bal_crypto_usd = get_cash_accounts().get("crypto_usd", 0.0)
-        st.markdown(
-            f'<div style="font-size:0.65rem;color:#5a6a7a;font-weight:600;">₿ Kripto Borsa Nakiti (USD)</div>'
-            f'<div style="font-size:1.1rem;font-weight:700;color:#00c48c;">{_bal_crypto_usd:,.0f} $</div>',
-            unsafe_allow_html=True)
-        st.caption("Binance, Coinbase vb. borsalardaki USD/USDT bakiyeniz")
-        _ci_crypto_usd, _ca_crypto_usd, _cb_crypto_usd, _cc_crypto_usd = st.columns([2,1,1,1])
-        with _ci_crypto_usd:
-            _inp_crypto_usd = st.number_input("Miktar", min_value=0.0, value=0.0,
-                step=100.0, key="cash_cr_inp2", label_visibility="collapsed")
-        with _ca_crypto_usd:
-            if st.button("➕ Ekle", key="btn_cr_add2", use_container_width=True, help="Üstüne ekle"):
-                if _inp_crypto_usd > 0:
-                    add_to_cash_account("crypto_usd", _inp_crypto_usd)
-                    st.success(f"✅ {_inp_crypto_usd:,.0f} $ eklendi!")
-                    st.rerun()
-        with _cb_crypto_usd:
-            if st.button("✏️ Ayarla", key="btn_cr_set2", use_container_width=True, help="Tam değere ayarla"):
-                set_cash_account("crypto_usd", _inp_crypto_usd)
-                st.success(f"✅ {_inp_crypto_usd:,.0f} $ olarak ayarlandı!")
-                st.rerun()
-        with _cc_crypto_usd:
-            if st.button("🗑 Sıfırla", key="btn_cr_reset2", use_container_width=True):
-                set_cash_account("crypto_usd", 0.0)
-                st.success("Sıfırlandı.")
-                st.rerun()
-
-        if not _crypto_all:
-            st.info("Henüz kripto pozisyon yok.")
-
-        # Ekle formu
         with st.expander("➕ Kripto Pozisyon Ekle"):
             _cc1, _cc2, _cc3 = st.columns(3)
             with _cc1:
-                _c_ticker = st.text_input("Ticker", placeholder="BTC-USD, ETH-USD, SOL-USD", key="c_ticker2")
+                _c_ticker = st.text_input("Ticker", placeholder="BTC-USD, ETH-USD", key="c_ticker2")
                 if _c_ticker and "-" not in _c_ticker.upper():
                     _c_ticker = f"{_c_ticker.upper()}-USD"
                 else:
@@ -1342,12 +1296,45 @@ with tab_portfolio:
             with _cc3:
                 _c_cost = st.number_input("Maliyet ($/adet)", min_value=0.0, step=0.01, key="c_cost2")
             _c_notes = st.text_input("Not", key="c_notes2")
-            if st.button("💾 Ekle", key="btn_add_crypto2"):
+            if st.button("💾 Kripto Ekle", key="btn_add_crypto2"):
                 if _c_ticker and _c_shares > 0 and _c_cost > 0:
                     add_position(_c_ticker, _c_shares, _c_cost, "Kripto", _c_notes,
-                                deduct_from_cash=False, asset_class="crypto", currency="USD")
+                                deduct_from_cash=True, asset_class="crypto", currency="USD")
                     st.success(f"✅ {_c_ticker} eklendi!")
                     st.rerun()
+
+        if not _crypto_all:
+            st.info("Henüz kripto pozisyon yok.")
+
+        # ── Kripto Borsa Nakiti ───────────────────────────────────────────────
+        st.markdown('<hr style="border-color:var(--color-border-tertiary);margin:0.5rem 0;">',
+                    unsafe_allow_html=True)
+        _bal_cr = get_cash_accounts().get("crypto_usd", 0.0)
+        st.markdown(
+            f'<div style="font-size:0.65rem;color:#5a6a7a;font-weight:600;">₿ Kripto Borsa Nakiti (USD)</div>'
+            f'<div style="font-size:1.1rem;font-weight:700;color:#00c48c;">{_bal_cr:,.0f} $</div>',
+            unsafe_allow_html=True)
+        st.caption("Binance, Coinbase vb. borsalardaki USD/USDT bakiyeniz")
+        _ci1, _ci2, _ci3, _ci4 = st.columns([2,1,1,1])
+        with _ci1:
+            _cr_inp = st.number_input("Miktar", min_value=0.0, value=0.0,
+                                      step=100.0, key="cash_cr_final", label_visibility="collapsed")
+        with _ci2:
+            if st.button("➕ Ekle", key="btn_cr_add", use_container_width=True, help="Üstüne ekle"):
+                if _cr_inp > 0:
+                    add_to_cash_account("crypto_usd", _cr_inp)
+                    st.success(f"✅ {_cr_inp:,.0f} $ eklendi!")
+                    st.rerun()
+        with _ci3:
+            if st.button("✏️ Ayarla", key="btn_cr_set", use_container_width=True, help="Tam değere ayarla"):
+                set_cash_account("crypto_usd", _cr_inp)
+                st.success(f"✅ {_cr_inp:,.0f} $ olarak ayarlandı!")
+                st.rerun()
+        with _ci4:
+            if st.button("🗑 Sıfırla", key="btn_cr_rst", use_container_width=True):
+                set_cash_account("crypto_usd", 0.0)
+                st.success("Sıfırlandı.")
+                st.rerun()
 
     # ═══════════════════════════════════════════════════════════════════════
     # EMTİA
@@ -1362,7 +1349,6 @@ with tab_portfolio:
         _comm_all = [p for p in load_portfolio() if p.get("asset_class") == "commodity"
                      and float(p.get("shares", 0)) > 0]
 
-        # Gram dönüşüm tablosu
         _GRAM = {
             "ALTIN_GRAM_TRY": {"src": "GC=F", "div": 31.1035},
             "GUMUS_GRAM_TRY": {"src": "SI=F", "div": 31.1035},
@@ -1378,17 +1364,16 @@ with tab_portfolio:
             except Exception:
                 pass
 
-            _e_rows = []
+            _e_rows     = []
             _e_enriched = []
             for _ep in _comm_all:
-                _tk    = _ep["ticker"]
-                _gram  = _GRAM.get(_tk)
-                _avg   = float(_ep.get("avg_cost", 0))
+                _tk   = _ep["ticker"]
+                _gram = _GRAM.get(_tk)
+                _avg  = float(_ep.get("avg_cost", 0))
 
                 if _gram:
-                    # TRY gram: GC=F/SI=F × USDTRY ÷ 31.1035
                     try:
-                        _fi = _yf_c2.Ticker(_gram["src"]).fast_info
+                        _fi     = _yf_c2.Ticker(_gram["src"]).fast_info
                         _usd_oz = float(getattr(_fi, "last_price", 0) or 0)
                         _cur_tl = _usd_oz * _usd_try_c / _gram["div"]
                     except Exception:
@@ -1397,20 +1382,18 @@ with tab_portfolio:
                     _ep["current_price_usd"] = _cur_usd
                     _ep["currency"] = "TRY"
                     _val_usd = _ep["shares"] * _cur_usd
-                    _avg_usd = _avg / _usd_try_c
                     _pnl     = (_cur_tl - _avg) / _avg * 100 if _avg > 0 else 0
                     _e_rows.append({
-                        "Varlık":   _tk.replace("_GRAM_TRY","").replace("=X",""),
-                        "Gram":     f"{_ep['shares']:.2f}",
-                        "Maliyet":  f"{_avg:.2f} TL/g",
-                        "Güncel":   f"{_cur_tl:.2f} TL/g",
-                        "Değer":    f"${_val_usd:,.2f} ({_ep['shares']*_cur_tl:,.0f} TL)",
-                        "K/Z %":    f"{_pnl:+.1f}%",
+                        "Varlık":  _tk.replace("_GRAM_TRY","").replace("=X",""),
+                        "Gram":    f"{_ep['shares']:.2f}",
+                        "Maliyet": f"{_avg:.2f} TL/g",
+                        "Güncel":  f"{_cur_tl:.2f} TL/g",
+                        "Değer":   f"${_val_usd:,.2f} ({_ep['shares']*_cur_tl:,.0f} TL)",
+                        "K/Z %":   f"{_pnl:+.1f}%",
                     })
                 else:
-                    # USD bazlı emtia
                     try:
-                        _fi = _yf_c2.Ticker(_tk).fast_info
+                        _fi  = _yf_c2.Ticker(_tk).fast_info
                         _cur = float(getattr(_fi, "last_price", 0) or _avg)
                     except Exception:
                         _cur = _avg
@@ -1419,29 +1402,26 @@ with tab_portfolio:
                     _val = _ep["shares"] * _cur
                     _pnl = (_cur - _avg) / _avg * 100 if _avg > 0 else 0
                     _e_rows.append({
-                        "Varlık":   _tk,
-                        "Adet":     f"{_ep['shares']:.4f}",
-                        "Maliyet":  f"${_avg:.2f}",
-                        "Güncel":   f"${_cur:.2f}",
-                        "Değer":    f"${_val:,.2f}",
-                        "K/Z %":    f"{_pnl:+.1f}%",
+                        "Varlık":  _tk,
+                        "Adet":    f"{_ep['shares']:.4f}",
+                        "Maliyet": f"${_avg:.2f}",
+                        "Güncel":  f"${_cur:.2f}",
+                        "Değer":   f"${_val:,.2f}",
+                        "K/Z %":   f"{_pnl:+.1f}%",
                     })
                 _e_enriched.append(_ep)
 
-            # Özet bar
             _render_asset_summary(_e_enriched, "EMTİA", usd_try=_usd_try_c)
 
-        # Nakit özet satırı
-        _nakit_ozet_commodity_usd = get_cash_accounts().get("commodity_usd", 0.0)
-        if _nakit_ozet_commodity_usd > 0:
-            st.markdown(
-                f'<div style="display:flex;align-items:center;gap:1rem;'
-                f'background:var(--color-background-secondary);border-radius:6px;'
-                f'padding:0.4rem 0.8rem;margin-bottom:0.5rem;font-size:0.75rem;">'
-                f'<span style="color:#5a6a7a;">💵 Emtia Hesap Nakiti:</span>'
-                f'<span style="font-weight:700;color:#00c48c;">{_nakit_ozet_commodity_usd:,.0f} $</span>'
-                f'</div>',
-                unsafe_allow_html=True)
+            _nakit_ozet_commodity_usd = get_cash_accounts().get("commodity_usd", 0.0)
+            if _nakit_ozet_commodity_usd > 0:
+                st.markdown(
+                    f'<div style="display:flex;align-items:center;gap:1rem;background:var(--color-background-secondary);'
+                    f'border-radius:6px;padding:0.4rem 0.8rem;margin-bottom:0.5rem;font-size:0.75rem;">'
+                    f'<span style="color:#5a6a7a;">💵 Emtia Hesap Nakiti:</span>'
+                    f'<span style="font-weight:700;color:#00c48c;">{_nakit_ozet_commodity_usd:,.0f} $</span>'
+                    f'</div>',
+                    unsafe_allow_html=True)
 
             st.dataframe(_e_rows, use_container_width=True)
 
@@ -1451,60 +1431,6 @@ with tab_portfolio:
                     from portfolio_manager import remove_position
                     remove_position(_del_e)
                     st.rerun()
-
-        # ── Emtia Nakit ──────────────────────────────────────────────────────
-        st.markdown('<hr style="border-color:var(--color-border-tertiary);margin:0.5rem 0;">',
-                    unsafe_allow_html=True)
-        _accts_em = get_cash_accounts()
-        _cash_em_val = _accts_em.get("commodity_usd", 0.0)
-        _em1, _em2, _em3 = st.columns([2, 1, 1])
-        with _em1:
-            st.markdown(
-                f'<div style="font-size:0.65rem;color:#5a6a7a;font-weight:600;">🥇 EMTİA HESAP NAKİT (USD)</div>'
-                f'<div style="font-size:1.1rem;font-weight:700;color:#00c48c;">${_cash_em_val:,.0f}</div>',
-                unsafe_allow_html=True)
-        with _em2:
-            _new_cash_em = st.number_input("Emtia nakit ($)", min_value=0.0,
-                                           value=max(0.0, float(_cash_em_val)), step=100.0, key="cash_em_input",
-                                           label_visibility="collapsed")
-        with _em3:
-            if st.button("💾 Kaydet", key="btn_cash_em", use_container_width=True):
-                set_cash_account("commodity_usd", _new_cash_em)
-                st.success(f"✅ Emtia nakiti ${_new_cash_em:,.0f} kaydedildi!")
-                st.rerun()
-
-
-        # ── 🥇 Emtia Hesap Nakiti (USD) ──────────────────────────────────────────
-        st.markdown('<hr style="border-color:var(--color-border-tertiary);margin:0.5rem 0;">',
-                    unsafe_allow_html=True)
-        _bal_commodity_usd = get_cash_accounts().get("commodity_usd", 0.0)
-        st.markdown(
-            f'<div style="font-size:0.65rem;color:#5a6a7a;font-weight:600;">🥇 Emtia Hesap Nakiti (USD)</div>'
-            f'<div style="font-size:1.1rem;font-weight:700;color:#00c48c;">{_bal_commodity_usd:,.0f} $</div>',
-            unsafe_allow_html=True)
-        _ci_commodity_usd, _ca_commodity_usd, _cb_commodity_usd, _cc_commodity_usd = st.columns([2,1,1,1])
-        with _ci_commodity_usd:
-            _inp_commodity_usd = st.number_input("Miktar", min_value=0.0, value=0.0,
-                step=100.0, key="cash_em_inp2", label_visibility="collapsed")
-        with _ca_commodity_usd:
-            if st.button("➕ Ekle", key="btn_em_add2", use_container_width=True, help="Üstüne ekle"):
-                if _inp_commodity_usd > 0:
-                    add_to_cash_account("commodity_usd", _inp_commodity_usd)
-                    st.success(f"✅ {_inp_commodity_usd:,.0f} $ eklendi!")
-                    st.rerun()
-        with _cb_commodity_usd:
-            if st.button("✏️ Ayarla", key="btn_em_set2", use_container_width=True, help="Tam değere ayarla"):
-                set_cash_account("commodity_usd", _inp_commodity_usd)
-                st.success(f"✅ {_inp_commodity_usd:,.0f} $ olarak ayarlandı!")
-                st.rerun()
-        with _cc_commodity_usd:
-            if st.button("🗑 Sıfırla", key="btn_em_reset2", use_container_width=True):
-                set_cash_account("commodity_usd", 0.0)
-                st.success("Sıfırlandı.")
-                st.rerun()
-
-        if not _comm_all:
-            st.info("Henüz emtia pozisyon yok.")
 
         with st.expander("➕ Emtia Pozisyon Ekle"):
             _etype = st.radio("Tür:", ["🥇 Altın Gram (TL)", "🥈 Gümüş Gram (TL)", "💵 USD Bazlı"],
@@ -1531,10 +1457,42 @@ with tab_portfolio:
             if st.button("💾 Ekle", key="btn_add_comm2"):
                 if _e_tk2 and _e_sh2 > 0 and _e_co2 > 0:
                     add_position(_e_tk2, _e_sh2, _e_co2, "Emtia", _e_nt2,
-                                deduct_from_cash=False,
+                                deduct_from_cash=True,
                                 asset_class="commodity", currency=_ecfg["currency"])
                     st.success(f"✅ Eklendi!")
                     st.rerun()
+
+        if not _comm_all:
+            st.info("Henüz emtia pozisyon yok.")
+
+        # ── Emtia Hesap Nakiti ────────────────────────────────────────────────
+        st.markdown('<hr style="border-color:var(--color-border-tertiary);margin:0.5rem 0;">',
+                    unsafe_allow_html=True)
+        _bal_em = get_cash_accounts().get("commodity_usd", 0.0)
+        st.markdown(
+            f'<div style="font-size:0.65rem;color:#5a6a7a;font-weight:600;">🥇 Emtia Hesap Nakiti (USD)</div>'
+            f'<div style="font-size:1.1rem;font-weight:700;color:#00c48c;">{_bal_em:,.0f} $</div>',
+            unsafe_allow_html=True)
+        _ei1, _ei2, _ei3, _ei4 = st.columns([2,1,1,1])
+        with _ei1:
+            _em_inp = st.number_input("Miktar", min_value=0.0, value=0.0,
+                                      step=100.0, key="cash_em_final", label_visibility="collapsed")
+        with _ei2:
+            if st.button("➕ Ekle", key="btn_em_add", use_container_width=True, help="Üstüne ekle"):
+                if _em_inp > 0:
+                    add_to_cash_account("commodity_usd", _em_inp)
+                    st.success(f"✅ {_em_inp:,.0f} $ eklendi!")
+                    st.rerun()
+        with _ei3:
+            if st.button("✏️ Ayarla", key="btn_em_set", use_container_width=True, help="Tam değere ayarla"):
+                set_cash_account("commodity_usd", _em_inp)
+                st.success(f"✅ {_em_inp:,.0f} $ olarak ayarlandı!")
+                st.rerun()
+        with _ei4:
+            if st.button("🗑 Sıfırla", key="btn_em_rst", use_container_width=True):
+                set_cash_account("commodity_usd", 0.0)
+                st.success("Sıfırlandı.")
+                st.rerun()
 
     # ═══════════════════════════════════════════════════════════════════════
     # TEFAS
@@ -1557,16 +1515,16 @@ with tab_portfolio:
             except Exception:
                 pass
 
-            _t_rows = []
-            _t_enriched = []
+            _t_rows    = []
+            _t_enriched= []
             from turkey_fetcher import fetch_tefas_fund
             for _tp in _tefas_all:
                 _avg_tl = float(_tp.get("avg_cost", 0))
                 try:
-                    _fd = fetch_tefas_fund(_tp["ticker"])
+                    _fd     = fetch_tefas_fund(_tp["ticker"])
                     _cur_tl = float(_fd.get("price", _avg_tl)) if _fd else _avg_tl
-                    _r1m = _fd.get("ret_1m", 0) if _fd else 0
-                    _r1y = _fd.get("ret_1y", 0) if _fd else 0
+                    _r1m    = _fd.get("ret_1m", 0) if _fd else 0
+                    _r1y    = _fd.get("ret_1y", 0) if _fd else 0
                 except Exception:
                     _cur_tl, _r1m, _r1y = _avg_tl, 0, 0
 
@@ -1577,37 +1535,33 @@ with tab_portfolio:
                 _val_usd = _val_tl / _usd_try_t
                 _pnl     = (_cur_tl - _avg_tl) / _avg_tl * 100 if _avg_tl > 0 else 0
                 _t_rows.append({
-                    "Fon":      _tp["ticker"],
-                    "Pay":      f"{_tp['shares']:,.0f}",
-                    "Maliyet":  f"{_avg_tl:.4f} TL",
-                    "Güncel":   f"{_cur_tl:.4f} TL",
-                    "Toplam":   f"{_val_tl:,.0f} TL",
-                    "USD":      f"${_val_usd:,.0f}",
-                    "K/Z %":    f"{_pnl:+.1f}%",
-                    "1A %":     f"{_r1m:+.1f}%",
-                    "1Y %":     f"{_r1y:+.1f}%",
-                    "Not":      _tp.get("notes",""),
+                    "Fon":     _tp["ticker"],
+                    "Pay":     f"{_tp['shares']:,.0f}",
+                    "Maliyet": f"{_avg_tl:.4f} TL",
+                    "Güncel":  f"{_cur_tl:.4f} TL",
+                    "Toplam":  f"{_val_tl:,.0f} TL",
+                    "USD":     f"${_val_usd:,.0f}",
+                    "K/Z %":   f"{_pnl:+.1f}%",
+                    "1A %":    f"{_r1m:+.1f}%",
+                    "1Y %":    f"{_r1y:+.1f}%",
+                    "Not":     _tp.get("notes",""),
                 })
                 _t_enriched.append(_tp)
 
-            # Özet bar
             _render_asset_summary(_t_enriched, "TEFAS", usd_try=_usd_try_t)
 
-        # Nakit özet satırı
-        _nakit_ozet_tefas_try = get_cash_accounts().get("tefas_try", 0.0)
-        if _nakit_ozet_tefas_try > 0:
-            st.markdown(
-                f'<div style="display:flex;align-items:center;gap:1rem;'
-                f'background:var(--color-background-secondary);border-radius:6px;'
-                f'padding:0.4rem 0.8rem;margin-bottom:0.5rem;font-size:0.75rem;">'
-                f'<span style="color:#5a6a7a;">💵 TEFAS/TL Nakit:</span>'
-                f'<span style="font-weight:700;color:#00c48c;">{_nakit_ozet_tefas_try:,.0f} TL</span>'
-                f'</div>',
-                unsafe_allow_html=True)
+            _nakit_ozet_tefas_try = get_cash_accounts().get("tefas_try", 0.0)
+            if _nakit_ozet_tefas_try > 0:
+                st.markdown(
+                    f'<div style="display:flex;align-items:center;gap:1rem;background:var(--color-background-secondary);'
+                    f'border-radius:6px;padding:0.4rem 0.8rem;margin-bottom:0.5rem;font-size:0.75rem;">'
+                    f'<span style="color:#5a6a7a;">🇹🇷 TEFAS/TL Nakit:</span>'
+                    f'<span style="font-weight:700;color:#00c48c;">{_nakit_ozet_tefas_try:,.0f} TL</span>'
+                    f'</div>',
+                    unsafe_allow_html=True)
 
             st.dataframe(_t_rows, use_container_width=True)
 
-            # Toplam TL/USD
             _ttl = sum(_tp["shares"] * float(_t_rows[i]["Güncel"].replace(" TL","").replace(",",""))
                       for i, _tp in enumerate(_tefas_all))
             st.caption(f"💼 Toplam TEFAS: {_ttl:,.0f} TL = ${_ttl/_usd_try_t:,.0f} (1 USD = {_usd_try_t:.2f} TL)")
@@ -1618,62 +1572,6 @@ with tab_portfolio:
                     from portfolio_manager import remove_position
                     remove_position(_del_t)
                     st.rerun()
-
-        # ── TEFAS / TL Nakit ─────────────────────────────────────────────────
-        st.markdown('<hr style="border-color:var(--color-border-tertiary);margin:0.5rem 0;">',
-                    unsafe_allow_html=True)
-        _accts_tf = get_cash_accounts()
-        _cash_tf_val = _accts_tf.get("tefas_try", 0.0)
-        _tf1, _tf2, _tf3 = st.columns([2, 1, 1])
-        with _tf1:
-            st.markdown(
-                f'<div style="font-size:0.65rem;color:#5a6a7a;font-weight:600;">🇹🇷 TEFAS / TL NAKİT</div>'
-                f'<div style="font-size:1.1rem;font-weight:700;color:#00c48c;">{_cash_tf_val:,.0f} TL</div>',
-                unsafe_allow_html=True)
-            st.caption("Borsada veya bankada bekleyen TL birikiminiz")
-        with _tf2:
-            _new_cash_tf = st.number_input("TL nakit", min_value=0.0,
-                                           value=max(0.0, float(_cash_tf_val)), step=1000.0, key="cash_tf_input",
-                                           label_visibility="collapsed")
-        with _tf3:
-            if st.button("💾 Kaydet", key="btn_cash_tf", use_container_width=True):
-                set_cash_account("tefas_try", _new_cash_tf)
-                st.success(f"✅ TL nakit {_new_cash_tf:,.0f} TL kaydedildi!")
-                st.rerun()
-
-
-        # ── 🇹🇷 TEFAS / TL Nakit ──────────────────────────────────────────
-        st.markdown('<hr style="border-color:var(--color-border-tertiary);margin:0.5rem 0;">',
-                    unsafe_allow_html=True)
-        _bal_tefas_try = get_cash_accounts().get("tefas_try", 0.0)
-        st.markdown(
-            f'<div style="font-size:0.65rem;color:#5a6a7a;font-weight:600;">🇹🇷 TEFAS / TL Nakit</div>'
-            f'<div style="font-size:1.1rem;font-weight:700;color:#00c48c;">{_bal_tefas_try:,.0f} TL</div>',
-            unsafe_allow_html=True)
-        st.caption("Borsada veya bankada bekleyen TL birikiminiz")
-        _ci_tefas_try, _ca_tefas_try, _cb_tefas_try, _cc_tefas_try = st.columns([2,1,1,1])
-        with _ci_tefas_try:
-            _inp_tefas_try = st.number_input("Miktar", min_value=0.0, value=0.0,
-                step=1000.0, key="cash_tf_inp2", label_visibility="collapsed")
-        with _ca_tefas_try:
-            if st.button("➕ Ekle", key="btn_tf_add2", use_container_width=True, help="Üstüne ekle"):
-                if _inp_tefas_try > 0:
-                    add_to_cash_account("tefas_try", _inp_tefas_try)
-                    st.success(f"✅ {_inp_tefas_try:,.0f} TL eklendi!")
-                    st.rerun()
-        with _cb_tefas_try:
-            if st.button("✏️ Ayarla", key="btn_tf_set2", use_container_width=True, help="Tam değere ayarla"):
-                set_cash_account("tefas_try", _inp_tefas_try)
-                st.success(f"✅ {_inp_tefas_try:,.0f} TL olarak ayarlandı!")
-                st.rerun()
-        with _cc_tefas_try:
-            if st.button("🗑 Sıfırla", key="btn_tf_reset2", use_container_width=True):
-                set_cash_account("tefas_try", 0.0)
-                st.success("Sıfırlandı.")
-                st.rerun()
-
-        if not _tefas_all:
-            st.info("Henüz TEFAS fonu yok.")
 
         with st.expander("➕ TEFAS Fon Ekle"):
             _tf1, _tf2, _tf3 = st.columns(3)
@@ -1690,18 +1588,52 @@ with tab_portfolio:
                     _fd_chk = fetch_tefas_fund(_t_code2)
                     if _fd_chk:
                         add_position(_t_code2, _t_sh2, _t_co2, "TEFAS", _t_nt2,
-                                    deduct_from_cash=False, asset_class="tefas", currency="TRY")
+                                    deduct_from_cash=True, asset_class="tefas", currency="TRY")
                         st.success(f"✅ {_t_code2} eklendi! Fiyat: {_fd_chk.get('price',0):.4f} TL")
                         st.rerun()
                     else:
                         st.warning(f"⚠️ '{_t_code2}' TEFAS'ta doğrulanamadı.")
                         if st.button("Yine de ekle", key="btn_force_tefas2"):
                             add_position(_t_code2, _t_sh2, _t_co2, "TEFAS", _t_nt2,
-                                        deduct_from_cash=False, asset_class="tefas", currency="TRY")
+                                        deduct_from_cash=True, asset_class="tefas", currency="TRY")
                             st.success(f"✅ {_t_code2} eklendi!")
                             st.rerun()
 
-    # ── Portföy Korelasyon + Senaryo Analizi ─────────────────────────────────
+        if not _tefas_all:
+            st.info("Henüz TEFAS fonu yok.")
+
+        # ── TEFAS / TL Nakit ─────────────────────────────────────────────────
+        st.markdown('<hr style="border-color:var(--color-border-tertiary);margin:0.5rem 0;">',
+                    unsafe_allow_html=True)
+        _bal_tf = get_cash_accounts().get("tefas_try", 0.0)
+        st.markdown(
+            f'<div style="font-size:0.65rem;color:#5a6a7a;font-weight:600;">🇹🇷 TEFAS / TL Nakit</div>'
+            f'<div style="font-size:1.1rem;font-weight:700;color:#00c48c;">{_bal_tf:,.0f} TL</div>',
+            unsafe_allow_html=True)
+        st.caption("Borsada veya bankada bekleyen TL birikiminiz")
+        _ti1, _ti2, _ti3, _ti4 = st.columns([2,1,1,1])
+        with _ti1:
+            _tf_inp = st.number_input("Miktar (TL)", min_value=0.0, value=0.0,
+                                      step=1000.0, key="cash_tf_final", label_visibility="collapsed")
+        with _ti2:
+            if st.button("➕ Ekle", key="btn_tf_add", use_container_width=True, help="Üstüne ekle"):
+                if _tf_inp > 0:
+                    add_to_cash_account("tefas_try", _tf_inp)
+                    st.success(f"✅ {_tf_inp:,.0f} TL eklendi!")
+                    st.rerun()
+        with _ti3:
+            if st.button("✏️ Ayarla", key="btn_tf_set", use_container_width=True, help="Tam değere ayarla"):
+                set_cash_account("tefas_try", _tf_inp)
+                st.success(f"✅ {_tf_inp:,.0f} TL olarak ayarlandı!")
+                st.rerun()
+        with _ti4:
+            if st.button("🗑 Sıfırla", key="btn_tf_rst", use_container_width=True):
+                set_cash_account("tefas_try", 0.0)
+                st.success("Sıfırlandı.")
+                st.rerun()
+
+
+        # ── Portföy Korelasyon + Senaryo Analizi ─────────────────────────────────
     st.markdown('<hr style="border-color:#1e2833;margin:1.5rem 0;">', unsafe_allow_html=True)
 
     adv_col1, adv_col2 = st.columns(2)
