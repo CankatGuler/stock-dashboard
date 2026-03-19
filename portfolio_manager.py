@@ -465,6 +465,41 @@ def set_cash_account(account: str, amount: float) -> bool:
         return False
 
 
+def add_to_cash_account(account: str, amount: float) -> bool:
+    """Belirli bir nakit hesabına EKLE (mevcut değerin üzerine)."""
+    amount = float(amount)
+    raw = _read_raw_portfolio()
+    accounts = raw.get("cash_accounts", {})
+    current = max(0.0, float(accounts.get(account, 0.0)))
+    accounts[account] = round(current + amount, 2)
+    raw["cash_accounts"] = accounts
+    if account == "usd":
+        raw["cash"] = accounts[account]
+
+    encoded = base64.b64encode(
+        json.dumps(raw, indent=2, ensure_ascii=False).encode()
+    ).decode()
+
+    token, repo = _get_github_config()
+    if token and repo:
+        try:
+            url  = f"https://api.github.com/repos/{repo}/contents/{GITHUB_PATH}"
+            hdrs = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
+            sha  = requests.get(url, headers=hdrs, timeout=10).json().get("sha", "")
+            resp = requests.put(url, headers=hdrs,
+                               json={"message": f"Cash add: {account}+{amount:.2f}",
+                                     "content": encoded, "sha": sha}, timeout=15)
+            return resp.status_code in (200, 201)
+        except Exception as e:
+            logger.warning("add_to_cash_account failed: %s", e)
+    try:
+        with open("portfolio.json", "w") as f:
+            json.dump(raw, f, indent=2, ensure_ascii=False)
+        return True
+    except Exception:
+        return False
+
+
 def get_total_cash_usd(usd_try: float = 32.0) -> dict:
     """
     Tüm nakit hesaplarını USD bazında topla.
