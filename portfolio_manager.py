@@ -171,17 +171,28 @@ def add_position(ticker, shares, avg_cost, sector="Diğer", notes="",
     Add or update a position (weighted average cost).
     asset_class: us_equity | crypto | commodity | tefas | other
     currency:    USD | TRY
-    deduct_from_cash=True ise alım tutarı nakitten düşülür.
+
+    Nakit düşme mantığı:
+    - us_equity  → usd hesabından düş (USD)
+    - crypto     → crypto_usd hesabından düş (USD)
+    - commodity  → commodity_usd hesabından düş (USD, TRY gram hariç)
+    - tefas      → tefas_try hesabından düş (TRY)
     """
     positions, cash, sha = _read_full_portfolio()
     ticker = ticker.upper().strip()
-    purchase_total = shares * avg_cost
+    purchase_total = shares * avg_cost  # Orijinal para biriminde
 
-    # TEFAS için nakit düşme — TRY bazlı, USD'ye çevirmeden
-    # Kripto ve emtia için normal USD nakit düşme
-    if currency == "TRY":
-        deduct_from_cash = False  # TRY varlıklar USD nakitten düşülmez
+    # Varlık sınıfı → cash_accounts anahtarı
+    _ACCOUNT_MAP = {
+        "us_equity":  "usd",
+        "crypto":     "crypto_usd",
+        "commodity":  "commodity_usd",
+        "tefas":      "tefas_try",
+        "other":      "usd",
+    }
+    _cash_account = _ACCOUNT_MAP.get(asset_class, "usd")
 
+    # Pozisyon güncelle (mevcut varsa)
     for pos in positions:
         if pos["ticker"] == ticker:
             old_val  = pos["shares"] * pos["avg_cost"]
@@ -194,10 +205,15 @@ def add_position(ticker, shares, avg_cost, sector="Diğer", notes="",
             pos["asset_class"] = asset_class
             pos["currency"]    = currency
             pos["updated"]     = datetime.now().strftime("%Y-%m-%d %H:%M")
-            new_cash = (cash - purchase_total) if deduct_from_cash else cash
+            # Legacy cash (us_equity için geriye uyumluluk)
+            new_cash = (cash - purchase_total) if (deduct_from_cash and asset_class == "us_equity") else cash
             _write_full_portfolio(positions, new_cash, sha)
+            # Cash accounts'tan düş
+            if deduct_from_cash and asset_class != "us_equity":
+                _deduct_from_cash_account(_cash_account, purchase_total)
             return positions
 
+    # Yeni pozisyon ekle
     positions.append({
         "ticker":      ticker,
         "shares":      shares,
@@ -209,8 +225,11 @@ def add_position(ticker, shares, avg_cost, sector="Diğer", notes="",
         "added":       datetime.now().strftime("%Y-%m-%d %H:%M"),
         "updated":     datetime.now().strftime("%Y-%m-%d %H:%M"),
     })
-    new_cash = (cash - purchase_total) if deduct_from_cash else cash
+    new_cash = (cash - purchase_total) if (deduct_from_cash and asset_class == "us_equity") else cash
     _write_full_portfolio(positions, new_cash, sha)
+    # Cash accounts'tan düş
+    if deduct_from_cash and asset_class != "us_equity":
+        _deduct_from_cash_account(_cash_account, purchase_total)
     return positions
 
 
@@ -267,10 +286,21 @@ def sell_position(ticker: str, shares_sold: float, sell_price: float = 0.0) -> t
                 pos["updated"] = datetime.now().strftime("%Y-%m-%d %H:%M")
                 msg = f"{ticker}: {remaining:.4f} adet kaldı.{pnl_str}"
 
-            # Satış gelirini nakite ekle
+            # Satış gelirini doğru nakit hesabına ekle
             sale_proceeds = (sell_price * shares_sold) if sell_price > 0 else 0.0
-            _, cur_cash, _ = _read_full_portfolio()
-            _write_full_portfolio(positions, cur_cash + sale_proceeds, sha)
+            _ac = pos.get("asset_class", "us_equity")
+            _AMAP = {"us_equity": "usd", "crypto": "crypto_usd",
+                     "commodity": "commodity_usd", "tefas": "tefas_try", "other": "usd"}
+            _cash_key = _AMAP.get(_ac, "usd")
+            if sale_proceeds > 0:
+                if _ac == "us_equity":
+                    _, cur_cash, _ = _read_full_portfolio()
+                    _write_full_portfolio(positions, cur_cash + sale_proceeds, sha)
+                else:
+                    _write_full_portfolio(positions, _read_full_portfolio()[1], sha)
+                    add_to_cash_account(_cash_key, sale_proceeds)
+            else:
+                _write_full_portfolio(positions, _read_full_portfolio()[1], sha)
             return positions, msg
 
     return positions, f"{ticker} portföyde bulunamadı."
@@ -457,6 +487,41 @@ def set_cash_account(account: str, amount: float) -> bool:
             logger.warning("set_cash_account GitHub write failed: %s", e)
 
     # Local fallback
+    try:
+        with open("portfolio.json", "w") as f:
+            json.dump(raw, f, indent=2, ensure_ascii=False)
+        return True
+    except Exception:
+        return False
+
+
+def _deduct_from_cash_account(account: str, amount: float) -> bool:
+    """Nakit hesabından düş. Bakiye sıfırın altına inmez."""
+    amount = max(0.0, float(amount))
+    raw = _read_raw_portfolio()
+    accounts = raw.get("cash_accounts", {})
+    current = max(0.0, float(accounts.get(account, 0.0)))
+    accounts[account] = round(max(0.0, current - amount), 2)
+    raw["cash_accounts"] = accounts
+    if account == "usd":
+        raw["cash"] = accounts[account]
+
+    encoded = base64.b64encode(
+        json.dumps(raw, indent=2, ensure_ascii=False).encode()
+    ).decode()
+
+    token, repo = _get_github_config()
+    if token and repo:
+        try:
+            url  = f"https://api.github.com/repos/{repo}/contents/{GITHUB_PATH}"
+            hdrs = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
+            sha  = requests.get(url, headers=hdrs, timeout=10).json().get("sha", "")
+            resp = requests.put(url, headers=hdrs,
+                               json={"message": f"Cash deduct: {account}-{amount:.2f}",
+                                     "content": encoded, "sha": sha}, timeout=15)
+            return resp.status_code in (200, 201)
+        except Exception as e:
+            logger.warning("_deduct_from_cash_account failed: %s", e)
     try:
         with open("portfolio.json", "w") as f:
             json.dump(raw, f, indent=2, ensure_ascii=False)
