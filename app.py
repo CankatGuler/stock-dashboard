@@ -1266,7 +1266,7 @@ with tab_portfolio:
             if st.button("💾 Ekle", key="btn_add_crypto2"):
                 if _c_ticker and _c_shares > 0 and _c_cost > 0:
                     add_position(_c_ticker, _c_shares, _c_cost, "Kripto", _c_notes,
-                                deduct_from_cash=True, asset_class="crypto", currency="USD")
+                                deduct_from_cash=False, asset_class="crypto", currency="USD")
                     st.success(f"✅ {_c_ticker} eklendi!")
                     st.rerun()
 
@@ -4141,11 +4141,80 @@ with tab_strategy:
 
     # ── Katman 1: Anlık Durum Panosu ─────────────────────────────────────
     _port_now     = [p for p in load_portfolio() if float(p.get("shares", 0)) > 0]
-    _cash_now     = get_cash()
-    _port_val_now = sum(
-        p.get("shares", 0) * p.get("current_price", p.get("avg_cost", 0))
-        for p in _port_now
-    )
+    _raw_cash     = get_cash()
+    _cash_now     = max(0.0, _raw_cash)
+
+    # Nakit negatifse uyar ve düzelt
+    if _raw_cash < -10:
+        _nc1, _nc2 = st.columns([3, 1])
+        with _nc1:
+            st.warning(
+                f"⚠️ Nakit ${_raw_cash:,.0f} görünüyor. "
+                f"Kripto/emtia alımları USD nakitten düşüldüğü için oluştu. "
+                f"Gerçek USD nakitinizi girin:"
+            )
+        with _nc2:
+            _fix_cash = st.number_input("Gerçek Nakit ($)",
+                                        min_value=0.0, value=0.0, step=100.0,
+                                        key="fix_cash_input")
+            if st.button("💾 Düzelt", key="btn_fix_cash"):
+                set_cash(_fix_cash)
+                st.success(f"✅ Nakit ${_fix_cash:,.0f} ayarlandı!")
+                st.rerun()
+
+    # USD/TRY kuru — TRY varlıkları dönüştürmek için
+    _usd_try_strat = 32.0
+    try:
+        import yfinance as _yf_strat
+        _usd_try_strat = float(_yf_strat.Ticker("USDTRY=X").fast_info.last_price or 32.0)
+    except Exception:
+        pass
+
+    # Varlık sınıfına göre doğru USD değeri hesapla
+    _GRAM_MAP_STRAT = {
+        "ALTIN_GRAM_TRY": "GC=F",
+        "GUMUS_GRAM_TRY": "SI=F",
+        "XAUTRY=X": "GC=F",
+        "XAGTRY=X": "SI=F",
+    }
+
+    def _pos_value_usd(pos):
+        """Pozisyonun güncel USD değerini hesapla."""
+        shares   = float(pos.get("shares", 0))
+        avg_cost = float(pos.get("avg_cost", 0))
+        currency = pos.get("currency", "USD")
+        asset_class = pos.get("asset_class", "us_equity")
+        ticker   = pos.get("ticker", "")
+
+        # Önce mevcut fiyatı bul
+        cur_price = float(pos.get("current_price", 0) or 0)
+
+        if cur_price <= 0:
+            # avg_cost kullan — para birimine göre dönüştür
+            if currency == "TRY":
+                return shares * avg_cost / _usd_try_strat
+            else:
+                return shares * avg_cost
+
+        # Para birimine göre USD'ye çevir
+        if currency == "TRY":
+            # TRY gram emtia: current_price zaten TRY/gram olabilir
+            # veya ons fiyatı (USD) olabilir — kontrol et
+            if ticker in _GRAM_MAP_STRAT:
+                # Gram emtia — avg_cost TL/gram, fiyat da TL/gram olmalı
+                # Eğer current_price çok büyükse (>1000) muhtemelen USD/oz
+                if cur_price > 500:
+                    # USD/oz → TRY/gram dönüştür
+                    cur_price_tl = cur_price * _usd_try_strat / 31.1035
+                    return shares * cur_price_tl / _usd_try_strat
+                else:
+                    return shares * cur_price / _usd_try_strat
+            else:
+                return shares * cur_price / _usd_try_strat
+        else:
+            return shares * cur_price
+
+    _port_val_now = sum(_pos_value_usd(p) for p in _port_now)
     _total_now    = _port_val_now + _cash_now
     _cash_ratio   = (_cash_now / _total_now * 100) if _total_now > 0 else 0
 
@@ -4175,8 +4244,8 @@ with tab_strategy:
     # KPI bar
     _kpi_cols = st.columns(5)
     for _col, _label, _val, _clr, _sub in [
-        (_kpi_cols[0], "Portföy Değeri",  f"${_port_val_now:,.0f}", "#4fc3f7", "hisse"),
-        (_kpi_cols[1], "Nakit",           f"${_cash_now:,.0f}",     "#00c48c", f"%{_cash_ratio:.0f} oran"),
+        (_kpi_cols[0], "Portföy Değeri",  f"${_port_val_now:,.0f}", "#4fc3f7", f"{len(_port_now)} pozisyon"),
+        (_kpi_cols[1], "Nakit",           f"${_cash_now:,.0f}",     "#00c48c" if _cash_now >= 0 else "#e74c3c", f"%{_cash_ratio:.0f} oran"),
         (_kpi_cols[2], "Makro Rejim",     _regime_label,            _regime_color, f"VIX {_vix_val:.0f}"),
         (_kpi_cols[3], "Fear & Greed",    f"{_fg_score:.0f}/100",   _fg_color, _fg_rating),
         (_kpi_cols[4], "FOMC'a Kalan",    f"{_fomc_days} gün",      "#ce93d8", "Fed toplantısı"),
