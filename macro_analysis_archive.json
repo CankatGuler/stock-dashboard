@@ -1,0 +1,78 @@
+[
+  {
+    "generated_at": "2026-03-20 21:45",
+    "regime": "RISK_OFF",
+    "regime_label": "Riskten Kaç",
+    "analysis_text": "# 📊 MAKRO ANALİZ VE PORTFÖY STRATEJİSİ\n\n---\n\n## 1. 🔄 GENEL PİYASA ORTAMI\n\n### Döngü Aşaması: **GEÇ DÖNGÜ → STAGFLASYONIST BASKIYA GEÇİŞ**\n\n| Gösterge Kombinasyonu | Sinyal | Anlam |\n|----------------------|--------|-------|\n| **Bakır ↓ (%−4.41) + Petrol ↑ (%+4.55)** | Divergence | Talep yavaşlıyor AMA arz şoku var → stagflasyon sinyali |\n| **VIX 26.78 + OVX 91.80** | Çift volatilite | Hem hisse hem emtia riski eş zamanlı yükseliyor |\n| **Yield Curve +0.77% (Normal)** | Pozitif | Resesyon henüz fiyatlanmıyor, ekonomi \"henüz\" sağlıklı |\n| **Credit Spread daralıyor** | Karışık | Kredi piyasası panik yapmıyor ama bu gecikmeli gösterge |\n\n**Sentez Yorum:**\n```\nBakır (büyüme barometresi) düşerken petrol (maliyet) yükseliyor = \nKlasik STAGFLASYON formülü: Büyüme ↓ + Enflasyon ↑\n\nYield curve henüz tersine dönmedi → Piyasa tam resesyon fiyatlamıyor\nAMA bakır+petrol divergence'ı 2022 Q2'ye benziyor → O dönem S&P %23 düştü\n```\n\n---\n\n## 2. ⚠️ EN KRİTİK RİSK\n\n### **TEHLİKE: USD/JPY 159.22 — BOJ Müdahale Riski**\n\n**Neden en kritik?**\n\n| Faktör | Detay |\n|--------|-------|\n| **Tarihsel Eşik** | BOJ, Eylül 2022'de 145.90'da, Ekim 2022'de 151.94'te müdahale etti |\n| **Şu an 159.22** | Tüm müdahale seviyelerinin **çok üstünde** |\n| **Carry Trade Hacmi** | ~$1.1 trilyon yen carry trade pozisyonu global sistemde |\n\n### Matematiksel Senaryo:\n```\nBOJ ani müdahale → USD/JPY 159 → 145 (≈%9 yen güçlenmesi)\n                 ↓\nCarry trade çözülmesi → Zorunlu ABD varlık satışı\n                 ↓\nS&P 500 etkisi: Tarihsel korelasyon %0.65\nBeklenen düşüş: %6-9 (6506 → 6100-5950 bandı)\n```\n\n> ⚡ **Uyarı:** Temmuz 2024'te USD/JPY 161→142 hareketinde S&P 3 günde %5.5 düştü. Şu an aynı risk canlı.\n\n---\n\n## 3. ✅ EN ÖNEMLİ FIRSAT\n\n### **Sektör: ENERJİ (Özellikle Entegre Petrol)**\n\n| Gerekçe | Veri |\n|---------|------|\n| **Petrol $98 + OVX 91** | Yüksek fiyat + yüksek volatilite = Üretici marjları genişliyor |\n| **Zayıf DXY (99.50)** | Dolar bazlı emtialara pozitif |\n| **Stagflasyon hedge** | Tarihsel olarak enerji, stagflasyonda en iyi performans gösteren sektör |\n\n**Tarihsel Kanıt:**\n```\n1973-74 Stagflasyonu: Enerji sektörü +45%, S&P -40%\n2022 H1 Stagflasyon korkusu: XLE +55%, S&P -20%\n```\n\n---\n\n## 4. 💼 SOMUT HİSSE ÖNERİLERİ\n\n### **[NAKİT / KISA TAHVİL]** — VIX 26+ ortamında fırsat maliyeti düşük park yeri\n\n| Ticker | Gerekçe |\n|--------|---------|\n| **SGOV** | 0-3 ay T-Bill, %4.3 getiri, sıfır duration riski. TLT %1.9 düşerken SGOV sabit. |\n| **BIL** | SPDR 1-3 ay, günlük likidite yüksek, ani fırsatlarda hızlı çıkış imkanı |\n\n---\n\n### **[ENERJİ]** — $98 petrol + stagflasyon hedge\n\n| Ticker | Gerekçe |\n|--------|---------|\n| **XOM** | Breakeven $35/varil. Şu an $98'de varil başı ~$25 serbest nakit akışı. %3.4 temettü verimi. |\n| **CVX** | Permian Basin maliyeti sektörün en düşüğü. Net borç/EBITDA 0.5x — sektörde en sağlam bilanço. |\n| **COP** | Saf upstream exposure, petrol fiyatına en yüksek beta (1.3x). Agresif tercih. |\n\n---\n\n### **[ALTIN]** — Real rate hedge + jeopolitik sigorta\n\n| Ticker | Gerekçe |\n|--------|---------|\n| **GLD** | Fiziki altın ETF, madenci riski yok. Altın $3,200'dan $3,450'a dönerse %8 upside. |\n| **NEM** | All-in sustaining cost $1,400/oz. $3,200 altında bile $1,800 marj. P/E 14x, sektör ortalaması 18x. |\n\n---\n\n### **[TEMEL TÜKETİM]** — Resesyona dayanıklı nakit akışı\n\n| Ticker | Gerekçe |\n|--------|---------|\n| **PG** | 67 yıl kesintisiz temettü artışı. Stagflasyonda fiyatlama gücü kanıtlanmış (2022: +%8 fiyat geçirdi). |\n| **WMT** | Deflasyonist/resesyonist dönemde tüketici \"trade-down\" etkisi. E-ticaret %20 YoY büyüyor. |\n\n---\n\n### **[SAĞLIK]** — Defansif + yapısal büyüme\n\n| Ticker | Gerekçe |\n|--------|---------|\n| **LLY** | GLP-1 pazarı 2030'a $100B+ bekleniyor. Şu anki değerleme yüksek (P/E 55x) ama büyüme %30+ |\n| **UNH** | Managed care tekeli, resesyonda sigorta iptalleri artsa da Medicare Advantage büyüyor |\n\n---\n\n### 📊 ÖNERİLEN DAĞILIM\n\n```\n┌─────────────────────────────────────────────────────────────┐\n│  NAKİT/KISA TAHVİL  ████████████████████░░░░░░░░░░  35%     │\n│  (SGOV, BIL)                                                │\n├─────────────────────────────────────────────────────────────┤\n│  ENERJİ             ████████████░░░░░░░░░░░░░░░░░░  20%     │\n│  (XOM, CVX)                                                 │\n├─────────────────────────────────────────────────────────────┤\n│  ALTIN              ████████░░░░░░░░░░░░░░░░░░░░░░  15%     │\n│  (GLD, NEM)                                                 │\n├─────────────────────────────────────────────────────────────┤\n│  DEFANSİF HİSSE     ████████████████░░░░░░░░░░░░░░  25%     │\n│  (PG, WMT, UNH)                                             │\n├─────────────────────────────────────────────────────────────┤\n│  BÜYÜME             ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░   5%     │\n│  (Sadece LLY, küçük pozisyon)                               │\n└─────────────────────────────────────────────────────────────┘\n```\n\n---\n\n## 5. 🚫 KAÇINILACAKLAR\n\n### **1. UZUN VADELİ TAHVİL (TLT)**\n- 10Y faiz %4.39 ve yükseliyor, TLT bu ay −%1.92\n- OVX 91 = enerji enflasyonu → Fed rate cut beklentisi ertelenir\n- **Risk:** 10Y %4.6 geçerse TLT %5+ daha düşer\n\n### **2. YÜKSEK BETA TEK",
+    "key_metrics": {
+      "VIX": {
+        "value": 26.78,
+        "change_pct": 11.26
+      },
+      "TNX": {
+        "value": 4.39,
+        "change_pct": 2.57
+      },
+      "IRX": {
+        "value": 3.62,
+        "change_pct": 0.17
+      },
+      "DXY": {
+        "value": 99.5,
+        "change_pct": 0.06
+      },
+      "GOLD": {
+        "value": 4492.0,
+        "change_pct": -4.94
+      },
+      "OIL": {
+        "value": 98.09,
+        "change_pct": 4.55
+      },
+      "COPPER": {
+        "value": 5.3,
+        "change_pct": -4.41
+      },
+      "SPX": {
+        "value": 6506.48,
+        "change_pct": -1.51
+      },
+      "NDX": {
+        "value": 21647.61,
+        "change_pct": -2.01
+      },
+      "TLT": {
+        "value": 85.83,
+        "change_pct": -1.92
+      },
+      "YIELD_CURVE": {
+        "value": 0.77,
+        "change_pct": 0
+      },
+      "CREDIT_SPREAD": {
+        "value": 0.7318,
+        "change_pct": 0.32
+      },
+      "OVX": {
+        "value": 91.8,
+        "change_pct": 0
+      },
+      "USDJPY": {
+        "value": 159.22,
+        "change_pct": 0.82
+      },
+      "LIQUIDITY": {
+        "value": -1.01,
+        "change_pct": 0
+      },
+      "FED_WATCH": {
+        "value": 3.62,
+        "change_pct": 0.006
+      },
+      "MOVE_PROXY": {
+        "value": 11.8,
+        "change_pct": 0
+      }
+    }
+  }
+]
