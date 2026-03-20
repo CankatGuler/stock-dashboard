@@ -3842,7 +3842,7 @@ def _load_macro_analysis_archive() -> list:
 with tab_macro:
     from macro_dashboard import (
         fetch_macro_data, compute_market_regime, build_claude_macro_context,
-        get_defensive_context_for_claude,
+        get_defensive_context_for_claude, get_regime_stock_context,
     )
 
     st.markdown(
@@ -3998,7 +3998,17 @@ with tab_macro:
         if _run_macro_claude:
             _macro_ctx    = build_claude_macro_context(_macro_data, _macro_regime)
             _regime_code  = _macro_regime.get("regime", "CAUTION")
-            _def_context  = get_defensive_context_for_claude(_regime_code)
+            # VIX ve bakır verisini makro datadan çek — rejim kararını güçlendir
+            try:
+                _vix_val_ctx  = float(getattr(_macro_data.get("vix"),  "value", 20.0) or 20.0)
+                _cu_chg_ctx   = float(getattr(_macro_data.get("copper"), "change_pct", 0.0) or 0.0)
+            except Exception:
+                _vix_val_ctx, _cu_chg_ctx = 20.0, 0.0
+            _def_context  = get_regime_stock_context(
+                regime=_regime_code,
+                vix=_vix_val_ctx,
+                copper_chg=_cu_chg_ctx,
+            )
             _api_key      = os.getenv("ANTHROPIC_API_KEY", "")
             if not _api_key:
                 st.error("ANTHROPIC_API_KEY eksik.")

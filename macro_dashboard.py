@@ -598,39 +598,230 @@ DEFENSIVE_UNIVERSE = {
 }
 
 
-def get_defensive_context_for_claude(regime: str) -> str:
+
+# ─── Büyüme / Roket Hisse Evreni (Risk-On, Toparlanma) ──────────────────────
+# VIX düşük, kredi spread'leri daralıyor, bakır yükseliyor → para beta'ya akar
+
+GROWTH_UNIVERSE = {
+    "Yapay Zeka / Yarı İletken": {
+        "ETF": ["SOXX", "SMH", "BOTZ", "AIQ"],
+        "Büyük Sermayeli": [
+            ("NVDA", "NVIDIA — veri merkezi GPU tekeli, AI boru hattı büyümesi yıllık %100+"),
+            ("AVGO", "Broadcom — özel AI chip + ağ altyapısı, güçlü serbest nakit akışı"),
+            ("AMD",  "AMD — sunucu CPU ve AI GPU pazar payı kazanıyor"),
+            ("TSM",  "TSMC — tüm ileri chip'lerin fabrikası, yapısal talep güvencesi"),
+            ("AMAT", "Applied Materials — çip üretim ekipmanı, döngü tepesinde yüksek marj"),
+        ],
+        "Dikkat": "Tek sektör riski yüksek — NVDA kazanç sezonunda tüm grup etkilenir.",
+    },
+    "Yazılım / Bulut": {
+        "ETF": ["IGV", "WCLD", "BUG"],
+        "Büyük Sermayeli": [
+            ("MSFT", "Microsoft — Azure + Copilot AI entegrasyonu, recurring gelir modeli"),
+            ("CRM",  "Salesforce — enterprise yazılım, AI Agentforce büyüme katalizörü"),
+            ("NOW",  "ServiceNow — IT workflow otomasyonu, yüksek net retention"),
+            ("PANW", "Palo Alto Networks — siber güvenlik konsolidasyonu, platform hamlesi"),
+            ("CRWD", "CrowdStrike — endpoint güvenlik lideri, güçlü ARR büyümesi"),
+        ],
+        "Dikkat": "Değerleme yüksek; faiz artışı veya büyüme yavaşlaması çarpanları sıkıştırır.",
+    },
+    "Döngüsel / Sanayi": {
+        "ETF": ["XLI", "VIS", "PAVE"],
+        "Büyük Sermayeli": [
+            ("CAT",  "Caterpillar — altyapı yatırım döngüsü + madencilik talebi"),
+            ("DE",   "Deere — tarım makineleri, yeniden stok döngüsünde öncü"),
+            ("GE",   "GE Aerospace — uçak motoru talebi güçlü, uzun sipariş defteri"),
+            ("VRT",  "Vertiv — veri merkezi soğutma altyapısı, AI talep ötesi büyüme"),
+            ("EMR",  "Emerson Electric — otomasyon teknolojileri, stabil nakit akışı"),
+        ],
+        "Dikkat": "Ekonomi gerçekten toparlanıyorsa bu grup en erken hareket eder; ama sahte rallilerde de erken düşer.",
+    },
+    "Finans / Bankacılık": {
+        "ETF": ["XLF", "KRE", "KBE"],
+        "Büyük Sermayeli": [
+            ("JPM",  "JPMorgan — en güçlü banka bilançosu, faiz artışından net kazanır"),
+            ("BAC",  "Bank of America — faiz duyarlılığı yüksek, faiz düştükçe net gelir artar"),
+            ("GS",   "Goldman Sachs — IB/trading döngüsü canlanınca en çok kazanan"),
+            ("V",    "Visa — tüketim hacmi proxy, deflationary değil döngüsel büyüme"),
+            ("BX",   "Blackstone — alternatif varlık yönetimi, AUM büyümesi"),
+        ],
+        "Dikkat": "Kredi kalitesi bozulursa banka hisseleri ilk vurulur — tüketici borç verileri izlenmeli.",
+    },
+    "Küçük Sermayeli / Büyüme (Yüksek Beta)": {
+        "ETF": ["IWM", "IJR", "VBK"],
+        "Büyük Sermayeli": [
+            ("PLTR", "Palantir — kamu/özel AI veri analitiği, yüksek momentum"),
+            ("IONQ", "IonQ — kuantum bilişim erken oyunu, spekülatif ama izlemeye değer"),
+            ("RKLB", "Rocket Lab — uzay fırlatma altyapısı, SpaceX rakibi"),
+            ("HOOD", "Robinhood — perakende yatırımcı aktivitesi proxy, risk-on barometresi"),
+            ("COIN", "Coinbase — kripto volume proxy, risk-on dönemde en yüksek beta"),
+        ],
+        "Dikkat": "Bu sepet risk-on dönemde 3-5x piyasayı döver, risk-off dönemde ise %50+ düşer. Pozisyon boyutu kritik.",
+    },
+    "Kripto Ekosistemi": {
+        "ETF": ["IBIT", "FBTC", "ETHA"],
+        "Büyük Sermayeli": [
+            ("COIN", "Coinbase — Bitcoin ETF onayından en çok kazanan, hacim odaklı gelir"),
+            ("MSTR", "MicroStrategy — kaldıraçlı BTC tutma stratejisi, Bitcoin beta 2x"),
+            ("RIOT", "Riot Platforms — Bitcoin madenci, hash rate büyümesi"),
+            ("CLSK", "CleanSpark — enerji verimli madencilik, düşük maliyet yapısı"),
+        ],
+        "Dikkat": "Bu sepet kripto piyasasına 1.5-3x kaldıraçlıdır. Halving döngüsü ve BTC dominansı izlenmeli.",
+    },
+}
+
+
+# ─── Stagflasyon Evreni (Özel Durum) ────────────────────────────────────────
+STAGFLATION_UNIVERSE = {
+    "Enerji (Upstream)": {
+        "ETF": ["XLE", "XOP", "OIH"],
+        "Büyük Sermayeli": [
+            ("XOM",  "ExxonMobil — petrol $90+ senaryosunda en yüksek serbest nakit akışı"),
+            ("COP",  "ConocoPhillips — saf E&P, petrol fiyatına net maruz kalım"),
+            ("CVX",  "Chevron — düşük üretim maliyeti, güçlü temettü artışı"),
+            ("MPC",  "Marathon Petroleum — rafineri marjları yüksek, jet yakıtı talebi"),
+            ("DVN",  "Devon Energy — yüksek değişken temettü, Permian Basin varlıkları"),
+        ],
+        "Dikkat": "Petrol $100+ geçerse enerji hisseleri zirveye yakın olabilir — timing kritik.",
+    },
+    "Altın / Enflasyon Koruyucu": {
+        "ETF": ["GLD", "IAU", "TIP", "TIPS"],
+        "Büyük Sermayeli": [
+            ("NEM",  "Newmont — maliyet kontrollü madenci, TL olarak enflasyon koruması"),
+            ("WPM",  "Wheaton Precious Metals — royalty modeli, düşük maliyet volatilitesi"),
+            ("FNV",  "Franco-Nevada — altın+petrol royalty, en savunmacı madenci profili"),
+            ("AEM",  "Agnico Eagle — Kanada bazlı, düşük siyasi risk, güçlü keşif"),
+        ],
+        "Dikkat": "Reel faiz yükselmeye devam ederse altın baskı görür. TIP/TLT oranı izlenmeli.",
+    },
+    "Hammadde / Emtia": {
+        "ETF": ["DJP", "PDBC", "COMT"],
+        "Büyük Sermayeli": [
+            ("FCX",  "Freeport-McMoRan — bakır liderliği, küresel elektrik talebiyle bağlantılı"),
+            ("NUE",  "Nucor — çelik üreticisi, inşaat ve enerji altyapısı talebi"),
+            ("CF",   "CF Industries — gübre/azot üreticisi, tarım emtia döngüsü"),
+            ("MOS",  "Mosaic — potash/fosfat, gıda fiyatları yükselince kazanır"),
+        ],
+        "Dikkat": "Stagflasyon uzarsa hammadde şirketleri marj sıkışmasına girer — girdi maliyeti de artar.",
+    },
+}
+
+
+# ─── Toparlanma / Geçiş Evreni ───────────────────────────────────────────────
+RECOVERY_UNIVERSE = {
+    "Döngüsel Liderler": {
+        "ETF": ["XLI", "XLB", "XLF"],
+        "Büyük Sermayeli": [
+            ("CAT",  "Caterpillar — altyapı siparişleri toparlanmanın erken sinyali"),
+            ("DE",   "Deere — tarım makineleri yeniden stok döngüsü"),
+            ("FCX",  "Freeport — bakır toparlanıyorsa bu hisse hem öncü hem kazanan"),
+            ("JPM",  "JPMorgan — kredi döngüsü canlanınca en sağlıklı banka"),
+            ("LEN",  "Lennar — konut inşaatı, faiz düştükçe ilk canlanır"),
+        ],
+        "Dikkat": "Toparlanma sahte ise bu grup ilk düşer. Sinyal teyidi olmadan erken giriş riskli.",
+    },
+    "Tüketici Takımlığı": {
+        "ETF": ["XLY", "VCR"],
+        "Büyük Sermayeli": [
+            ("AMZN", "Amazon — tüketici harcaması + AWS bulut, çift motor"),
+            ("HD",   "Home Depot — konut yenileme döngüsü, faiz hassasiyeti düşüşte azalır"),
+            ("NKE",  "Nike — küresel tüketici marka, Çin toparlanmasına bağlı"),
+            ("TSLA", "Tesla — hem tüketim hem enerji, yüksek beta büyüme"),
+        ],
+        "Dikkat": "Tüketici güveni geri gelmedikçe bu sektör performans göstermez.",
+    },
+}
+
+
+def get_regime_stock_context(regime: str, vix: float = 20.0,
+                              copper_chg: float = 0.0) -> str:
     """
-    Mevcut rejime göre ön plana çıkan savunmacı sektörleri ve
-    somut hisse isimlerini Claude prompt'una eklemek için metin üret.
+    Piyasa rejimine göre doğru hisse evrenini seçip Claude'a verir.
+
+    Karar mantığı:
+    - RISK_ON / BULL      → Büyüme/Roket hisseleri ön planda
+    - RISK_OFF / CAUTION  → Defansif hisseler ön planda
+    - STAGFLATION         → Enerji + Altın ön planda
+    - RECOVERY            → Döngüsel + Teknoloji karışımı
+    - Geçiş zone (VIX 18-25 arası)  → Her iki evren de gösterilir
     """
-    lines = ["\n=== SAVUNMACI HİSSE EVRENİ (REFERANS) ==="]
-    lines.append("Claude bu listeden somut öneri yapmalıdır. ETF veya bireysel hisse belirt.")
+    lines = ["\n=== REJİME GÖRE HİSSE EVRENİ ==="]
+    lines.append(f"Aktif rejim: {regime} | VIX: {vix:.1f} | Bakır değişim: {copper_chg:+.1f}%")
+    lines.append("Claude bu listeden somut ticker önerisi yapmalıdır.")
+
+    # ── Rejim kararı ──────────────────────────────────────────────────────
+    # VIX ve bakır birlikte rejimi teyit eder
+    is_risk_on    = regime in ("RISK_ON", "BULL") or (vix < 18 and copper_chg > 1.0)
+    is_risk_off   = regime in ("RISK_OFF",) or vix > 25
+    is_caution    = regime == "CAUTION" or (18 <= vix <= 25)
+    is_stagflation= regime == "STAGFLATION" or (copper_chg < -2.0 and vix > 22)
+    is_recovery   = regime in ("RECOVERY", "TRANSITION") or (copper_chg > 2.0 and vix < 22)
+
+    if is_stagflation:
+        lines.append("⚠️ STAGFLASYON REJİMİ — Büyüme değil, enflasyon koruması öncelikli")
+        lines.append("Önerilen ağırlık: Enerji %25 | Altın %20 | Defansif %30 | Nakit %25\n")
+        for sector, info in STAGFLATION_UNIVERSE.items():
+            _format_sector(lines, sector, info, max_stocks=3)
+        lines.append("--- Destekleyici Defansif ---")
+        for sector in ["Sağlık", "Temel Tüketim"]:
+            _format_sector(lines, sector, DEFENSIVE_UNIVERSE.get(sector, {}), max_stocks=2)
+
+    elif is_risk_on:
+        lines.append("🚀 RISK-ON REJİMİ — Büyüme ve momentum hisseleri öne çıkar")
+        lines.append("Önerilen ağırlık: Büyüme Hisse %50 | Döngüsel %20 | Kripto %10 | Nakit %20\n")
+        for sector in ["Yapay Zeka / Yarı İletken", "Yazılım / Bulut",
+                       "Döngüsel / Sanayi", "Finans / Bankacılık"]:
+            _format_sector(lines, sector, GROWTH_UNIVERSE.get(sector, {}), max_stocks=3)
+
+    elif is_recovery:
+        lines.append("🔄 TOPARLANMA REJİMİ — Döngüsel hisseler liderliğe geçiyor")
+        lines.append("Önerilen ağırlık: Döngüsel %30 | Teknoloji %25 | Defansif %20 | Nakit %25\n")
+        for sector, info in RECOVERY_UNIVERSE.items():
+            _format_sector(lines, sector, info, max_stocks=3)
+        lines.append("--- Büyüme Kataloğundan ---")
+        for sector in ["Yapay Zeka / Yarı İletken", "Finans / Bankacılık"]:
+            _format_sector(lines, sector, GROWTH_UNIVERSE.get(sector, {}), max_stocks=2)
+
+    elif is_risk_off:
+        lines.append("🛡️ RISK-OFF REJİMİ — Sermaye koruması, defansif pozisyonlanma")
+        lines.append("Önerilen ağırlık: Nakit/Tahvil %30 | Defansif %40 | Altın %15 | Enerji %15\n")
+        for sector in ["Kısa Vadeli Tahvil / Para Piyasası", "Sağlık",
+                       "Utilities", "Temel Tüketim", "Altın / Değer Deposu"]:
+            _format_sector(lines, sector, DEFENSIVE_UNIVERSE.get(sector, {}), max_stocks=3)
+
+    else:  # CAUTION / geçiş
+        lines.append("⚡ TEMKİN REJİMİ — Karışık sinyaller, her iki yön hazırlığı")
+        lines.append("Önerilen ağırlık: Defansif %35 | Kaliteli Büyüme %25 | Nakit %25 | Altın %15\n")
+        lines.append("--- Defansif Taraf ---")
+        for sector in ["Kısa Vadeli Tahvil / Para Piyasası", "Sağlık", "Altın / Değer Deposu"]:
+            _format_sector(lines, sector, DEFENSIVE_UNIVERSE.get(sector, {}), max_stocks=2)
+        lines.append("--- Kaliteli Büyüme (Seçici) ---")
+        for sector in ["Yazılım / Bulut", "Yapay Zeka / Yarı İletken"]:
+            _format_sector(lines, sector, GROWTH_UNIVERSE.get(sector, {}), max_stocks=2)
+
+    lines.append("=" * 50)
+    return "\n".join(lines)
+
+
+def _format_sector(lines: list, sector: str, info: dict, max_stocks: int = 3):
+    """Sektör bilgisini Claude prompt'u için formatla."""
+    if not info:
+        return
+    etfler   = info.get("ETF", [])
+    hisseler = info.get("Büyük Sermayeli", [])
+    dikkat   = info.get("Dikkat", "") or info.get("Not", "")
+
+    lines.append(f"[{sector}]")
+    if etfler:
+        lines.append(f"  ETF alternatifi: {', '.join(etfler)}")
+    for ticker, desc in hisseler[:max_stocks]:
+        lines.append(f"  • {ticker}: {desc}")
+    if dikkat:
+        lines.append(f"  ⚠ {dikkat}")
     lines.append("")
 
-    # Rejime göre öncelik sırası
-    if regime in ("RISK_OFF", "CAUTION"):
-        priority = ["Kısa Vadeli Tahvil / Para Piyasası", "Sağlık", "Utilities",
-                    "Temel Tüketim", "Altın / Değer Deposu", "Enerji"]
-    elif regime == "STAGFLATION":
-        priority = ["Enerji", "Altın / Değer Deposu", "Sağlık",
-                    "Temel Tüketim", "Kısa Vadeli Tahvil / Para Piyasası", "Utilities"]
-    else:
-        priority = list(DEFENSIVE_UNIVERSE.keys())
 
-    for sector in priority:
-        info = DEFENSIVE_UNIVERSE.get(sector, {})
-        hisseler = info.get("Büyük Sermayeli", [])
-        etfler   = info.get("ETF", [])
-        dikkat   = info.get("Dikkat", "") or info.get("Not", "")
-
-        lines.append(f"[{sector}]")
-        if etfler:
-            lines.append(f"  ETF: {', '.join(etfler)}")
-        for ticker, desc in hisseler[:3]:  # En fazla 3 hisse göster
-            lines.append(f"  • {ticker}: {desc}")
-        if dikkat:
-            lines.append(f"  ⚠ {dikkat}")
-        lines.append("")
-
-    lines.append("=" * 45)
-    return "\n".join(lines)
+# Geriye uyumluluk için eski fonksiyon adını koru
+def get_defensive_context_for_claude(regime: str) -> str:
+    """Eski API — get_regime_stock_context'e yönlendir."""
+    return get_regime_stock_context(regime)
