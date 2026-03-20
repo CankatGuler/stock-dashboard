@@ -389,160 +389,216 @@ def collect_all_strategy_data(
     positions: list,
     watchlist_tickers: list = None,
     cash: float = 0,
-    existing_scores: dict = None,   # {ticker: score} — hafızadan
-    existing_targets: dict = None,  # {ticker: {mean, upside}} — hedeflerden
-    macro_data: dict = None,        # Zaten çekilmişse tekrar çekme
+    existing_scores: dict = None,
+    existing_targets: dict = None,
+    macro_data: dict = None,
 ) -> dict:
     """
-    Strateji analizine girecek TÜM veriyi tek seferde topla.
-    Bu fonksiyonun çıktısı Claude'a gidecek.
-
-    Döndürür: Tam veri paketi dict
+    Strateji analizine girecek TÜM veriyi topla.
+    - Ağır katmanlar (2-6) ThreadPoolExecutor ile PARALEL çalışır → ~2.5 dk yerine ~45 sn
+    - Her katmanın başarı/başarısızlık durumu data["veri_kalitesi"] ile raporlanır
+    - Direktör boş veri geldiğinde bunu artık görüyor
     """
-    logger.info("Strateji verisi toplanıyor...")
-    tickers = [p.get("ticker", "") for p in positions if p.get("ticker")]
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    import time as _time
+
+    logger.info("Strateji verisi toplanıyor (paralel mod)...")
+    t0 = _time.time()
+
+    tickers     = [p.get("ticker", "") for p in positions if p.get("ticker")]
     all_tickers = list(dict.fromkeys(tickers + (watchlist_tickers or [])))
+    tefas_codes = [p["ticker"] for p in positions
+                   if p.get("asset_class") == "tefas" and float(p.get("shares", 0)) > 0]
+    crypto_pos  = [p for p in positions if p.get("asset_class") == "crypto"]
 
     data = {
-        "timestamp":    datetime.now(timezone.utc).isoformat(),
-        "user_profile": get_user_profile(),
-        "portfolio":    {},
-        "macro":        {},
-        "sentiment":    {},
-        "fed":          {},
-        "market":       {},
+        "timestamp":         datetime.now(timezone.utc).isoformat(),
+        "user_profile":      get_user_profile(),
+        "portfolio":         {},
+        "macro":             {},
+        "sentiment":         {},
+        "fed":               {},
+        "market":            {},
+        "economic":          {},
+        "sp500_valuation":   {},
+        "sector_rotation":   {},
+        "economic_context":  "",
+        "crypto":            {},
+        "commodity":         {},
+        "turkey":            {},
+        "correlations":      {},
+        "calendar":          [],
         "earnings_calendar": [],
         "short_interest":    {},
+        "put_call":          {},
         "hisse_skorlari":    existing_scores or {},
         "analist_hedefleri": existing_targets or {},
+        "veri_kalitesi":     {},   # ← YENİ: her katmanın sağlık durumu
     }
 
-    # Portföy özeti
+    # ── Portföy özeti (senkron — hızlı, veri gerektirmiyor) ──────────────
     data["portfolio"] = {
-        "positions":   positions,
-        "cash":        round(cash, 2),
-        "analytics":   fetch_portfolio_analytics(positions),
+        "positions": positions,
+        "cash":      round(cash, 2),
+        "analytics": fetch_portfolio_analytics(positions),
     }
+    data["veri_kalitesi"]["portfoy_base"] = "ok"
 
-    # Makro — zaten varsa tekrar çekme (performans)
+    # ── Makro Katman 1 (senkron — zaten cache'li olabilir) ───────────────
     if macro_data:
         data["macro"] = macro_data
+        data["veri_kalitesi"]["makro"] = "cache"
     else:
         try:
             from macro_dashboard import fetch_macro_data, compute_market_regime
-            _macro = fetch_macro_data()
+            _macro  = fetch_macro_data()
             _regime = compute_market_regime(_macro)
             data["macro"] = {
-                "indicators": {k: {"value": v.value, "signal": v.signal, "note": v.note}
+                "indicators": {k: {"value": v.value, "change_pct": v.change_pct,
+                                   "signal": v.signal, "note": v.note}
                                for k, v in _macro.items()},
-                "regime":     _regime,
+                "regime": _regime,
             }
+            data["veri_kalitesi"]["makro"] = f"ok ({len(_macro)} gösterge)"
         except Exception as e:
-            logger.warning("Macro data failed: %s", e)
+            logger.warning("Macro failed: %s", e)
+            data["veri_kalitesi"]["makro"] = f"HATA: {str(e)[:60]}"
 
-    # Fear & Greed
+    # ── Hızlı senkron veriler ─────────────────────────────────────────────
     data["sentiment"] = fetch_fear_greed()
+    data["fed"]       = fetch_fed_calendar()
+    data["market"]    = fetch_economic_indicators()
+    data["put_call"]  = fetch_put_call_ratio()
 
-    # Fed takvimi
-    data["fed"] = fetch_fed_calendar()
+    # ── PARALEL katman çekişleri ──────────────────────────────────────────
+    # Her katman bağımsız — birbirini beklemek zorunda değil
+    def fetch_layer2():
+        try:
+            from economic_data import fetch_all_economic_data, build_economic_context
+            r = fetch_all_economic_data()
+            return ("layer2", {
+                "economic":         r.get("macro_econ", {}),
+                "sp500_valuation":  r.get("valuation", {}),
+                "sector_rotation":  r.get("sectors", {}),
+                "economic_context": build_economic_context(r),
+            })
+        except Exception as e:
+            return ("layer2_err", str(e))
 
-    # Piyasa göstergeleri (breadth, risk appetite)
-    data["market"] = fetch_economic_indicators()
+    def fetch_layer3():
+        try:
+            from crypto_fetcher import fetch_all_crypto_data
+            r = fetch_all_crypto_data(crypto_positions=tuple(
+                {k: v for k, v in p.items() if isinstance(v, (str, int, float, bool))}
+                for p in crypto_pos
+            ) if crypto_pos else None)
+            return ("layer3", r)
+        except Exception as e:
+            return ("layer3_err", str(e))
 
-    # Put/Call proxy
-    data["put_call"] = fetch_put_call_ratio()
+    def fetch_layer4():
+        try:
+            from commodity_fetcher import fetch_all_commodity_data
+            return ("layer4", fetch_all_commodity_data())
+        except Exception as e:
+            return ("layer4_err", str(e))
 
-    # Earnings takvimi
-    data["earnings_calendar"] = fetch_earnings_calendar(tickers)
+    def fetch_layer5():
+        try:
+            from turkey_fetcher import fetch_all_turkey_data
+            return ("layer5", fetch_all_turkey_data(
+                tefas_codes=tuple(tefas_codes) if tefas_codes else None
+            ))
+        except Exception as e:
+            return ("layer5_err", str(e))
 
-    # Short interest (sadece portföy hisseleri)
-    data["short_interest"] = fetch_short_interest(tickers)
+    def fetch_correlations():
+        try:
+            from correlation_engine import fetch_all_correlations
+            return ("corr", fetch_all_correlations(portfolio_tickers=tickers))
+        except Exception as e:
+            return ("corr_err", str(e))
 
-    # Katman 2: Ekonomik veri ve sektör rotasyonu
-    try:
-        from economic_data import fetch_all_economic_data, build_economic_context
-        _layer2 = fetch_all_economic_data()
-        data["economic"]        = _layer2.get("macro_econ", {})
-        data["sp500_valuation"] = _layer2.get("valuation", {})
-        data["sector_rotation"] = _layer2.get("sectors", {})
-        data["economic_context"]= build_economic_context(_layer2)
-        logger.info("Katman 2 verisi eklendi: %d gösterge", len(data["economic"]))
-    except Exception as e:
-        logger.warning("Layer 2 data failed: %s", e)
-        data["economic"]        = {}
-        data["sp500_valuation"] = {}
-        data["sector_rotation"] = {}
+    def fetch_calendar():
+        try:
+            from financial_calendar import get_upcoming_events
+            return ("cal", get_upcoming_events(tickers=tickers, days_ahead=30, min_stars=2))
+        except Exception as e:
+            return ("cal_err", str(e))
 
-    # Cross-asset korelasyon analizi
-    try:
-        from correlation_engine import fetch_all_correlations
-        _corr = fetch_all_correlations(portfolio_tickers=tickers)
-        data["correlations"] = _corr
-        logger.info("Korelasyon analizi eklendi")
-    except Exception as e:
-        logger.warning("Correlation analysis failed: %s", e)
-        data["correlations"] = {}
+    def fetch_earnings():
+        try:
+            return ("earn", fetch_earnings_calendar(tickers))
+        except Exception as e:
+            return ("earn_err", str(e))
 
-    # Kripto verileri (Katman 3)
-    try:
-        from crypto_fetcher import fetch_all_crypto_data
-        _crypto_positions = [p for p in positions if p.get("asset_class") == "crypto"]
-        data["crypto"] = fetch_all_crypto_data(crypto_positions=_crypto_positions)
-        logger.info("Kripto verisi eklendi")
-    except Exception as e:
-        logger.warning("Crypto data failed: %s", e)
-        data["crypto"] = {}
+    def fetch_short():
+        try:
+            return ("short", fetch_short_interest(tickers))
+        except Exception as e:
+            return ("short_err", str(e))
 
-    # Emtia verileri (Katman 4)
-    try:
-        from commodity_fetcher import fetch_all_commodity_data
-        data["commodity"] = fetch_all_commodity_data()
-        logger.info("Emtia verisi eklendi")
-    except Exception as e:
-        logger.warning("Commodity data failed: %s", e)
-        data["commodity"] = {}
+    def fetch_portfolio_integrated():
+        try:
+            from portfolio_integrator import build_integrated_portfolio
+            up = data.get("user_profile", {})
+            return ("port_int", build_integrated_portfolio(
+                positions=positions,
+                cash_usd=cash,
+                year_target_pct=float(up.get("year_target_pct", 40.0)),
+                year_start_value=float(up.get("year_start_value", 0.0)),
+            ))
+        except Exception as e:
+            return ("port_int_err", str(e))
 
-    # Türkiye verileri (Katman 5)
-    try:
-        from turkey_fetcher import fetch_all_turkey_data
-        _tefas_codes = [p["ticker"] for p in positions
-                        if p.get("asset_class") == "tefas" and float(p.get("shares",0)) > 0]
-        data["turkey"] = fetch_all_turkey_data(tefas_codes=_tefas_codes)
-        logger.info("Türkiye verisi eklendi")
-    except Exception as e:
-        logger.warning("Turkey data failed: %s", e)
-        data["turkey"] = {}
+    # Tüm görevleri paralel çalıştır
+    tasks = [
+        fetch_layer2, fetch_layer3, fetch_layer4, fetch_layer5,
+        fetch_correlations, fetch_calendar, fetch_earnings,
+        fetch_short, fetch_portfolio_integrated,
+    ]
 
-    # Bütünleşik portföy (Katman 6)
-    try:
-        from portfolio_integrator import build_integrated_portfolio
-        _user_prof    = data.get("user_profile", {})
-        _year_target  = float(_user_prof.get("year_target_pct", 40.0))
-        _year_start   = float(_user_prof.get("year_start_value", 0.0))
-        data["portfolio"] = build_integrated_portfolio(
-            positions        = positions,
-            cash_usd         = cash,
-            year_target_pct  = _year_target,
-            year_start_value = _year_start,
-        )
-        logger.info("Bütünleşik portföy hesaplandı")
-    except Exception as e:
-        logger.warning("Portfolio integrator failed: %s", e)
-        # Fallback — eski yöntem
-        data["portfolio"] = {
-            "positions": positions,
-            "cash":      round(cash, 2),
-            "analytics": fetch_portfolio_analytics(positions),
-        }
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = {executor.submit(fn): fn.__name__ for fn in tasks}
+        for future in as_completed(futures):
+            try:
+                result = future.result(timeout=45)
+                key, val = result
+                if key == "layer2":
+                    data.update(val)
+                    data["veri_kalitesi"]["ekonomik_k2"] = f"ok ({len(val.get('economic',{}))} gösterge)"
+                elif key == "layer3":
+                    data["crypto"] = val
+                    data["veri_kalitesi"]["kripto_k3"] = f"ok ({len(val)} metrik)"
+                elif key == "layer4":
+                    data["commodity"] = val
+                    data["veri_kalitesi"]["emtia_k4"] = f"ok ({len(val)} metrik)"
+                elif key == "layer5":
+                    data["turkey"] = val
+                    data["veri_kalitesi"]["turkiye_k5"] = f"ok ({len(val)} metrik)"
+                elif key == "corr":
+                    data["correlations"] = val
+                    data["veri_kalitesi"]["korelasyon"] = "ok"
+                elif key == "cal":
+                    data["calendar"] = val
+                    data["veri_kalitesi"]["takvim"] = f"ok ({len(val)} olay)"
+                elif key == "earn":
+                    data["earnings_calendar"] = val
+                elif key == "short":
+                    data["short_interest"] = val
+                elif key == "port_int":
+                    data["portfolio"] = val
+                    data["veri_kalitesi"]["portfoy_entegre"] = "ok"
+                elif key.endswith("_err"):
+                    layer = key.replace("_err", "")
+                    data["veri_kalitesi"][layer] = f"⚠️ HATA: {str(val)[:80]}"
+                    logger.warning("Paralel katman hatası [%s]: %s", layer, val)
+            except Exception as e:
+                logger.warning("Future exception [%s]: %s", futures[future], e)
 
-    # Finansal takvim (direktör için yaklaşan olaylar)
-    try:
-        from financial_calendar import get_upcoming_events
-        data["calendar"] = get_upcoming_events(tickers=tickers, days_ahead=30, min_stars=2)
-    except Exception as e:
-        data["calendar"] = []
-
-    logger.info("Strateji verisi tamamlandı.")
+    elapsed = _time.time() - t0
+    data["veri_kalitesi"]["_sure_sn"] = round(elapsed, 1)
+    logger.info("Strateji verisi tamamlandı — %.1f sn (paralel)", elapsed)
     return data
 
 

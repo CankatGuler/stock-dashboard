@@ -5183,13 +5183,28 @@ with tab_strategy:
 
             _two_phase_progress(1, 8, "Tüm veriler toplanıyor...")
 
-            # Tüm veri topla (kripto, emtia, Türkiye dahil)
+            # Tüm veri topla — paralel mod, veri kalitesi raporlu
             _strat_data = collect_all_strategy_data(
                 positions          = _port_enriched,
                 watchlist_tickers  = _watchlist_tickers,
                 cash               = _cash_now,
             )
             _strat_data["user_profile"] = _user_profile_strat
+
+            # Veri kalitesi kontrolü — hangi katman başarılı, hangisi hatalı
+            _vk = _strat_data.get("veri_kalitesi", {})
+            _sure = _vk.get("_sure_sn", "?")
+            _hatali = {k: v for k, v in _vk.items()
+                       if k != "_sure_sn" and "HATA" in str(v)}
+            _prog_text.markdown(
+                f'<div style="font-size:0.75rem;color:#4fc3f7;">✅ Veri toplama tamamlandı '
+                f'({_sure}s) — {len(_vk)-1} katman | '
+                + (f'<span style="color:#ffb300;">⚠️ {len(_hatali)} katman hatalı: '
+                   + ", ".join(_hatali.keys()) + '</span>' if _hatali else
+                   '<span style="color:#00c48c;">Tüm katmanlar sağlıklı</span>')
+                + '</div>',
+                unsafe_allow_html=True,
+            )
 
             _two_phase_progress(2, 8, "Sinyal motoru çalışıyor...")
 
