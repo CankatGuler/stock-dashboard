@@ -3645,12 +3645,204 @@ with tab_watchlist:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# ─── Makro Analiz HTML Raporu ve Arşiv ───────────────────────────────────────
+
+def _generate_macro_html(analysis_text: str, macro_data: dict,
+                          regime: dict, generated_at: str) -> str:
+    """Makro analizi güzel bir HTML raporuna dönüştür."""
+    import re
+    # Markdown başlıklarını HTML'e çevir
+    html_body = analysis_text
+    html_body = re.sub(r'^## (.+)$', r'<h2></h2>', html_body, flags=re.MULTILINE)
+    html_body = re.sub(r'^### (.+)$', r'<h3></h3>', html_body, flags=re.MULTILINE)
+    html_body = re.sub(r'\*\*(.+?)\*\*', r'<strong></strong>', html_body)
+    html_body = re.sub(r'\*(.+?)\*', r'<em></em>', html_body)
+    html_body = re.sub(r'^- (.+)$', r'<li></li>', html_body, flags=re.MULTILINE)
+    html_body = re.sub(r'(<li>[^<]*</li>)+', lambda m: '<ul>'+m.group(0)+'</ul>', html_body)
+    html_body = html_body.replace('\n', '<br>')
+
+    regime_label = regime.get("label", "")
+    regime_color = regime.get("color", "#5a6a7a")
+
+    # Makro gösterge tablosu
+    table_rows = ""
+    for key, ind in macro_data.items():
+        try:
+            sig_color = {"red": "#e74c3c", "amber": "#ffb300",
+                         "green": "#00c48c", "neutral": "#8a9ab0"}.get(
+                getattr(ind, "signal", "neutral"), "#8a9ab0")
+            table_rows += (
+                f'<tr><td style="color:#b0bec5;">{getattr(ind,"label",key)}</td>'
+                f'<td style="font-weight:600;">{getattr(ind,"value",0):.2f} {getattr(ind,"unit","")}</td>'
+                f'<td style="color:{sig_color};">{getattr(ind,"change_pct",0):+.2f}%</td>'
+                f'<td style="font-size:0.8rem;color:#8a9ab0;">{getattr(ind,"note","")[:60]}</td></tr>'
+            )
+        except Exception:
+            pass
+
+    return f"""<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Makro Analiz — {generated_at}</title>
+<style>
+  * {{ box-sizing:border-box; margin:0; padding:0; }}
+  body {{ font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+          background:#0d1117; color:#e8edf3; padding:2rem; line-height:1.7; }}
+  .container {{ max-width:860px; margin:0 auto; }}
+  h1 {{ font-size:1.4rem; color:#4fc3f7; margin-bottom:0.2rem; }}
+  h2 {{ font-size:1.05rem; color:#4fc3f7; margin:1.4rem 0 0.5rem;
+        border-left:3px solid #4fc3f7; padding-left:0.6rem; }}
+  h3 {{ font-size:0.95rem; color:#b0bec5; margin:0.8rem 0 0.3rem; }}
+  p, li {{ font-size:0.88rem; color:#c8d4e0; margin-bottom:0.4rem; }}
+  ul {{ margin-left:1.2rem; margin-bottom:0.6rem; }}
+  strong {{ color:#e8edf3; }}
+  .regime-badge {{ display:inline-block; padding:4px 14px; border-radius:14px;
+                   font-weight:700; font-size:0.8rem;
+                   background:{regime_color}22; color:{regime_color};
+                   border:1px solid {regime_color}; }}
+  .meta {{ color:#5a6a7a; font-size:0.78rem; margin-bottom:1.5rem; }}
+  table {{ width:100%; border-collapse:collapse; font-size:0.82rem; margin-bottom:1.2rem; }}
+  th {{ background:#1a2332; color:#8a9ab0; text-align:left; padding:6px 10px;
+        font-size:0.72rem; text-transform:uppercase; letter-spacing:0.05em; }}
+  td {{ padding:6px 10px; border-bottom:1px solid #1e2833; }}
+  .section {{ background:#111927; border-radius:8px; padding:1.2rem 1.5rem;
+              margin-bottom:1.2rem; border:0.5px solid #1e2833; }}
+  @media print {{ body {{ background:#fff; color:#000; }}
+                  .section {{ border:1px solid #ccc; }} }}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🌍 Makro Analiz Raporu</h1>
+  <div class="meta">
+    Üretildi: {generated_at} &nbsp;|&nbsp;
+    Rejim: <span class="regime-badge">{regime_label}</span>
+  </div>
+
+  <div class="section">
+    <h2>📊 Makro Göstergeler</h2>
+    <table>
+      <thead><tr><th>Gösterge</th><th>Değer</th><th>Değişim</th><th>Not</th></tr></thead>
+      <tbody>{table_rows}</tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    {html_body}
+  </div>
+
+  <div style="text-align:center;color:#2a3a4a;font-size:0.72rem;margin-top:2rem;">
+    AI Makro Analist — {generated_at}
+  </div>
+</div>
+</body>
+</html>"""
+
+
+def _save_macro_analysis_to_archive(analysis_text: str, macro_data: dict,
+                                     regime: dict, generated_at: str) -> bool:
+    """Makro analizini JSON arşivine ekle (GitHub veya lokal)."""
+    import json, base64, requests as _req
+    ARCHIVE_FILE = "macro_analysis_archive.json"
+
+    entry = {
+        "generated_at":  generated_at,
+        "regime":        regime.get("regime", ""),
+        "regime_label":  regime.get("label", ""),
+        "analysis_text": analysis_text,
+        "key_metrics": {
+            k: {"value": getattr(v,"value",0), "change_pct": getattr(v,"change_pct",0)}
+            for k, v in (macro_data or {}).items()
+        },
+    }
+
+    # Lokal yaz
+    try:
+        try:
+            with open(ARCHIVE_FILE) as f:
+                archive = json.load(f)
+        except Exception:
+            archive = []
+        archive.append(entry)
+        archive = archive[-30:]  # Son 30 analiz
+        with open(ARCHIVE_FILE, "w") as f:
+            json.dump(archive, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+    # GitHub'a yaz (varsa)
+    try:
+        from portfolio_manager import _get_github_config
+        token, repo = _get_github_config()
+        if token and repo:
+            url  = f"https://api.github.com/repos/{repo}/contents/{ARCHIVE_FILE}"
+            hdrs = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
+            try:
+                existing = _req.get(url, headers=hdrs, timeout=8).json()
+                sha = existing.get("sha", "")
+                old_content = json.loads(base64.b64decode(existing.get("content","e30=")).decode())
+                if isinstance(old_content, list):
+                    old_content.append(entry)
+                    old_content = old_content[-30:]
+                else:
+                    old_content = [entry]
+            except Exception:
+                sha = ""
+                old_content = [entry]
+
+            payload = {
+                "message": f"Macro analysis: {generated_at}",
+                "content": base64.b64encode(
+                    json.dumps(old_content, ensure_ascii=False, indent=2).encode()
+                ).decode(),
+            }
+            if sha:
+                payload["sha"] = sha
+            _req.put(url, headers=hdrs, json=payload, timeout=15)
+            return True
+    except Exception:
+        pass
+    return True  # Lokal kayıt başarılıysa True
+
+
+def _load_macro_analysis_archive() -> list:
+    """Makro analiz arşivini yükle."""
+    import json, base64, requests as _req
+    ARCHIVE_FILE = "macro_analysis_archive.json"
+
+    # GitHub'dan dene
+    try:
+        from portfolio_manager import _get_github_config
+        token, repo = _get_github_config()
+        if token and repo:
+            url  = f"https://api.github.com/repos/{repo}/contents/{ARCHIVE_FILE}"
+            hdrs = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
+            resp = _req.get(url, headers=hdrs, timeout=8)
+            if resp.status_code == 200:
+                data = json.loads(base64.b64decode(resp.json()["content"]).decode())
+                if isinstance(data, list):
+                    return data
+    except Exception:
+        pass
+
+    # Lokal fallback
+    try:
+        with open(ARCHIVE_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+
+
 # TAB 7 — MAKRO GÖSTERGE PANELİ
 # ─────────────────────────────────────────────────────────────────────────────
 
 with tab_macro:
     from macro_dashboard import (
-        fetch_macro_data, compute_market_regime, build_claude_macro_context
+        fetch_macro_data, compute_market_regime, build_claude_macro_context,
+        get_defensive_context_for_claude,
     )
 
     st.markdown(
@@ -3791,39 +3983,134 @@ with tab_macro:
             unsafe_allow_html=True,
         )
 
-        if st.button("🧠 Claude ile Makroyu Yorumla", key="btn_macro_claude"):
-            _macro_ctx = build_claude_macro_context(_macro_data, _macro_regime)
-            _api_key   = os.getenv("ANTHROPIC_API_KEY", "")
+        _mc1, _mc2 = st.columns([3, 1])
+        with _mc1:
+            _run_macro_claude = st.button(
+                "🧠 Claude ile Makroyu Yorumla + Hisse Öner",
+                key="btn_macro_claude", use_container_width=True, type="primary"
+            )
+        with _mc2:
+            if st.session_state.get("macro_claude_analysis"):
+                if st.button("🔄 Sil / Yenile", key="btn_macro_clear", use_container_width=True):
+                    st.session_state.pop("macro_claude_analysis", None)
+                    st.rerun()
+
+        if _run_macro_claude:
+            _macro_ctx    = build_claude_macro_context(_macro_data, _macro_regime)
+            _regime_code  = _macro_regime.get("regime", "CAUTION")
+            _def_context  = get_defensive_context_for_claude(_regime_code)
+            _api_key      = os.getenv("ANTHROPIC_API_KEY", "")
             if not _api_key:
                 st.error("ANTHROPIC_API_KEY eksik.")
             else:
-                with st.spinner("Claude makro ortamı analiz ediyor..."):
+                with st.spinner("Claude makro ortamı analiz ediyor ve hisse önerisi hazırlıyor..."):
                     import anthropic as _ant
                     _client = _ant.Anthropic(api_key=_api_key)
                     _prompt = f"""{_macro_ctx}
+{_def_context}
 
-Yukarıdaki makro verilere bakarak şunları değerlendir:
+Sen deneyimli bir portföy yöneticisisin. Yukarıdaki makro verileri ve savunmacı hisse evrenini
+kullanarak aşağıdaki 6 soruyu yanıtla. Duygulardan arınık, matematiksel ve veri odaklı ol.
 
-1. **Genel Piyasa Ortamı**: Şu an hangi aşamadayız? (genişleme, yavaşlama, daralma, toparlanma)
-2. **En Kritik Risk**: Şu an portföy için en tehlikeli gösterge hangisi ve neden?
-3. **En Önemli Fırsat**: Mevcut ortamda hangi sektör veya varlık tipi öne çıkıyor?
-4. **Portföy Tavsiyesi**: Bu makro ortamda ideal portföy dağılımı nasıl olmalı? (savunmacı/saldırgan/dengeli)
-5. **Önümüzdeki 4-8 Hafta**: Dikkat edilmesi gereken kritik gelişmeler neler?
+## 1. 🔄 GENEL PİYASA ORTAMI
+Şu an hangi döngü aşamasındayız? Temel göstergeleri birbirine bağla.
+Sadece tekil gösterge yorumu değil — bakır+petrol+VIX+yield curve kombinasyonu ne söylüyor?
 
-Türkçe, net ve somut yaz. Genel laflar değil, bu spesifik rakamlara dayalı yorum yap."""
+## 2. ⚠️ EN KRİTİK RİSK
+Portföy için şu an en tehlikeli TEK gösterge nedir? Neden?
+Matematiksel sonucu yaz: "Bu tetikleyici devreye girerse S&P %X düşer çünkü..."
+
+## 3. ✅ EN ÖNEMLİ FIRSAT
+Mevcut ortamda hangi sektör öne çıkıyor? Neden?
+
+## 4. 💼 SOMUT HİSSE ÖNERİLERİ (Bu bölüm zorunlu)
+Her önerilen sektör için referans listesinden 2-3 somut hisse seç.
+Format:
+**[Sektör Adı]** — [Neden bu sektör?]
+- TICKER: [Tek cümle, bu hisseyi seçme gerekçesi, şu anki makro ile bağlantısı]
+
+Önerilen Dağılım:
+Nakit/Kısa Tahvil: %X | Defansif Hisse: %X | Altın: %X | Enerji: %X | Büyüme: %X
+
+## 5. 🚫 KAÇINILACAKLAR
+Hangi sektör/varlık şu an en riskli? Somut neden.
+
+## 6. 📅 ÖNÜMÜZDEKİ 4-8 HAFTA
+İzlenecek 3 kritik gelişme. Tarih/seviye bazlı eşikler ver.
+Örn: "USD/JPY 155 altına kırarsa..." veya "VIX 30 geçerse..."
+
+Türkçe yaz. Genel laflar değil, bu spesifik rakamlara dayalı somut yorum."""
 
                     try:
                         _resp = _client.messages.create(
                             model="claude-opus-4-5",
-                            max_tokens=1500,
+                            max_tokens=2500,
                             messages=[{"role": "user", "content": _prompt}]
                         )
-                        st.session_state["macro_claude_analysis"] = _resp.content[0].text
+                        _analysis_text = _resp.content[0].text
+                        st.session_state["macro_claude_analysis"] = _analysis_text
+                        st.session_state["macro_analysis_ts"]     = __import__("datetime").datetime.now().strftime("%Y-%m-%d %H:%M")
                     except Exception as _e:
                         st.error(f"Claude bağlantı hatası: {_e}")
 
         if st.session_state.get("macro_claude_analysis"):
-            st.markdown(st.session_state["macro_claude_analysis"])
+            _analysis_text = st.session_state["macro_claude_analysis"]
+            _analysis_ts   = st.session_state.get("macro_analysis_ts", "")
+
+            # Analiz göster
+            st.markdown(f'<div style="font-size:0.7rem;color:#5a6a7a;margin-bottom:0.5rem;">🕐 {_analysis_ts}</div>',
+                       unsafe_allow_html=True)
+            st.markdown(_analysis_text)
+
+            # HTML raporu oluştur ve indir
+            st.markdown("---")
+            _report_html = _generate_macro_html(
+                analysis_text = _analysis_text,
+                macro_data    = _macro_data,
+                regime        = _macro_regime,
+                generated_at  = _analysis_ts,
+            )
+            _dl_col1, _dl_col2 = st.columns([1, 3])
+            with _dl_col1:
+                from datetime import datetime as _dt_macro
+                st.download_button(
+                    label="📄 Raporu İndir (HTML)",
+                    data=_report_html.encode("utf-8"),
+                    file_name=f"makro_analiz_{_dt_macro.now().strftime('%Y-%m-%d')}.html",
+                    mime="text/html",
+                    key="dl_macro_html",
+                    use_container_width=True,
+                )
+            with _dl_col2:
+                if st.button("💾 Arşive Kaydet", key="btn_macro_archive", use_container_width=True):
+                    _saved = _save_macro_analysis_to_archive(
+                        analysis_text = _analysis_text,
+                        macro_data    = _macro_data,
+                        regime        = _macro_regime,
+                        generated_at  = _analysis_ts,
+                    )
+                    if _saved:
+                        st.success("✅ Makro analiz arşive kaydedildi!")
+                    else:
+                        st.warning("Lokal kaydedildi, GitHub yazma hatası.")
+
+            # Arşiv görüntüle
+            with st.expander("📚 Makro Analiz Arşivi", expanded=False):
+                _archive = _load_macro_analysis_archive()
+                if _archive:
+                    for _entry in _archive[-5:][::-1]:  # Son 5, en yeni üstte
+                        st.markdown(
+                            f'<div style="background:#111927;border-radius:6px;padding:0.6rem 1rem;'
+                            f'margin-bottom:0.5rem;border-left:3px solid #4fc3f7;">'
+                            f'<b style="color:#4fc3f7;">{_entry.get("generated_at","")}</b> — '
+                            f'<span style="color:#8a9ab0;">{_entry.get("regime_label","")}</span>'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
+                        with st.expander(f"  Analizi Görüntüle — {_entry.get('generated_at','')}"):
+                            st.markdown(_entry.get("analysis_text",""))
+                else:
+                    st.caption("Henüz arşivlenmiş analiz yok.")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

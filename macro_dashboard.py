@@ -528,3 +528,109 @@ def fetch_extended_macro() -> dict:
         logger.debug("MOVE proxy failed: %s", e)
 
     return results
+
+
+# ─── Sektör Bazlı Savunmacı Hisse Evreni ─────────────────────────────────────
+# Claude bu listeden seçerek somut öneri yapar.
+# Her varlık sınıfı için temsili ve likit isimler tutuldu.
+
+DEFENSIVE_UNIVERSE = {
+    "Sağlık": {
+        "ETF": ["XLV", "VHT"],
+        "Büyük Sermayeli": [
+            ("LLY",  "Eli Lilly — GLP-1 / obezite liderliği, güçlü boru hattı"),
+            ("JNJ",  "Johnson & Johnson — çeşitlendirilmiş gelir, güçlü temettü"),
+            ("UNH",  "UnitedHealth — sağlık sigortası tekeli, nakit akışı sağlam"),
+            ("ABBV", "AbbVie — Humira sonrası geçiş tamamlanıyor, yüksek temettü"),
+            ("MRK",  "Merck — Keytruda büyüme motoru, savunmacı profil"),
+        ],
+        "Dikkat": "Politika riski (ilaç fiyat regülasyonu) değerlemeyi baskılayabilir.",
+    },
+    "Utilities": {
+        "ETF": ["XLU", "VPU"],
+        "Büyük Sermayeli": [
+            ("NEE",  "NextEra Energy — yenilenebilir enerji liderliği, düzenli temettü"),
+            ("SO",   "Southern Company — güney ABD, nükleer kapasite genişliyor"),
+            ("DUK",  "Duke Energy — çeşitlendirilmiş altyapı, istikrarlı nakit"),
+            ("AEP",  "American Electric Power — yüksek iletim ağı, temettü odaklı"),
+            ("ED",   "Consolidated Edison — NYC altyapısı, ultra defansif"),
+        ],
+        "Dikkat": "Yüksek faiz ortamında utilities hisseleri baskı altına girer — tahvil alternatifi gibi fiyatlanır.",
+    },
+    "Temel Tüketim": {
+        "ETF": ["XLP", "VDC"],
+        "Büyük Sermayeli": [
+            ("PG",   "Procter & Gamble — fiyat geçirme gücü yüksek, 60+ yıl temettü"),
+            ("KO",   "Coca-Cola — marka gücü, global dağıtım, Berkshire tercihi"),
+            ("WMT",  "Walmart — deflasyonist dönemde bile güçlü, e-ticaret büyüyor"),
+            ("COST", "Costco — üyelik modeli, döngüsel olmayan gelir"),
+            ("MO",   "Altria — yüksek temettü, düşük volatilite, tütün nakit akışı"),
+        ],
+        "Dikkat": "Stagflasyon senaryosunda tüketim baskılanabilir; marka gücü olanlar hayatta kalır.",
+    },
+    "Enerji": {
+        "ETF": ["XLE", "VDE", "OIH"],
+        "Büyük Sermayeli": [
+            ("XOM",  "ExxonMobil — entegre dev, düşük üretim maliyeti, güçlü temettü"),
+            ("CVX",  "Chevron — Permian Basin avantajı, borcunu erken ödüyor"),
+            ("COP",  "ConocoPhillips — saf E&P, petrol fiyatına en net maruz kalım"),
+            ("PSX",  "Phillips 66 — rafineri marjı yüksek, jet yakıtı talebi artıyor"),
+            ("SLB",  "SLB (Schlumberger) — servis şirketi, küresel sondaj döngüsüne bağlı"),
+        ],
+        "Dikkat": "Petrol $100+ senaryosunda en çok yararlanan ancak timing kritik; çok geç giriş OVX başa çıkıldıktan sonra gelir.",
+    },
+    "Altın / Değer Deposu": {
+        "ETF": ["GLD", "IAU", "GDXJ", "GDX"],
+        "Büyük Sermayeli": [
+            ("NEM",  "Newmont — dünya no.1 altın madencisi, hedge edilmiş maliyet yapısı"),
+            ("AEM",  "Agnico Eagle — Kanada bazlı, düşük jeopolitik risk, güçlü keşif"),
+            ("GOLD", "Barrick Gold — büyük ölçek, bakır çeşitlendirmesi var"),
+            ("WPM",  "Wheaton Precious Metals — royalty modeli, maliyet volatilitesi yok"),
+            ("FNV",  "Franco-Nevada — altın/petrol royalty, düşük operasyonel risk"),
+        ],
+        "Dikkat": "Altın madencileri altın fiyatına 1.5-2x kaldıraçlı; fiziki altın tercih edilirse GLD/IAU daha temiz.",
+    },
+    "Kısa Vadeli Tahvil / Para Piyasası": {
+        "ETF": ["SHV", "BIL", "SGOV", "TFLO"],
+        "Not": "Risksiz getiri ~%3.5-4.5 aralığında; VIX 25+ ortamında nakit alternatifi olarak en güvenli park yeri.",
+        "Büyük Sermayeli": [],
+    },
+}
+
+
+def get_defensive_context_for_claude(regime: str) -> str:
+    """
+    Mevcut rejime göre ön plana çıkan savunmacı sektörleri ve
+    somut hisse isimlerini Claude prompt'una eklemek için metin üret.
+    """
+    lines = ["\n=== SAVUNMACI HİSSE EVRENİ (REFERANS) ==="]
+    lines.append("Claude bu listeden somut öneri yapmalıdır. ETF veya bireysel hisse belirt.")
+    lines.append("")
+
+    # Rejime göre öncelik sırası
+    if regime in ("RISK_OFF", "CAUTION"):
+        priority = ["Kısa Vadeli Tahvil / Para Piyasası", "Sağlık", "Utilities",
+                    "Temel Tüketim", "Altın / Değer Deposu", "Enerji"]
+    elif regime == "STAGFLATION":
+        priority = ["Enerji", "Altın / Değer Deposu", "Sağlık",
+                    "Temel Tüketim", "Kısa Vadeli Tahvil / Para Piyasası", "Utilities"]
+    else:
+        priority = list(DEFENSIVE_UNIVERSE.keys())
+
+    for sector in priority:
+        info = DEFENSIVE_UNIVERSE.get(sector, {})
+        hisseler = info.get("Büyük Sermayeli", [])
+        etfler   = info.get("ETF", [])
+        dikkat   = info.get("Dikkat", "") or info.get("Not", "")
+
+        lines.append(f"[{sector}]")
+        if etfler:
+            lines.append(f"  ETF: {', '.join(etfler)}")
+        for ticker, desc in hisseler[:3]:  # En fazla 3 hisse göster
+            lines.append(f"  • {ticker}: {desc}")
+        if dikkat:
+            lines.append(f"  ⚠ {dikkat}")
+        lines.append("")
+
+    lines.append("=" * 45)
+    return "\n".join(lines)
