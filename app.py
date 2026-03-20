@@ -4018,6 +4018,7 @@ with tab_macro:
                     _client = _ant.Anthropic(api_key=_api_key)
                     _prompt = f"""{_macro_ctx}
 {_def_context}
+{_crisis_ctx}
 
 Sen deneyimli bir portföy yöneticisisin. Yukarıdaki makro verileri ve savunmacı hisse evrenini
 kullanarak aşağıdaki 6 soruyu yanıtla. Duygulardan arınık, matematiksel ve veri odaklı ol.

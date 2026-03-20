@@ -649,6 +649,33 @@ def _build_director_message(
             for e in critical:
                 lines.append(f"• {e['date']}: {e['event']} ({e.get('days_until',0)} gün)")
 
+    # ── Tarihsel Kriz Karşılaştırması ────────────────────────────────────
+    _crisis_ctx = all_data.get("crisis_context", "") if isinstance(all_data, dict) else ""
+    if _crisis_ctx:
+        lines.append(_crisis_ctx)
+    elif all_data and isinstance(all_data, dict):
+        _comps = all_data.get("crisis_comparisons", [])
+        if _comps:
+            lines.append("\n═══ TARİHSEL BENZERLİK ═══")
+            for c in _comps[:2]:
+                lines.append(
+                    f"• {c['label']}: %{c['similarity_pct']:.0f} benzerlik | "
+                    f"Risk: {c['risk_level']} | Tetikleyici: {c['trigger']}"
+                )
+
+    # ── Sistematik Risk Göstergeleri ─────────────────────────────────────
+    _sys = all_data.get("systemic_risk", {}) if isinstance(all_data, dict) else {}
+    _buffett = _sys.get("buffett", {})
+    if isinstance(_buffett, dict) and _buffett.get("ratio"):
+        lines.append(f"\nBuffett Göstergesi: %{_buffett['ratio']:.0f} "
+                     f"(ort. %100, 2000 zirvesi %148, 2007 %105) — {_buffett.get('note','')[:80]}")
+
+    _finstress = all_data.get("financial_stress", {}) if isinstance(all_data, dict) else {}
+    if _finstress:
+        kre = _finstress.get("KRE")
+        if kre and hasattr(kre, "note"):
+            lines.append(f"Bölgesel Banka Stres (KRE): {kre.note[:80]}")
+
     # ── Yıl Sonu Hedefi Bağlamı ─────────────────────────────────────────
     lines.append(f"\n═══ YIL SONU HEDEFİ ═══")
     lines.append(f"Hedef: %{year_target_pct:.0f} | Mevcut portföy: ${pa.get('total_value',0):,.0f}")

@@ -596,6 +596,55 @@ def collect_all_strategy_data(
             except Exception as e:
                 logger.warning("Future exception [%s]: %s", futures[future], e)
 
+    # ── Tarihsel Kriz Karşılaştırması (senkron — hızlı hesaplama) ─────────
+    try:
+        from crisis_comparator import compare_to_historical_crises, get_crisis_context_for_claude
+        _macro_ind = data.get("macro", {}).get("indicators", {})
+        _econ      = data.get("macro_econ", {})
+        _val       = data.get("valuation", {})
+
+        # Mevcut gösterge değerlerini topla
+        _current_ind = {}
+        buffett = _val.get("buffett", {})
+        if isinstance(buffett, dict):
+            _current_ind["buffett_ratio"] = buffett.get("ratio", 0)
+
+        for k, label in [("sp500_pe", "sp500_pe"), ("vix", "vix")]:
+            ind = _macro_ind.get(k) or _econ.get(k.upper())
+            if ind:
+                _current_ind[label] = getattr(ind, "value", 0) if hasattr(ind, "value") else ind.get("value", 0)
+
+        # VIX makro datadan
+        vix_data = data.get("macro", {}).get("indicators", {}).get("vix")
+        if vix_data:
+            _current_ind["vix"] = getattr(vix_data, "value", 20)
+
+        # Spekülatif aktivite
+        spec = _econ.get("SPEC_ACTIVITY")
+        if spec and hasattr(spec, "value"):
+            _current_ind["spec_activity_pct"] = spec.value
+
+        # Konut
+        yeni_konut = _econ.get("yeni_konut") or data.get("housing", {}).get("yeni_konut")
+        if yeni_konut and hasattr(yeni_konut, "value"):
+            _current_ind["new_home_sales"] = yeni_konut.value
+
+        _crisis_comps = compare_to_historical_crises(_current_ind)
+        _crisis_ctx   = get_crisis_context_for_claude(_current_ind)
+        data["crisis_comparisons"] = [
+            {"label": c.label, "similarity_pct": c.similarity_pct,
+             "risk_level": c.risk_level, "drawdown": c.drawdown,
+             "trigger": c.trigger, "lesson": c.lesson,
+             "matched_signals": c.matched_signals}
+            for c in _crisis_comps
+        ]
+        data["crisis_context"] = _crisis_ctx
+        data["veri_kalitesi"]["kriz_karsilastirma"] = f"ok ({len(_crisis_comps)} kriz)"
+    except Exception as e:
+        logger.warning("Kriz karşılaştırması alınamadı: %s", e)
+        data["crisis_comparisons"] = []
+        data["crisis_context"] = ""
+
     elapsed = _time.time() - t0
     data["veri_kalitesi"]["_sure_sn"] = round(elapsed, 1)
     logger.info("Strateji verisi tamamlandı — %.1f sn (paralel)", elapsed)

@@ -1,3 +1,4 @@
+import streamlit as st
 # economic_data.py — Katman 2 Ekonomik Veri Modülü
 #
 # FRED API (ücretsiz, key gerektirmez) + yfinance ile:
@@ -168,6 +169,7 @@ SECTOR_ETFS = {
 }
 
 
+@st.cache_data(ttl=1800, show_spinner=False)
 def fetch_sector_rotation() -> dict:
     result = {}
     try:
@@ -288,11 +290,398 @@ def fetch_vix_term_structure() -> dict:
     return {}
 
 
-def fetch_all_economic_data() -> dict:
-    """Tüm Katman 2 ekonomik veriyi topla."""
-    logger.info("Ekonomik veri toplanıyor...")
-    result = {"macro_econ":{},"valuation":{},"sectors":{},"market_structure":{},"timestamp":datetime.now(timezone.utc).isoformat()}
+@st.cache_data(ttl=1800, show_spinner=False)
 
+# ─── Adım 1: Buffett Göstergesi ──────────────────────────────────────────────
+# Wilshire 5000 Toplam Piyasa Değeri / ABD GSYİH
+# FRED serileri: WILL5000IND (Wilshire 5000) + GDP (çeyreklik)
+# Tarihsel referanslar: Ort ~%100, 2000 zirvesi %148, 2007 zirvesi %105, bugün ~%190-230
+
+def fetch_buffett_indicator() -> dict:
+    """
+    Buffett Göstergesi = Toplam Piyasa Değeri / GSYİH
+    FRED'den Wilshire 5000 (günlük) ve GDP (çeyreklik) çeker.
+    
+    Yorumlama eşikleri tarihsel kriz dönemleriyle kalibre edilmiştir:
+    < %100 → Ucuz (tarihsel ortalama)
+    %100-150 → Adil değer aralığı
+    %150-200 → Pahalı
+    > %200 → Aşırı pahalı (1929/2000 benzeri bölge)
+    """
+    try:
+        # Wilshire 5000 Toplam Piyasa Değeri (milyar dolar)
+        r_will = requests.get(f"{FRED_BASE}?id=WILL5000IND", timeout=10)
+        # GDP (milyar dolar, çeyreklik)
+        r_gdp  = requests.get(f"{FRED_BASE}?id=GDP", timeout=10)
+
+        if r_will.status_code != 200 or r_gdp.status_code != 200:
+            raise ValueError("FRED erişim hatası")
+
+        # CSV parse — son satır en güncel veri
+        def parse_fred_csv(text):
+            lines = [l for l in text.strip().splitlines() if l and not l.startswith('DATE')]
+            if not lines:
+                return None, None
+            last = lines[-1].split(',')
+            return last[0], float(last[1]) if last[1] != '.' else None
+
+        will_date, will_val = parse_fred_csv(r_will.text)
+        gdp_date,  gdp_val  = parse_fred_csv(r_gdp.text)
+
+        if not will_val or not gdp_val:
+            raise ValueError("Veri boş")
+
+        # Buffett Göstergesi = (Piyasa Değeri / Yıllıklaştırılmış GDP) * 100
+        # GDP çeyreklik → yıllıklaştır (×4 zaten annualized olarak geliyor FRED'den)
+        ratio = (will_val / gdp_val) * 100
+
+        # Sinyal
+        if ratio < 100:
+            signal, note = "green", f"Tarihi ortalamanın altında — piyasa ucuz bölgede"
+        elif ratio < 150:
+            signal, note = "neutral", f"Adil değer aralığı — dikkatli seçicilik"
+        elif ratio < 200:
+            signal, note = "amber", f"Pahalı bölge — 2000 dotcom zirvesinin ({148:.0f}%) üzerinde"
+        else:
+            signal, note = "red", (
+                f"AŞIRI PAHALI — 2000 zirvesi %148, 2007 zirvesi %105. "
+                f"Bu seviye tarihte sadece 1929 öncesinde görüldü."
+            )
+
+        return {
+            "ratio":       round(ratio, 1),
+            "wilshire":    round(will_val, 0),
+            "gdp":         round(gdp_val, 0),
+            "will_date":   will_date,
+            "gdp_date":    gdp_date,
+            "signal":      signal,
+            "note":        note,
+            # Tarihsel karşılaştırma için referans noktalar
+            "historical": {
+                "avg":       100,
+                "dot2000":   148,
+                "gfc2007":   105,
+                "current":   round(ratio, 1),
+            }
+        }
+    except Exception as e:
+        logger.warning("Buffett göstergesi alınamadı: %s", e)
+        return {}
+
+
+# ─── Adım 2: Konut Piyasası Verileri ─────────────────────────────────────────
+# Yeni Konut Satışları + Mevcut Konut Satışları + MBA Mortgage Başvuruları + Konut Fiyat Endeksi
+# FRED serileri: HSN1F (yeni konut), EXSFHSUSQ176S (mevcut konut), CSUSHPISA (Case-Shiller)
+
+def fetch_housing_data() -> dict:
+    """
+    Konut piyasası bileşik göstergesi.
+    
+    Yeni Konut Satışları özellikle önemli çünkü:
+    1. İleri gösterge — mevcut konut satışlarından 1-3 ay önce hareket eder
+    2. Mortgage faiz duyarlılığı yüksek — faiz değişimlerini hızla yansıtır
+    3. Üretim zinciri etkisi — mobilya, boya, elektrikli alet talebiyle bağlantılı
+    
+    587K (Ocak 2026 gerçekleşme) vs 722K beklenti = %18.7 olumsuz sürpriz
+    Bu büyüklükte bir sapma piyasada ciddi sinyal.
+    """
+    result = {}
+
+    # 1. Yeni Konut Satışları (bin adet, aylık yıllıklaştırılmış oran)
+    try:
+        r = requests.get(f"{FRED_BASE}?id=HSN1F", timeout=10)
+        if r.status_code == 200:
+            lines = [l for l in r.text.strip().splitlines()
+                     if l and not l.startswith('DATE')]
+            # Son 3 veriyi al — trend görmek için
+            recent = []
+            for line in lines[-3:]:
+                parts = line.split(',')
+                if len(parts) == 2 and parts[1] != '.':
+                    recent.append((parts[0], float(parts[1])))
+
+            if recent:
+                cur_date, cur_val = recent[-1]
+                prev_val = recent[-2][1] if len(recent) >= 2 else cur_val
+                yoy_val  = recent[0][1]  if len(recent) >= 3 else cur_val
+
+                chg_mom = (cur_val - prev_val) / prev_val * 100 if prev_val else 0
+                chg_yoy = (cur_val - yoy_val)  / yoy_val  * 100 if yoy_val  else 0
+
+                # 587K vs 722K beklenti örneği — %18.7 hayal kırıklığı
+                # Sinyal: 700K+ güçlü, 600-700K nötr, <600K zayıf
+                if cur_val >= 700:
+                    sig, notu = "green",   "Güçlü konut talebi — faiz baskısı yok"
+                elif cur_val >= 600:
+                    sig, notu = "neutral", "Orta düzey talep — faiz baskısı hissediliyor"
+                elif cur_val >= 500:
+                    sig, notu = "amber",   "Zayıf talep — yüksek faiz alımları engelliyor"
+                else:
+                    sig, notu = "red",     "Konut piyasası donuyor — 2008 benzeri baskı"
+
+                result["yeni_konut"] = EconIndicator(
+                    key="YENI_KONUT", label="Yeni Konut Satışları (Yıllık K)",
+                    value=round(cur_val, 0), prev=round(prev_val, 0),
+                    date=cur_date, signal=sig,
+                    note=f"{notu} | Aylık: {chg_mom:+.1f}% | Yıllık: {chg_yoy:+.1f}%"
+                )
+    except Exception as e:
+        logger.warning("Yeni konut satışları alınamadı: %s", e)
+
+    # 2. Mevcut Konut Satışları (milyon adet)
+    try:
+        r = requests.get(f"{FRED_BASE}?id=EXSFHSUSQ176S", timeout=10)
+        if r.status_code == 200:
+            lines = [l for l in r.text.strip().splitlines()
+                     if l and not l.startswith('DATE')]
+            recent = [(l.split(',')[0], float(l.split(',')[1]))
+                      for l in lines[-2:] if l.split(',')[1] != '.']
+            if recent:
+                cur_date, cur_val = recent[-1]
+                prev_val = recent[0][1] if len(recent) >= 2 else cur_val
+                chg = (cur_val - prev_val) / prev_val * 100 if prev_val else 0
+
+                sig = "green" if cur_val > 4.5 else ("amber" if cur_val > 3.5 else "red")
+                result["mevcut_konut"] = EconIndicator(
+                    key="MEVCUT_KONUT", label="Mevcut Konut Satışları (M)",
+                    value=round(cur_val, 2), prev=round(prev_val, 2),
+                    date=cur_date, signal=sig,
+                    note=f"Aylık değişim: {chg:+.1f}% | {'Güçlü' if sig=='green' else 'Zayıf'} talep"
+                )
+    except Exception as e:
+        logger.warning("Mevcut konut satışları alınamadı: %s", e)
+
+    # 3. Case-Shiller Konut Fiyat Endeksi (20 şehir)
+    try:
+        r = requests.get(f"{FRED_BASE}?id=SPCS20RSA", timeout=10)
+        if r.status_code == 200:
+            lines = [l for l in r.text.strip().splitlines()
+                     if l and not l.startswith('DATE')]
+            recent = [(l.split(',')[0], float(l.split(',')[1]))
+                      for l in lines[-13:] if len(l.split(',')) == 2 and l.split(',')[1] != '.']
+            if len(recent) >= 2:
+                cur_date, cur_val = recent[-1]
+                yoy_val  = recent[0][1]
+                chg_yoy  = (cur_val - yoy_val) / yoy_val * 100
+
+                sig = "green" if chg_yoy > 5 else ("neutral" if chg_yoy > 0 else "amber")
+                result["konut_fiyat"] = EconIndicator(
+                    key="KONUT_FIYAT", label="Case-Shiller Konut Fiyat Endeksi",
+                    value=round(cur_val, 1), prev=round(yoy_val, 1),
+                    date=cur_date, signal=sig,
+                    note=f"Yıllık değişim: {chg_yoy:+.1f}% | {'Yükseliş sürüyor' if chg_yoy > 0 else 'Fiyatlar düşüyor'}"
+                )
+    except Exception as e:
+        logger.warning("Konut fiyat endeksi alınamadı: %s", e)
+
+    # 4. 30 Yıllık Mortgage Faizi (Freddie Mac verisi — FRED'den)
+    try:
+        r = requests.get(f"{FRED_BASE}?id=MORTGAGE30US", timeout=10)
+        if r.status_code == 200:
+            lines = [l for l in r.text.strip().splitlines()
+                     if l and not l.startswith('DATE')]
+            recent = [(l.split(',')[0], float(l.split(',')[1]))
+                      for l in lines[-5:] if len(l.split(',')) == 2 and l.split(',')[1] != '.']
+            if recent:
+                cur_date, cur_val = recent[-1]
+                prev_val = recent[0][1] if len(recent) >= 2 else cur_val
+                chg = cur_val - prev_val
+
+                # 7%+ konut piyasasını donduruyor
+                sig = "green" if cur_val < 5.5 else ("amber" if cur_val < 7 else "red")
+                result["mortgage_faiz"] = EconIndicator(
+                    key="MORTGAGE30", label="30Y Mortgage Faizi (%)",
+                    value=round(cur_val, 2), prev=round(prev_val, 2),
+                    date=cur_date, signal=sig,
+                    note=(
+                        f"{'Konut piyasasını donduruyor' if cur_val >= 7 else 'Baskılı ama sürdürülebilir'} "
+                        f"| 4 haftalık değişim: {chg:+.2f}pp"
+                    )
+                )
+    except Exception as e:
+        logger.warning("Mortgage faizi alınamadı: %s", e)
+
+    return result
+
+
+# ─── Adım 3: Bölgesel Banka + Ticari GYO Stres ───────────────────────────────
+
+def fetch_financial_stress_indicators() -> dict:
+    """
+    Bölgesel bankacılık sistemi ve ticari gayrimenkul stres göstergeleri.
+    
+    Neden önemli: 
+    - Ticari GYO kredilerinin %70'i bölgesel bankalardan
+    - $1.5T ofis/ticari GYO kredisi 2025-2027 vadeye geliyor
+    - Ofis boşluk oranı %25+ büyük şehirlerde (COVID kalıcı uzaktan çalışma etkisi)
+    - KRE ETF: Bölgesel bankaların sağlığı için gerçek zamanlı barometri
+    """
+    result = {}
+
+    tickers_config = {
+        # Bölgesel Bankalar
+        "KRE":   ("Bölgesel Bankalar ETF (KRE)",  "Bölgesel banka stres barometresi — düşüş = CRE kredi baskısı"),
+        "KBE":   ("Bankacılık Sektörü ETF (KBE)",  "Geniş bankacılık sektörü — KRE'den ayrışma önemli sinyal"),
+        # Ticari Gayrimenkul
+        "VNQ":   ("Ticari GYO ETF (VNQ)",           "Ticari gayrimenkul değeri — ofis/perakende ağırlıklı"),
+        "CMBS":  ("CMBS ETF (CMBS)",                "Ticari mortgage menkul kıymetleri — spread proxy"),
+        # Referans
+        "XLF":   ("Finansal Sektör ETF (XLF)",      "Büyük banka referansı — KRE/XLF oranı kritik"),
+    }
+
+    import yfinance as yf_fs
+    for ticker, (label, note) in tickers_config.items():
+        try:
+            fi = yf_fs.Ticker(ticker).fast_info
+            price   = float(getattr(fi, "last_price",      0) or 0)
+            prev    = float(getattr(fi, "previous_close",  price) or price)
+            w52h    = float(getattr(fi, "year_high",        price) or price)
+            chg_pct = (price - prev) / prev * 100 if prev > 0 else 0
+            dd_pct  = (price - w52h) / w52h * 100 if w52h > 0 else 0  # 52 hafta zirvesinden drawdown
+
+            # Bölgesel bankalar için: 52H zirvesinden %20+ düşüş stres sinyali
+            if ticker in ("KRE", "KBE"):
+                if dd_pct < -30:
+                    sig = "red"
+                elif dd_pct < -15:
+                    sig = "amber"
+                else:
+                    sig = "green"
+            else:
+                sig = "green" if chg_pct > 0 else ("amber" if chg_pct > -2 else "red")
+
+            if price > 0:
+                result[ticker] = EconIndicator(
+                    key=ticker, label=label,
+                    value=round(price, 2), prev=round(prev, 2),
+                    date="güncel", signal=sig,
+                    note=f"{note} | Günlük: {chg_pct:+.1f}% | 52H zirvesinden: {dd_pct:+.1f}%"
+                )
+        except Exception as e:
+            logger.debug("Finansal stres verisi alınamadı [%s]: %s", ticker, e)
+
+    # KRE/XLF Oranı — bölgesel banka ile büyük banka performansı ayrışması
+    if "KRE" in result and "XLF" in result:
+        kre_v = result["KRE"].value
+        xlf_v = result["XLF"].value
+        # Normalize edilmiş oran — eğer KRE/XLF oranı düşüyorsa bölgesel bankalar stres altında
+        ratio = kre_v / xlf_v if xlf_v > 0 else 0
+        result["KRE_XLF_RATIO"] = EconIndicator(
+            key="KRE_XLF_RATIO",
+            label="Bölgesel/Büyük Banka Oranı (KRE/XLF)",
+            value=round(ratio, 3), prev=round(ratio, 3),
+            date="güncel",
+            signal="amber" if ratio < 1.5 else "green",
+            note=(
+                "Oran düşüyorsa bölgesel bankalar büyük bankalardan kötü performans gösteriyor "
+                "— CRE stresinin sisteme yayıldığı sinyal"
+            )
+        )
+
+    return result
+
+
+# ─── Adım 4: Teminat Borcu Proxy ─────────────────────────────────────────────
+# FINRA aylık açıklıyor (gecikme var), yfinance'ten yaklaşık proxy
+
+def fetch_margin_debt_proxy() -> dict:
+    """
+    Teminat Borcu (Margin Debt) yaklaşık göstergesi.
+    
+    FINRA resmi verisi aylık ve 6 hafta gecikmeli gelir.
+    Proxy yöntemi: Spekülatif ETF'lerin relatif güçünü kullanır.
+    
+    Tarihsel tehlike seviyeleri:
+    1929 öncesi: Teminat borcu / GSYİH = %12
+    2000 öncesi: %2.7 (tarihsel zirve o dönem için)
+    2007 öncesi: %2.5
+    2024-2026: ~%3.0 (yaklaşık FRED MARGIN verisi)
+    
+    Senaryo yorumu belgenin çok isabetli tespitiyle örtüşüyor:
+    Bu oran yüksek olduğunda kaldıraç çözülmesi sarmalı çok hızlı gerçekleşir.
+    """
+    result = {}
+
+    try:
+        # FRED'den margin debt verisi (BOGMBASE yaklaşık proxy)
+        # Resmi seri: MARGDEBT (FINRA verisinden türetilmiş)
+        r = requests.get(f"{FRED_BASE}?id=BOGMBASE", timeout=10)
+        if r.status_code == 200:
+            lines = [l for l in r.text.strip().splitlines()
+                     if l and not l.startswith('DATE')]
+            if lines:
+                last = lines[-1].split(',')
+                if last[1] != '.':
+                    base_val = float(last[1])
+                    result["monetary_base"] = {
+                        "value": round(base_val, 0),
+                        "date":  last[0],
+                        "note":  "Fed parasal baz (milyar dolar) — yüksekse likiditeli ortam"
+                    }
+    except Exception as e:
+        logger.debug("Parasal baz alınamadı: %s", e)
+
+    # Spekülatif aktivite proxy: Yüksek beta hisseler / Düşük beta oranı
+    # TQQQ (3x NASDAQ) / QQQ oranının yüksekliği spekülatif iştahı gösterir
+    try:
+        import yfinance as yf_md
+        tqqq_fi = yf_md.Ticker("TQQQ").fast_info
+        qqq_fi  = yf_md.Ticker("QQQ").fast_info
+
+        tqqq_p = float(getattr(tqqq_fi, "last_price", 0) or 0)
+        qqq_p  = float(getattr(qqq_fi,  "last_price", 0) or 0)
+
+        tqqq_h52 = float(getattr(tqqq_fi, "year_high", tqqq_p) or tqqq_p)
+        tqqq_l52 = float(getattr(tqqq_fi, "year_low",  tqqq_p) or tqqq_p)
+
+        # 52H aralığındaki pozisyon — spekülatif aktivite göstergesi
+        if tqqq_h52 > tqqq_l52:
+            spec_position = (tqqq_p - tqqq_l52) / (tqqq_h52 - tqqq_l52) * 100
+        else:
+            spec_position = 50
+
+        if spec_position > 80:
+            sig  = "red"
+            notu = "Spekülatif aktivite zirveye yakın — kaldıraç fazla birikmiş olabilir"
+        elif spec_position > 60:
+            sig  = "amber"
+            notu = "Orta-yüksek spekülatif aktivite — dikkatli izle"
+        else:
+            sig  = "green"
+            notu = "Spekülatif aktivite makul seviyede"
+
+        result["spec_activity"] = EconIndicator(
+            key="SPEC_ACTIVITY",
+            label="Spekülatif Aktivite Proxy (TQQQ Pozisyon %)",
+            value=round(spec_position, 1), prev=50.0,
+            date="güncel", signal=sig, note=notu
+        )
+    except Exception as e:
+        logger.debug("Spekülatif aktivite proxy alınamadı: %s", e)
+
+    return result
+
+
+
+def fetch_all_economic_data() -> dict:
+    """
+    Tüm Katman 2 ekonomik veriyi topla.
+    Yeni eklenenler: Buffett Göstergesi, Konut Piyasası, Bölgesel Banka/CRE Stres,
+                     Teminat Borcu Proxy
+    """
+    logger.info("Ekonomik veri toplanıyor (genişletilmiş Katman 2)...")
+    result = {
+        "macro_econ":      {},
+        "valuation":       {},
+        "sectors":         {},
+        "market_structure":{},
+        "housing":         {},
+        "financial_stress":{},
+        "systemic_risk":   {},
+        "timestamp":       datetime.now(timezone.utc).isoformat()
+    }
+
+    # Mevcut temel göstergeler
     for fn, key in [(fetch_ism_manufacturing,"ISM_MFG"),(fetch_ism_services,"ISM_SVC"),
                     (fetch_pce,"CORE_PCE"),(fetch_gdp_growth,"GDP"),(fetch_nfp,"NFP")]:
         r = fn()
@@ -302,13 +691,51 @@ def fetch_all_economic_data() -> dict:
     result["valuation"].update(fetch_sp500_valuation())
     result["sectors"] = fetch_sector_rotation()
 
-    # Piyasa yapısı — Put/Call + VIX term structure
+    # Piyasa yapısı
     pcr = fetch_put_call_ratio()
     vts = fetch_vix_term_structure()
     if pcr: result["market_structure"]["put_call"] = pcr
     if vts: result["market_structure"]["vix_term"]  = vts
 
-    logger.info("Ekonomik veri: %d gösterge", len(result["macro_econ"]))
+    # ── YENİ: Buffett Göstergesi ─────────────────────────────────────────
+    try:
+        _buffett = fetch_buffett_indicator()
+        if _buffett:
+            result["valuation"]["buffett"] = _buffett
+            result["systemic_risk"]["buffett"] = _buffett
+            logger.info("Buffett göstergesi: %.1f", _buffett.get("ratio", 0))
+    except Exception as e:
+        logger.warning("Buffett göstergesi alınamadı: %s", e)
+
+    # ── YENİ: Konut Piyasası ─────────────────────────────────────────────
+    try:
+        _housing = fetch_housing_data()
+        result["housing"].update(_housing)
+        result["macro_econ"].update(_housing)
+        logger.info("Konut verisi: %d gösterge", len(_housing))
+    except Exception as e:
+        logger.warning("Konut verisi alınamadı: %s", e)
+
+    # ── YENİ: Bölgesel Banka + CRE Stres ─────────────────────────────────
+    try:
+        _stress = fetch_financial_stress_indicators()
+        result["financial_stress"].update(_stress)
+        logger.info("Finansal stres: %d gösterge", len(_stress))
+    except Exception as e:
+        logger.warning("Finansal stres alınamadı: %s", e)
+
+    # ── YENİ: Teminat Borcu Proxy ─────────────────────────────────────────
+    try:
+        _margin = fetch_margin_debt_proxy()
+        result["systemic_risk"].update(_margin)
+        if "spec_activity" in _margin:
+            result["macro_econ"]["SPEC_ACTIVITY"] = _margin["spec_activity"]
+    except Exception as e:
+        logger.warning("Teminat borcu proxy alınamadı: %s", e)
+
+    logger.info("Katman 2 tamamlandı: %d temel + %d konut + %d stres gösterge",
+                len(result["macro_econ"]), len(result["housing"]),
+                len(result["financial_stress"]))
     return result
 
 
