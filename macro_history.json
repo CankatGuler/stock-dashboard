@@ -360,5 +360,115 @@
         "note": "Tahvil volatilitesi ORTA (%12) — dikkat"
       }
     }
+  },
+  {
+    "date": "2026-03-20",
+    "timestamp": "2026-03-20T21:44:10",
+    "regime": "RISK_OFF",
+    "label": "Riskten Kaç",
+    "indicators": {
+      "VIX": {
+        "value": 26.78,
+        "change_pct": 11.26,
+        "signal": "amber",
+        "note": "Yüksek belirsizlik — dikkatli ol"
+      },
+      "TNX": {
+        "value": 4.39,
+        "change_pct": 2.57,
+        "signal": "amber",
+        "note": "Orta faiz — değerleme baskısı var"
+      },
+      "IRX": {
+        "value": 3.62,
+        "change_pct": 0.17,
+        "signal": "neutral",
+        "note": ""
+      },
+      "DXY": {
+        "value": 99.5,
+        "change_pct": 0.06,
+        "signal": "green",
+        "note": "Zayıf dolar — uluslararası şirketlere pozitif"
+      },
+      "GOLD": {
+        "value": 4492.0,
+        "change_pct": -4.94,
+        "signal": "green",
+        "note": "Altın düşüyor — risk iştahı iyileşiyor"
+      },
+      "OIL": {
+        "value": 98.09,
+        "change_pct": 4.55,
+        "signal": "red",
+        "note": "Yüksek petrol — enflasyon baskısı, Fed sıkılaşır"
+      },
+      "COPPER": {
+        "value": 5.3,
+        "change_pct": -4.41,
+        "signal": "red",
+        "note": "Bakır düşüyor — küresel büyüme yavaşlaması sinyali"
+      },
+      "SPX": {
+        "value": 6506.48,
+        "change_pct": -1.51,
+        "signal": "red",
+        "note": "Piyasa sert düşüyor — risk azalt"
+      },
+      "NDX": {
+        "value": 21647.61,
+        "change_pct": -2.01,
+        "signal": "neutral",
+        "note": ""
+      },
+      "TLT": {
+        "value": 85.83,
+        "change_pct": -1.92,
+        "signal": "neutral",
+        "note": ""
+      },
+      "YIELD_CURVE": {
+        "value": 0.77,
+        "change_pct": 0,
+        "signal": "green",
+        "note": "Normal curve (+0.77%) — ekonomi sağlıklı"
+      },
+      "CREDIT_SPREAD": {
+        "value": 0.7318,
+        "change_pct": 0.32,
+        "signal": "green",
+        "note": "Credit spread DARAL IYOR — risk iştahı artıyor, kredi ortamı iyileşiyor"
+      },
+      "OVX": {
+        "value": 91.8,
+        "change_pct": 0,
+        "signal": "red",
+        "note": "OVX 92 — Yüksek petrol volatilitesi: jeopolitik risk veya arz şoku"
+      },
+      "USDJPY": {
+        "value": 159.22,
+        "change_pct": 0.82,
+        "signal": "amber",
+        "note": "USD/JPY 159.2 — Aşırı zayıf yen, BOJ müdahale riski"
+      },
+      "LIQUIDITY": {
+        "value": -1.01,
+        "change_pct": 0,
+        "signal": "red",
+        "note": "Likidite DARALIYOR — tahvil yükseliyor, hisse+altın düşüyor: risk-off modu"
+      },
+      "FED_WATCH": {
+        "value": 3.62,
+        "change_pct": 0.006,
+        "signal": "neutral",
+        "note": "Fed beklentisi DEĞİŞMEDİ — piyasa sabit fiyatlıyor (3M: %3.62)"
+      },
+      "MOVE_PROXY": {
+        "value": 11.8,
+        "change_pct": 0,
+        "signal": "amber",
+        "note": "Tahvil volatilitesi ORTA (%12) — dikkat"
+      }
+    }
   }
 ]
