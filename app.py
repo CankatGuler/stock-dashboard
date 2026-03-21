@@ -5274,9 +5274,13 @@ with tab_strategy:
                 with _aw_cols[i]:
                     st.metric(_ac_labels.get(ac, ac), f"%{pct:.1f}")
 
-            # Direktör çağrısı
+
+        # Direktör çağrısı — veri hazır ama sonuç yoksa çalıştır
+        _sim_data_ready = st.session_state.get("simulation_data")
+        _sim_needs_run  = _sim_data_ready and not st.session_state.get("simulation_result")
+        if _sim_needs_run:
             with st.spinner("🧭 Direktör senaryo analizi yapıyor (~30 sn)..."):
-                _sim_prompt = build_scenario_director_prompt(_sim_data)
+                _sim_prompt = build_scenario_director_prompt(_sim_data_ready)
                 _api_key = os.getenv("ANTHROPIC_API_KEY", "")
                 if not _api_key:
                     st.error("ANTHROPIC_API_KEY eksik.")
@@ -5285,82 +5289,82 @@ with tab_strategy:
                         import anthropic as _ant_sim
                         _sim_client = _ant_sim.Anthropic(api_key=_api_key)
                         _sim_system = """Sen çok varlıklı portföy yönetiminde uzmanlaşmış strateji direktörüsün.
-ABD hisse, kripto, emtia ve TEFAS fonlarını aynı anda yönetiyorsun.
-Bu bir SENARYO SİMÜLASYONU — senaryo şu an GERÇEKLEŞIYOR.
+    ABD hisse, kripto, emtia ve TEFAS fonlarını aynı anda yönetiyorsun.
+    Bu bir SENARYO SİMÜLASYONU — senaryo şu an GERÇEKLEŞIYOR.
 
-═══ MİKRO-METRİK ODAĞI ═══
-Her ABD hissesini şu etiketlerle değerlendir:
-- [Faiz_indirim_pozitif] veya [Faiz_indirim_negatif]
-- [Resesyon_defansif] veya [Resesyon_hassas]
-- [Yuksek_FCF] veya [Dusuk_FCF]
-FCF yield yüksek + borç düşük = koru. Tersini azalt/sat.
+    ═══ MİKRO-METRİK ODAĞI ═══
+    Her ABD hissesini şu etiketlerle değerlendir:
+    - [Faiz_indirim_pozitif] veya [Faiz_indirim_negatif]
+    - [Resesyon_defansif] veya [Resesyon_hassas]
+    - [Yuksek_FCF] veya [Dusuk_FCF]
+    FCF yield yüksek + borç düşük = koru. Tersini azalt/sat.
 
-═══ TEFAS LOOK-THROUGH ═══
-IIH = %90 büyük şirket hissesi → resesyon duyarlılığı YÜKSEK
-AEY = %80 altın → resesyon koruması YÜKSEK
-Her fonun içeriğine göre ayrı karar ver.
+    ═══ TEFAS LOOK-THROUGH ═══
+    IIH = %90 büyük şirket hissesi → resesyon duyarlılığı YÜKSEK
+    AEY = %80 altın → resesyon koruması YÜKSEK
+    Her fonun içeriğine göre ayrı karar ver.
 
-═══ SENARYO OLASILILANDIRMASI (ZORUNLU) ═══
-Kararları 3 senaryonun ağırlıklı ortalaması olarak ver:
-- Baz (%55): Fed önleyici indirim → soft landing, 6-9 ay toparlanma
-- Alternatif (%35): Hard landing → resesyon derinleşiyor, 12-18 ay baskı
-- Kuyruk (%10): Sistemik kriz → carry trade çöküşü + kredi donması
-Ağırlıklı beklenen etki = Σ(olasılık × portföy_etkisi). Negatif beklentide agresif pozisyon alma.
+    ═══ SENARYO OLASILILANDIRMASI (ZORUNLU) ═══
+    Kararları 3 senaryonun ağırlıklı ortalaması olarak ver:
+    - Baz (%55): Fed önleyici indirim → soft landing, 6-9 ay toparlanma
+    - Alternatif (%35): Hard landing → resesyon derinleşiyor, 12-18 ay baskı
+    - Kuyruk (%10): Sistemik kriz → carry trade çöküşü + kredi donması
+    Ağırlıklı beklenen etki = Σ(olasılık × portföy_etkisi). Negatif beklentide agresif pozisyon alma.
 
-═══ KORElASYON SİGORTASI ═══
-VIX 34 + USDJPY 142 = yüksek korelasyon ortamı.
-Kripto-Nasdaq-BIST birlikte düşüyorsa nakit önerisini 1.5x artır ve bunu belirt.
+    ═══ KORElASYON SİGORTASI ═══
+    VIX 34 + USDJPY 142 = yüksek korelasyon ortamı.
+    Kripto-Nasdaq-BIST birlikte düşüyorsa nakit önerisini 1.5x artır ve bunu belirt.
 
-Yanıtını SADECE aşağıdaki JSON formatında ver (açıklama ekleme):
-{
-  "senaryo_yorumu": "2-3 cümle — hangi olasılık ağır basıyor, neden?",
-  "senaryo_olasiliklari": {
-    "baz":        {"tanim": "...", "olasilik_pct": 55, "portfoy_etkisi": "+/-%X"},
-    "alternatif": {"tanim": "...", "olasilik_pct": 35, "portfoy_etkisi": "+/-%X"},
-    "kuyruk":     {"tanim": "...", "olasilik_pct": 10, "portfoy_etkisi": "+/-%X"}
-  },
-  "harmonize_strateji": "Ağırlıklı ortalama sonucu — tek cümle net karar",
-  "onerilen_agirliklar": {
-    "us_equity":  {"pct": 0, "onceki_pct": 19, "degisim_pp": 0, "gerekce": "tek cümle"},
-    "crypto":     {"pct": 0, "onceki_pct": 20, "degisim_pp": 0, "gerekce": "tek cümle"},
-    "commodity":  {"pct": 0, "onceki_pct": 17, "degisim_pp": 0, "gerekce": "tek cümle"},
-    "tefas":      {"pct": 0, "onceki_pct": 40, "degisim_pp": 0, "gerekce": "tek cümle"},
-    "nakit":      {"pct": 0, "onceki_pct":  4, "degisim_pp": 0, "gerekce": "tek cümle"}
-  },
-  "hisse_bazli_kararlar": [
+    Yanıtını SADECE aşağıdaki JSON formatında ver (açıklama ekleme):
     {
-      "ticker": "TICKER",
-      "etiketler": ["Faiz_indirim_pozitif", "Resesyon_defansif"],
-      "fcf_durumu": "Yuksek_FCF|Dusuk_FCF|N/A",
-      "karar": "KORU|ARTIR|AZALT|SAT",
-      "gerekce": "tek cümle"
+      "senaryo_yorumu": "2-3 cümle — hangi olasılık ağır basıyor, neden?",
+      "senaryo_olasiliklari": {
+        "baz":        {"tanim": "...", "olasilik_pct": 55, "portfoy_etkisi": "+/-%X"},
+        "alternatif": {"tanim": "...", "olasilik_pct": 35, "portfoy_etkisi": "+/-%X"},
+        "kuyruk":     {"tanim": "...", "olasilik_pct": 10, "portfoy_etkisi": "+/-%X"}
+      },
+      "harmonize_strateji": "Ağırlıklı ortalama sonucu — tek cümle net karar",
+      "onerilen_agirliklar": {
+        "us_equity":  {"pct": 0, "onceki_pct": 19, "degisim_pp": 0, "gerekce": "tek cümle"},
+        "crypto":     {"pct": 0, "onceki_pct": 20, "degisim_pp": 0, "gerekce": "tek cümle"},
+        "commodity":  {"pct": 0, "onceki_pct": 17, "degisim_pp": 0, "gerekce": "tek cümle"},
+        "tefas":      {"pct": 0, "onceki_pct": 40, "degisim_pp": 0, "gerekce": "tek cümle"},
+        "nakit":      {"pct": 0, "onceki_pct":  4, "degisim_pp": 0, "gerekce": "tek cümle"}
+      },
+      "hisse_bazli_kararlar": [
+        {
+          "ticker": "TICKER",
+          "etiketler": ["Faiz_indirim_pozitif", "Resesyon_defansif"],
+          "fcf_durumu": "Yuksek_FCF|Dusuk_FCF|N/A",
+          "karar": "KORU|ARTIR|AZALT|SAT",
+          "gerekce": "tek cümle"
+        }
+      ],
+      "tefas_kararlari": [
+        {
+          "ticker": "IIH",
+          "icerik": "%90 hisse yogun",
+          "resesyon_duyarlilik": "YUKSEK",
+          "karar": "AZALT|TUT|ARTIR",
+          "gerekce": "tek cümle"
+        }
+      ],
+      "korelasyon_sigortasi": {
+        "aktif": true,
+        "neden": "VIX 34 + USDJPY 142 — korelasyon artıyor",
+        "nakit_artirim_pp": 5
+      },
+      "zamanlama": "hemen|kademeli_1hafta|bekle_teyit",
+      "zamanlama_gerekce": "neden bu zamanlama",
+      "kritik_aksiyonlar": [
+        {"oncelik": 1, "ticker": "...", "aksiyon": "...", "neden": "..."},
+        {"oncelik": 2, "ticker": "...", "aksiyon": "...", "neden": "..."},
+        {"oncelik": 3, "ticker": "...", "aksiyon": "...", "neden": "..."}
+      ],
+      "senaryo_sonu_sinyali": "Hangi 3-4 gösterge risk-on'a dönüşü teyit eder",
+      "en_buyuk_yanilma_riski": "Bu analizde en çok yanılabileceğimiz nokta"
     }
-  ],
-  "tefas_kararlari": [
-    {
-      "ticker": "IIH",
-      "icerik": "%90 hisse yogun",
-      "resesyon_duyarlilik": "YUKSEK",
-      "karar": "AZALT|TUT|ARTIR",
-      "gerekce": "tek cümle"
-    }
-  ],
-  "korelasyon_sigortasi": {
-    "aktif": true,
-    "neden": "VIX 34 + USDJPY 142 — korelasyon artıyor",
-    "nakit_artirim_pp": 5
-  },
-  "zamanlama": "hemen|kademeli_1hafta|bekle_teyit",
-  "zamanlama_gerekce": "neden bu zamanlama",
-  "kritik_aksiyonlar": [
-    {"oncelik": 1, "ticker": "...", "aksiyon": "...", "neden": "..."},
-    {"oncelik": 2, "ticker": "...", "aksiyon": "...", "neden": "..."},
-    {"oncelik": 3, "ticker": "...", "aksiyon": "...", "neden": "..."}
-  ],
-  "senaryo_sonu_sinyali": "Hangi 3-4 gösterge risk-on'a dönüşü teyit eder",
-  "en_buyuk_yanilma_riski": "Bu analizde en çok yanılabileceğimiz nokta"
-}
-Türkçe yaz. Ağırlıklar toplamı %100 olmalı."""
+    Türkçe yaz. Ağırlıklar toplamı %100 olmalı."""
 
                         _sim_resp = _sim_client.messages.create(
                             model="claude-opus-4-5",
