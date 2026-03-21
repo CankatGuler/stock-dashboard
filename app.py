@@ -5814,6 +5814,52 @@ Türkçe yaz. Ağırlıklar toplamı %100 olmalı."""
                 )
             st.markdown('</div>', unsafe_allow_html=True)
 
+        # ── Senaryo Olasılıklandırması ────────────────────────────────────
+        _so = _dir.get("senaryo_olasiliklari", {})
+        _hs = _dir.get("harmonize_strateji", "")
+        _ks = _dir.get("korelasyon_sigortasi", {})
+        if _so or _hs:
+            st.markdown(
+                '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+                'letter-spacing:0.1em;margin:1rem 0 0.4rem;">🎲 SENARYO OLASILILANDIRMASI</div>',
+                unsafe_allow_html=True)
+            if _so:
+                _sc1, _sc2, _sc3 = st.columns(3)
+                for _col, _key, _label, _color in [
+                    (_sc1, "baz",        "Baz Senaryo",   "#00c48c"),
+                    (_sc2, "alternatif", "Alternatif",     "#ffb300"),
+                    (_sc3, "kuyruk",     "Kuyruk Riski",   "#e74c3c"),
+                ]:
+                    _sd = _so.get(_key, {})
+                    if _sd:
+                        with _col:
+                            st.markdown(
+                                f'<div style="background:#1a2332;border-top:3px solid {_color};'
+                                f'border-radius:6px;padding:0.7rem;text-align:center;">'
+                                f'<div style="font-size:0.62rem;color:{_color};font-weight:700;">'
+                                f'{_label}</div>'
+                                f'<div style="font-size:1.1rem;font-weight:700;color:#e8edf3;">'
+                                f'%{_sd.get("olasilik_pct",0)}</div>'
+                                f'<div style="font-size:0.72rem;color:#b0bec5;">'
+                                f'{_sd.get("tanim","")}</div>'
+                                f'<div style="font-size:0.72rem;color:{_color};">'
+                                f'{_sd.get("portfoy_etkisi","")}</div>'
+                                f'</div>',
+                                unsafe_allow_html=True)
+            if _hs:
+                st.markdown(
+                    f'<div style="background:#111927;border-left:3px solid #ce93d8;'
+                    f'border-radius:0 6px 6px 0;padding:0.6rem 1rem;margin-top:0.5rem;'
+                    f'font-size:0.82rem;color:#e8edf3;">🎯 {_hs}</div>',
+                    unsafe_allow_html=True)
+
+        # ── Korelasyon Sigortası ──────────────────────────────────────────
+        if _ks and _ks.get("aktif"):
+            st.warning(
+                f"⚠️ **Korelasyon Sigortası Aktif** — {_ks.get('neden','')} "
+                f"| Nakit artırım önerisi: +%{_ks.get('nakit_artirim_pct',0)}"
+            )
+
         # ── HTML Export ───────────────────────────────────────────────────
         st.markdown('<div style="margin-top:1rem;"></div>', unsafe_allow_html=True)
         from datetime import datetime as _dt_strat2

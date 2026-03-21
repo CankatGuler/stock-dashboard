@@ -180,20 +180,50 @@ US_EQUITY_ANALYST_SYSTEM = """Sen ABD hisse senedi piyasalarında uzmanlaşmış
 S&P 500 değerlemesi, sektör rotasyonu, kurumsal kazanç döngüleri ve teknik analiz konularında
 derinlemesine bilgiye sahipsin.
 
-GÖREV SINIRI: Yalnızca ABD hisse senedi piyasasını analiz et. Kripto, Türkiye veya emtia 
-hakkında yorum yapma — bunlar diğer analistlerin alanı.
+GÖREV SINIRI: Yalnızca ABD hisse senedi piyasasını analiz et.
+
+KESKİN NİŞANCI MODU — MİKRO METRİK ODAĞI:
+Makro görüşün yanında, portföydeki her ABD hissesini aşağıdaki üç filtreden geçir:
+
+1. FCF YİELD & BORÇLULUK (Resesyon Direnci):
+   - Serbest nakit akışı getirisi yüksek (>%5) ve borç/özkaynak düşük (<1.0) şirketler
+     resesyon döneminde hayatta kalır. Bunları "Defansif Kalite" olarak etiketle.
+   - Borç yükü yüksek ve negatif FCF'li şirketler faiz artışında ilk çökenlerdir.
+
+2. AI ÜRETKENLİK İZİ (Revenue per Employee Trendi):
+   - Şirketin son 2-4 çeyrekte çalışan başına geliri artıyorsa AI operasyonel kazanım
+     sağlıyor demektir. Bu şirketi "AI Verimlilik Lideri" olarak etiketle.
+   - Azalıyorsa kalabalık iş gücü maliyeti rekabet avantajını yiyor.
+
+3. MAKRO DUYARLILIK ETİKETİ:
+   Her hisse için şu etiketleri kullan:
+   - Faiz_indirim_pozitif / Faiz_indirim_negatif
+   - Resesyon_defansif / Resesyon_hassas
+   - Dolar_zayiflama_pozitif / Dolar_zayiflama_negatif
 
 YANIT FORMATI (JSON — hiçbir alan boş olamaz):
 {
   "sinyal": "AL|TUT|BEKLE|AZALT|SAT",
   "guven": 1-10,
   "ana_gerekcce": "Tek cümle, net",
-  "sektor_gorusu": "Şu an hangi sektör güçlü, hangisi zayıf?",
-  "deger_leme": "Piyasa ucuz mu pahalı mı — kısa gerekçe",
-  "destekleyen": ["Pozitif faktör 1", "Pozitif faktör 2"],
+  "sektor_gorusu": "Hangi sektör güçlü/zayıf",
+  "deger_leme": "Piyasa ucuz mu pahalı mı",
+  "hisse_mikro_analiz": [
+    {
+      "ticker": "TICKER",
+      "beta": 0.0,
+      "fcf_yield_tahmini": "yüksek|orta|düşük|negatif",
+      "borc_durumu": "güçlü|orta|riskli",
+      "ai_uretkenlik": "lider|orta|geri_kaliyor",
+      "makro_duyarlilik": ["Faiz_indirim_pozitif", "Resesyon_defansif"],
+      "aksiyon": "KORU|ARTIR|AZALT|SAT",
+      "gerekce": "tek cümle"
+    }
+  ],
+  "destekleyen": ["Faktör 1", "Faktör 2"],
   "riskler": ["Risk 1", "Risk 2"],
-  "oneri": "Somut eylem önerisi",
-  "izle": "Önümüzdeki 2 haftada kritik gösterge"
+  "oneri": "Somut genel öneri",
+  "izle": "Kritik gösterge"
 }"""
 
 
@@ -229,16 +259,53 @@ def analyze_us_equity_with_claude(economic_data: dict, portfolio_positions: list
             if note:
                 lines.append(f"• {note}")
 
-    # Portföydeki hisseler
+    # Portföydeki hisseler — mikro metriklerle
     us_positions = [p for p in portfolio_positions
                     if p.get("asset_class", "us_equity") == "us_equity"
                     and float(p.get("shares", 0)) > 0]
     if us_positions:
-        lines.append("\n=== PORTFÖYDEKİ ABD HİSSELERİ ===")
-        for p in us_positions[:8]:
-            pnl = ((p.get("current_price", p["avg_cost"]) - p["avg_cost"])
-                   / p["avg_cost"] * 100) if p["avg_cost"] > 0 else 0
-            lines.append(f"• {p['ticker']}: K/Z %{pnl:+.0f}, Sektör: {p.get('sector','?')}")
+        lines.append("\n=== PORTFÖYDEKİ ABD HİSSELERİ (MİKRO ANALİZ) ===")
+        lines.append("Her hisse için FCF yield, beta, borç durumu ve makro duyarlılığını değerlendir.")
+        
+        # yfinance'ten mikro metrikler çek
+        try:
+            import yfinance as _yf_micro
+            for p in us_positions[:10]:
+                ticker = p["ticker"]
+                cur    = p.get("current_price", p["avg_cost"])
+                avg    = p["avg_cost"]
+                pnl    = (cur - avg) / avg * 100 if avg > 0 else 0
+                shares = float(p.get("shares", 0))
+                val    = shares * cur
+                
+                # Temel metrikler
+                try:
+                    info = _yf_micro.Ticker(ticker).info
+                    beta         = info.get("beta", "?")
+                    fcf          = info.get("freeCashflow", 0) or 0
+                    market_cap   = info.get("marketCap", 0) or 0
+                    fcf_yield    = (fcf / market_cap * 100) if market_cap > 0 and fcf else 0
+                    de_ratio     = info.get("debtToEquity", 0) or 0
+                    rev_per_emp_note = ""
+                    rev = info.get("totalRevenue", 0) or 0
+                    emp = info.get("fullTimeEmployees", 0) or 0
+                    if rev > 0 and emp > 0:
+                        rev_per_emp = rev / emp / 1000  # K dolar
+                        rev_per_emp_note = f"Gelir/Çalışan: ${rev_per_emp:.0f}K"
+                    
+                    lines.append(
+                        f"• {ticker}: K/Z %{pnl:+.0f} | Değer: ${val:,.0f} | "
+                        f"Beta: {beta} | FCF Getirisi: {fcf_yield:+.1f}% | "
+                        f"Borç/Özkaynak: {de_ratio:.1f} | {rev_per_emp_note} | "
+                        f"Sektör: {p.get('sector','?')}"
+                    )
+                except Exception:
+                    lines.append(f"• {ticker}: K/Z %{pnl:+.0f}, Değer: ${val:,.0f}, Sektör: {p.get('sector','?')}")
+        except Exception:
+            for p in us_positions[:8]:
+                pnl = ((p.get("current_price", p["avg_cost"]) - p["avg_cost"])
+                       / p["avg_cost"] * 100) if p["avg_cost"] > 0 else 0
+                lines.append(f"• {p['ticker']}: K/Z %{pnl:+.0f}, Sektör: {p.get('sector','?')}")
 
     # Sinyal motoru sinyali
     us_sig = signal_summary.get("us_equity", {})
@@ -451,9 +518,28 @@ def analyze_turkey_with_claude(turkey_data: dict, portfolio_positions: list,
     tefas_pos = [p for p in portfolio_positions if p.get("asset_class") == "tefas"
                  and float(p.get("shares", 0)) > 0]
     if tefas_pos:
-        lines.append("\n=== TEFAS POZİSYONLARI ===")
+        lines.append("\n=== TEFAS POZİSYONLARI (LOOK-THROUGH ANALİZİ) ===")
+        # Bilinen fon içerik haritası — KAP aylık raporlarından derlendi
+        TEFAS_MAP = {
+            "IIH":  ("Hisse Yoğun",          "Büyük Şirket ~%90",         "YÜKSEK", "ORTA"),
+            "AEY":  ("Altın/Kıymetli Maden", "Altın ~%80",                "DÜŞÜK",  "DÜŞÜK"),
+            "YAC":  ("Dengeli",               "Hisse %50 Tahvil %50",      "ORTA",   "DÜŞÜK"),
+            "TTE":  ("Hisse (Teknoloji)",     "Teknoloji ~%85",            "YÜKSEK", "ORTA"),
+            "GAF":  ("Kamu Menkul Kıymet",   "Devlet Tahvili ~%90",       "DÜŞÜK",  "YÜKSEK"),
+            "MAC":  ("Hisse (Banka)",         "Bankacılık ~%80",           "ÇOK YÜK","ORTA"),
+            "NNF":  ("Hisse (Büyüme)",        "Küçük/Orta Şirket ~%85",   "YÜKSEK", "ORTA"),
+        }
         for p in tefas_pos:
-            lines.append(f"• {p['ticker']}: {p['shares']:,.0f} adet, maliyet {p['avg_cost']:.4f} TL")
+            kod  = p["ticker"].upper()
+            tip, icerik, ress_duy, kur_risk = TEFAS_MAP.get(
+                kod, ("Bilinmiyor", "KAP'tan kontrol et", "?", "?")
+            )
+            val_tl = float(p.get("shares", 0)) * float(p.get("current_price", p.get("avg_cost", 0)))
+            lines.append(
+                f"• {kod} [{tip}]: {p['shares']:,.0f} adet | ~{val_tl:,.0f} TL | "
+                f"İçerik: {icerik} | Resesyon Duyar.: {ress_duy} | Kur Riski: {kur_risk}"
+            )
+        lines.append("Analiz: Her fonun içeriğine göre resesyon/kur riskini ayrı ayrı değerlendir.")
 
     tr_sig = signal_summary.get("turkey", {})
     if tr_sig:
@@ -522,6 +608,28 @@ vade_planlari: Kısa/orta/uzun vade için baz ve risk senaryoları
 yil_sonu_hedefi: Hedefe ulaşmak için ne kadar risk gerekiyor?
 bir_sonraki_kontrol: Tarih + tetikleyiciler (max 3)
 
+═══ SENARYO OLASILILANDIRMASI (KRİTİK) ═══
+Tek bir senaryoya %100 güvenme. Her kararı üç olasılığın matematiksel harmanı yap:
+
+1. BAZI SENARYO (dominant) — en yüksek olasılık, verilerle destekli
+2. ALTERNATİF SENARYO — %20-35 ihtimalle gerçekleşebilecek zıt senaryo  
+3. KUYRUK RİSKİ — %5-15 ihtimalle ancak çok yıkıcı uç senaryo
+
+Örnek format:
+"senaryo_olasılıkları": {
+  "baz": {"tanim": "Soft landing", "olasilik_pct": 55, "portfoy_etkisi": "+8%"},
+  "alternatif": {"tanim": "Hard landing resesyon", "olasilik_pct": 35, "portfoy_etkisi": "-18%"},
+  "kuyruk": {"tanim": "Likidite krizi", "olasilik_pct": 10, "portfoy_etkisi": "-45%"}
+}
+"harmonize_strateji": "Bu üç olasılığın ağırlıklı ortalamasına göre önerim şu..."
+
+Ağırlıklı beklenen getiri = Σ(olasılık × etki). Negatif beklenen değerde agresif pozisyon alma.
+
+═══ KORElASYON SİGORTASI ═══
+Eğer portföydeki varlık sınıfları arasındaki 30 günlük korelasyon 0.7'yi geçiyorsa
+(likidite krizinde hepsi birlikte düşüyorsa), nakit oranı otomatik olarak
+önerilen seviyenin 1.5 katına çıkarılmalı. Bunu her analizde kontrol et.
+
 ═══ ÇIKTI KURALLARI ═══
 • Her aksiyon somut olmalı: "risk azalt" değil, "AVGO pozisyonunu %20 küçült"
 • Nakit oranı her zaman belirtilmeli
@@ -557,6 +665,17 @@ bir_sonraki_kontrol: Tarih + tetikleyiciler (max 3)
     "uzun": {"sure": "1-3 yil", "tema": "...", "pozisyonlama": "..."}
   },
   "yil_sonu_hedefi": {"hedef_pct": 0, "mevcut_pct": 0, "kalan_pct": 0, "gerekan_aylik_pct": 0, "risk_degerlendirmesi": "...", "tavsiye": "..."},
+  "senaryo_olasiliklari": {
+    "baz":        {"tanim": "...", "olasilik_pct": 0, "portfoy_etkisi": "..."},
+    "alternatif": {"tanim": "...", "olasilik_pct": 0, "portfoy_etkisi": "..."},
+    "kuyruk":     {"tanim": "...", "olasilik_pct": 0, "portfoy_etkisi": "..."}
+  },
+  "harmonize_strateji": "Üç olasılığın ağırlıklı ortalaması olarak özet strateji",
+  "korelasyon_sigortasi": {
+    "aktif": true,
+    "neden": "...",
+    "nakit_artirim_pct": 0
+  },
   "bir_sonraki_kontrol": {
     "tarih": "YYYY-MM-DD", "neden": "...",
     "tetikleyiciler": [{"tip": "fiyat|takvim|durum", "aciklama": "...", "esik": "..."}]
@@ -615,11 +734,31 @@ def _build_director_message(
         lines.append("")
 
     # ── Korelasyon Özeti ─────────────────────────────────────────────────
+    # Korelasyon analizi + sigorta sinyali
     corr_prompt = correlations.get("prompt", "") if correlations else ""
     if corr_prompt:
-        lines.append("═══ KORELASYON ÖZETİ ═══")
-        lines.append(corr_prompt[:400])  # Çok özlü tut
+        lines.append("═══ KORELASYON ANALİZİ ═══")
+        lines.append(corr_prompt[:400])
         lines.append("")
+
+    # Korelasyon sigortası — kritik eşik kontrolü
+    try:
+        if correlations:
+            pairs = correlations.get("cross_asset_pairs", {})
+            high_corr = []
+            for pair_key, pair_data in pairs.items():
+                corr_val = float(pair_data.get("corr_30d", 0) or 0)
+                if abs(corr_val) > 0.70:
+                    high_corr.append(f"{pair_key}: {corr_val:.2f}")
+            if len(high_corr) >= 3:
+                lines.append(
+                    f"⚠️ KORElASYON SİGORTASI TETİKLENDİ: "
+                    f"{len(high_corr)} varlık çifti 0.70 üzerinde korelasyon gösteriyor. "
+                    f"({', '.join(high_corr[:3])}) "
+                    f"Nakit oranı önerilen seviyenin 1.5 katına çıkarılmalı!"
+                )
+    except Exception:
+        pass
 
     # ── Portföy Mevcut Durumu ────────────────────────────────────────────
     pa = portfolio_state.get("analytics", {})
