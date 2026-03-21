@@ -278,29 +278,54 @@ def analyze_us_equity_with_claude(economic_data: dict, portfolio_positions: list
                 shares = float(p.get("shares", 0))
                 val    = shares * cur
                 
-                # Temel metrikler
+                # Temel metrikler — her alan için ayrı fallback
                 try:
                     info = _yf_micro.Ticker(ticker).info
-                    beta         = info.get("beta", "?")
-                    fcf          = info.get("freeCashflow", 0) or 0
-                    market_cap   = info.get("marketCap", 0) or 0
-                    fcf_yield    = (fcf / market_cap * 100) if market_cap > 0 and fcf else 0
-                    de_ratio     = info.get("debtToEquity", 0) or 0
-                    rev_per_emp_note = ""
-                    rev = info.get("totalRevenue", 0) or 0
-                    emp = info.get("fullTimeEmployees", 0) or 0
+                except Exception:
+                    info = {}
+
+                def _safe(val, default="N/A"):
+                    """None, NaN, 0 gibi geçersiz değerler için fallback."""
+                    import math
+                    if val is None:
+                        return default
+                    try:
+                        if isinstance(val, float) and math.isnan(val):
+                            return default
+                    except Exception:
+                        pass
+                    return val
+
+                try:
+                    beta       = _safe(info.get("beta"), "N/A")
+                    beta_str   = f"{beta:.1f}" if isinstance(beta, float) else str(beta)
+
+                    fcf        = float(_safe(info.get("freeCashflow"), 0) or 0)
+                    mktcap     = float(_safe(info.get("marketCap"),    0) or 0)
+                    fcf_yield  = round(fcf / mktcap * 100, 1) if mktcap > 0 and fcf != 0 else 0
+                    fcf_str    = f"{fcf_yield:+.1f}%" if fcf_yield != 0 else "N/A"
+
+                    de_raw     = _safe(info.get("debtToEquity"), None)
+                    de_str     = f"{float(de_raw):.1f}" if de_raw is not None else "N/A"
+
+                    rev        = float(_safe(info.get("totalRevenue"),      0) or 0)
+                    emp        = float(_safe(info.get("fullTimeEmployees"), 0) or 0)
                     if rev > 0 and emp > 0:
-                        rev_per_emp = rev / emp / 1000  # K dolar
-                        rev_per_emp_note = f"Gelir/Çalışan: ${rev_per_emp:.0f}K"
-                    
+                        rpe_str = f"Gelir/Çalışan: ${rev/emp/1000:.0f}K"
+                    else:
+                        rpe_str = "Gelir/Çalışan: N/A"
+
                     lines.append(
                         f"• {ticker}: K/Z %{pnl:+.0f} | Değer: ${val:,.0f} | "
-                        f"Beta: {beta} | FCF Getirisi: {fcf_yield:+.1f}% | "
-                        f"Borç/Özkaynak: {de_ratio:.1f} | {rev_per_emp_note} | "
+                        f"Beta: {beta_str} | FCF Getirisi: {fcf_str} | "
+                        f"Borç/Özkaynak: {de_str} | {rpe_str} | "
                         f"Sektör: {p.get('sector','?')}"
                     )
                 except Exception:
-                    lines.append(f"• {ticker}: K/Z %{pnl:+.0f}, Değer: ${val:,.0f}, Sektör: {p.get('sector','?')}")
+                    lines.append(
+                        f"• {ticker}: K/Z %{pnl:+.0f} | Değer: ${val:,.0f} | "
+                        f"Beta: N/A | FCF: N/A | Sektör: {p.get('sector','?')}"
+                    )
         except Exception:
             for p in us_positions[:8]:
                 pnl = ((p.get("current_price", p["avg_cost"]) - p["avg_cost"])
