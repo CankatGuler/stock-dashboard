@@ -5157,7 +5157,7 @@ with tab_strategy:
     # ── Katman 3: Strateji Üret ───────────────────────────────────────────
     st.markdown('<hr style="border-color:var(--color-border-tertiary);margin:0.5rem 0;">', unsafe_allow_html=True)
 
-    _strat_c1, _strat_c2 = st.columns([2, 1])
+    _strat_c1, _strat_c2, _strat_c3 = st.columns([2, 1, 1])
     with _strat_c1:
         st.markdown(
             '<div style="font-size:0.75rem;color:var(--color-text-secondary);line-height:1.7;">'
@@ -5173,6 +5173,215 @@ with tab_strategy:
             "🧭 Strateji Üret",
             key="btn_strategy", use_container_width=True, type="primary",
         )
+    with _strat_c3:
+        _run_simulation = st.button(
+            "🧪 Senaryo Simülasyonu",
+            key="btn_simulation", use_container_width=True,
+            help="Olası piyasa senaryolarında portföyü test et",
+        )
+
+    # ── Senaryo Simülasyonu ───────────────────────────────────────────────
+    if _run_simulation:
+        from scenario_simulator import (
+            SCENARIOS, build_scenario_data, build_scenario_director_prompt
+        )
+        st.markdown('<hr style="border-color:var(--color-border-tertiary);margin:0.5rem 0;">',
+                    unsafe_allow_html=True)
+        st.markdown(
+            '<div style="font-size:0.7rem;color:#5a6a7a;text-transform:uppercase;'
+            'letter-spacing:0.1em;">🧪 SENARYO SİMÜLASYONU</div>',
+            unsafe_allow_html=True)
+
+        _sim_scenarios = {k: v["isim"] for k, v in SCENARIOS.items()}
+        _sim_col1, _sim_col2 = st.columns([2, 1])
+        with _sim_col1:
+            _sim_key = st.selectbox(
+                "Senaryo Seç:",
+                options=list(_sim_scenarios.keys()),
+                format_func=lambda x: _sim_scenarios[x],
+                key="sim_scenario_sel",
+            )
+        with _sim_col2:
+            _run_sim_now = st.button("▶ Simülasyonu Çalıştır",
+                                     key="btn_run_sim", use_container_width=True, type="primary")
+
+        # Senaryo açıklaması
+        if _sim_key:
+            _sc_info = SCENARIOS[_sim_key]
+            st.info(f"**{_sc_info['isim']}**\n\n{_sc_info['ozet']}")
+
+        if _run_sim_now:
+            _sim_port = [
+                {**p, "current_price": p.get("avg_cost", 0)}
+                for p in _port_now if float(p.get("shares", 0)) > 0
+            ]
+            _usd_try_sim = 38.0
+            try:
+                import yfinance as _yf_sim
+                _usd_try_sim = float(_yf_sim.Ticker("USDTRY=X").fast_info.last_price or 38.0)
+            except Exception:
+                pass
+
+            _sim_data = build_scenario_data(
+                scenario_key        = _sim_key,
+                portfolio_positions = _sim_port,
+                portfolio_cash      = _cash_now,
+                user_profile        = {
+                    "risk_tol":        _risk_tol,
+                    "time_horizon":    _time_horizon,
+                    "goal":            _goal,
+                    "year_target_pct": float(st.session_state.get("st_year_target", 40.0)),
+                },
+                usd_try = _usd_try_sim,
+            )
+
+            # Mevcut vs tahmini ağırlık görselleştirmesi
+            _s1, _s2, _s3 = st.columns(3)
+            with _s1:
+                st.metric("Mevcut Portföy", f"${_sim_data['portfolio']['analytics']['total_with_cash']:,.0f}")
+            with _s2:
+                st.metric("Senaryo Sonrası", f"${_sim_data['projected_total']:,.0f}",
+                          delta=f"{_sim_data['projected_loss']:+,.0f}$")
+            with _s3:
+                _etki_pct = _sim_data['projected_loss'] / max(_sim_data['portfolio']['analytics']['total_with_cash'], 1) * 100
+                st.metric("Etki %", f"{_etki_pct:+.1f}%")
+
+            # Mevcut ağırlıklar
+            st.markdown("**Mevcut Ağırlıklar:**")
+            _aw_cols = st.columns(4)
+            _ac_labels = {"us_equity":"🇺🇸 ABD", "crypto":"₿ Kripto",
+                          "commodity":"🥇 Emtia", "tefas":"🇹🇷 TEFAS", "other":"Diğer"}
+            for i, (ac, pct) in enumerate(sorted(_sim_data['class_weights_now'].items(),
+                                                  key=lambda x:-x[1])):
+                with _aw_cols[i % 4]:
+                    st.metric(_ac_labels.get(ac, ac), f"%{pct:.1f}")
+
+            # Direktörü çalıştır
+            with st.spinner(f"🧭 Direktör senaryo analizi yapıyor..."):
+                _sim_prompt = build_scenario_director_prompt(_sim_data)
+                _api_key = os.getenv("ANTHROPIC_API_KEY", "")
+                if not _api_key:
+                    st.error("ANTHROPIC_API_KEY eksik.")
+                else:
+                    import anthropic as _ant_sim
+                    _sim_client = _ant_sim.Anthropic(api_key=_api_key)
+
+                    _sim_system = """Sen çok varlıklı portföy yönetiminde uzmanlaşmış strateji direktörüsün.
+Bir senaryo simülasyonu yapıyorsun. Bu senaryo GERÇEKLEŞIYOR.
+Görevin: Bu senaryo karşısında portföyü 4 varlık sınıfı arasında nasıl yeniden ağırlıklandıracağını belirlemek.
+
+Yanıtını şu JSON formatında ver:
+{
+  "senaryo_yorumu": "Senaryonun gerçek anlamı — panik mi, resesyon mu, fırsat mı?",
+  "onerilen_agirliklar": {
+    "us_equity":  {"pct": 0, "degisim": "+/-X pp", "gerekce": "..."},
+    "crypto":     {"pct": 0, "degisim": "+/-X pp", "gerekce": "..."},
+    "commodity":  {"pct": 0, "degisim": "+/-X pp", "gerekce": "..."},
+    "tefas":      {"pct": 0, "degisim": "+/-X pp", "gerekce": "..."},
+    "nakit":      {"pct": 0, "degisim": "+/-X pp", "gerekce": "..."}
+  },
+  "zamanlama": "hemen|kademeli_1hafta|bekle_teyit",
+  "zamanlama_gerekce": "...",
+  "kritik_aksiyonlar": [
+    {"oncelik": 1, "aksiyon": "...", "ticker": "...", "neden": "..."},
+    {"oncelik": 2, "aksiyon": "...", "ticker": "...", "neden": "..."},
+    {"oncelik": 3, "aksiyon": "...", "ticker": "...", "neden": "..."}
+  ],
+  "senaryo_sonu_sinyali": "Bu senaryonun bitmesinin/pozisyon değiştirmenin sinyali",
+  "en_buyuk_risk": "Bu senaryo analizinde en çok yanılabileceğimiz nokta"
+}
+Türkçe yaz. Toplam ağırlıklar %100 olmalı."""
+
+                    try:
+                        _sim_resp = _sim_client.messages.create(
+                            model="claude-opus-4-5",
+                            max_tokens=3000,
+                            system=_sim_system,
+                            messages=[{"role":"user","content":_sim_prompt}]
+                        )
+                        _sim_result_raw = _sim_resp.content[0].text
+                        st.session_state["simulation_result"] = _sim_result_raw
+                        st.session_state["simulation_data"]   = _sim_data
+                    except Exception as _se:
+                        st.error(f"Simülasyon hatası: {_se}")
+
+        # Simülasyon sonuçları
+        if st.session_state.get("simulation_result"):
+            import re as _re_sim
+            _raw = st.session_state["simulation_result"]
+
+            # JSON parse
+            try:
+                _json_match = _re_sim.search(r'\{.*\}', _raw, _re_sim.DOTALL)
+                _sim_json   = json.loads(_json_match.group()) if _json_match else {}
+            except Exception:
+                _sim_json = {}
+
+            if _sim_json:
+                # Senaryo yorumu
+                st.markdown(f"""
+<div style="background:#111927;border-left:4px solid #4fc3f7;border-radius:6px;
+     padding:1rem;margin:1rem 0;">
+<div style="font-size:0.65rem;color:#5a6a7a;font-weight:700;margin-bottom:0.4rem;">
+🧠 DİREKTÖR SENARYO YORUMU</div>
+<div style="color:#e8edf3;">{_sim_json.get("senaryo_yorumu","")}</div>
+</div>""", unsafe_allow_html=True)
+
+                # Önerilen ağırlıklar
+                st.markdown("**📊 Önerilen Yeniden Ağırlıklandırma:**")
+                _ow = _sim_json.get("onerilen_agirliklar", {})
+                _ow_cols = st.columns(len(_ow))
+                _ac_emoji = {"us_equity":"🇺🇸","crypto":"₿","commodity":"🥇","tefas":"🇹🇷","nakit":"💵"}
+                for i, (ac, info) in enumerate(_ow.items()):
+                    with _ow_cols[i]:
+                        _pct_now = st.session_state.get("simulation_data",{}).get(
+                            "class_weights_now",{}).get(ac, 0)
+                        _pct_new = info.get("pct", 0)
+                        _delta   = _pct_new - _pct_now
+                        _em      = _ac_emoji.get(ac, "📌")
+                        st.markdown(
+                            f'<div style="background:#1a2332;border-radius:8px;padding:0.7rem;text-align:center;">'
+                            f'<div style="font-size:0.7rem;color:#8a9ab0;">{_em} {ac.upper()}</div>'
+                            f'<div style="font-size:1.3rem;font-weight:700;color:#e8edf3;">%{_pct_new}</div>'
+                            f'<div style="font-size:0.8rem;color={"#00c48c" if _delta>=0 else "#e74c3c"};">{_delta:+.0f}pp</div>'
+                            f'<div style="font-size:0.7rem;color:#8a9ab0;margin-top:4px;">{info.get("gerekce","")[:60]}</div>'
+                            f'</div>',
+                            unsafe_allow_html=True)
+
+                # Zamanlama
+                _zam = _sim_json.get("zamanlama","")
+                _zam_color = {"hemen":"#e74c3c","kademeli_1hafta":"#ffb300","bekle_teyit":"#4fc3f7"}.get(_zam,"#8a9ab0")
+                st.markdown(
+                    f'<div style="margin:0.8rem 0;padding:0.5rem 1rem;background:#1a2332;border-radius:6px;">'
+                    f'<span style="color:{_zam_color};font-weight:700;">⏱ Zamanlama: {_zam.upper()}</span> '
+                    f'— {_sim_json.get("zamanlama_gerekce","")}</div>',
+                    unsafe_allow_html=True)
+
+                # Kritik aksiyonlar
+                _aksiyonlar = _sim_json.get("kritik_aksiyonlar", [])
+                if _aksiyonlar:
+                    st.markdown("**🎯 Kritik Aksiyonlar:**")
+                    for _ak in _aksiyonlar:
+                        _pr = _ak.get("oncelik",0)
+                        _cl = "#e74c3c" if _pr==1 else ("#ffb300" if _pr==2 else "#4fc3f7")
+                        st.markdown(
+                            f'<div style="border-left:3px solid {_cl};padding:0.4rem 0.8rem;'
+                            f'background:#1a2332;border-radius:0 6px 6px 0;margin-bottom:0.3rem;">'
+                            f'<b style="color:{_cl};">#{_pr}</b> {_ak.get("ticker","")}: '
+                            f'{_ak.get("aksiyon","")} — '
+                            f'<span style="color:#8a9ab0;font-size:0.8rem;">{_ak.get("neden","")}</span>'
+                            f'</div>',
+                            unsafe_allow_html=True)
+
+                # Senaryo sonu sinyali & en büyük risk
+                _rc1, _rc2 = st.columns(2)
+                with _rc1:
+                    st.success(f"✅ **Senaryo Sonu Sinyali:** {_sim_json.get('senaryo_sonu_sinyali','')}")
+                with _rc2:
+                    st.warning(f"⚠️ **En Büyük Risk:** {_sim_json.get('en_buyuk_risk','')}")
+            else:
+                # JSON parse başarısız — ham metin göster
+                st.markdown(_raw)
 
     # Strateji çalıştır — İKİ AŞAMALI SİSTEM
     if _run_strategy:
