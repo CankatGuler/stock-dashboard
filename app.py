@@ -5285,28 +5285,80 @@ with tab_strategy:
                         import anthropic as _ant_sim
                         _sim_client = _ant_sim.Anthropic(api_key=_api_key)
                         _sim_system = """Sen çok varlıklı portföy yönetiminde uzmanlaşmış strateji direktörüsün.
-Bir senaryo simülasyonu yapıyorsun. Bu senaryo GERÇEKLEŞIYOR.
-Görevin: Portföyü 4 varlık sınıfı arasında nasıl yeniden ağırlıklandıracağını belirlemek.
+ABD hisse, kripto, emtia ve TEFAS fonlarını aynı anda yönetiyorsun.
+Bu bir SENARYO SİMÜLASYONU — senaryo şu an GERÇEKLEŞIYOR.
 
-Yanıtını şu JSON formatında ver (başka hiçbir şey yazma):
+═══ MİKRO-METRİK ODAĞI ═══
+Her ABD hissesini şu etiketlerle değerlendir:
+- [Faiz_indirim_pozitif] veya [Faiz_indirim_negatif]
+- [Resesyon_defansif] veya [Resesyon_hassas]
+- [Yuksek_FCF] veya [Dusuk_FCF]
+FCF yield yüksek + borç düşük = koru. Tersini azalt/sat.
+
+═══ TEFAS LOOK-THROUGH ═══
+IIH = %90 büyük şirket hissesi → resesyon duyarlılığı YÜKSEK
+AEY = %80 altın → resesyon koruması YÜKSEK
+Her fonun içeriğine göre ayrı karar ver.
+
+═══ SENARYO OLASILILANDIRMASI (ZORUNLU) ═══
+Kararları 3 senaryonun ağırlıklı ortalaması olarak ver:
+- Baz (%55): Fed önleyici indirim → soft landing, 6-9 ay toparlanma
+- Alternatif (%35): Hard landing → resesyon derinleşiyor, 12-18 ay baskı
+- Kuyruk (%10): Sistemik kriz → carry trade çöküşü + kredi donması
+Ağırlıklı beklenen etki = Σ(olasılık × portföy_etkisi). Negatif beklentide agresif pozisyon alma.
+
+═══ KORElASYON SİGORTASI ═══
+VIX 34 + USDJPY 142 = yüksek korelasyon ortamı.
+Kripto-Nasdaq-BIST birlikte düşüyorsa nakit önerisini 1.5x artır ve bunu belirt.
+
+Yanıtını SADECE aşağıdaki JSON formatında ver (açıklama ekleme):
 {
-  "senaryo_yorumu": "Senaryonun gerçek anlamı — panik mi, resesyon mu, fırsat mı?",
+  "senaryo_yorumu": "2-3 cümle — hangi olasılık ağır basıyor, neden?",
+  "senaryo_olasiliklari": {
+    "baz":        {"tanim": "...", "olasilik_pct": 55, "portfoy_etkisi": "+/-%X"},
+    "alternatif": {"tanim": "...", "olasilik_pct": 35, "portfoy_etkisi": "+/-%X"},
+    "kuyruk":     {"tanim": "...", "olasilik_pct": 10, "portfoy_etkisi": "+/-%X"}
+  },
+  "harmonize_strateji": "Ağırlıklı ortalama sonucu — tek cümle net karar",
   "onerilen_agirliklar": {
-    "us_equity":  {"pct": 0, "degisim": "+/-X pp", "gerekce": "tek cümle"},
-    "crypto":     {"pct": 0, "degisim": "+/-X pp", "gerekce": "tek cümle"},
-    "commodity":  {"pct": 0, "degisim": "+/-X pp", "gerekce": "tek cümle"},
-    "tefas":      {"pct": 0, "degisim": "+/-X pp", "gerekce": "tek cümle"},
-    "nakit":      {"pct": 0, "degisim": "+/-X pp", "gerekce": "tek cümle"}
+    "us_equity":  {"pct": 0, "onceki_pct": 19, "degisim_pp": 0, "gerekce": "tek cümle"},
+    "crypto":     {"pct": 0, "onceki_pct": 20, "degisim_pp": 0, "gerekce": "tek cümle"},
+    "commodity":  {"pct": 0, "onceki_pct": 17, "degisim_pp": 0, "gerekce": "tek cümle"},
+    "tefas":      {"pct": 0, "onceki_pct": 40, "degisim_pp": 0, "gerekce": "tek cümle"},
+    "nakit":      {"pct": 0, "onceki_pct":  4, "degisim_pp": 0, "gerekce": "tek cümle"}
+  },
+  "hisse_bazli_kararlar": [
+    {
+      "ticker": "TICKER",
+      "etiketler": ["Faiz_indirim_pozitif", "Resesyon_defansif"],
+      "fcf_durumu": "Yuksek_FCF|Dusuk_FCF|N/A",
+      "karar": "KORU|ARTIR|AZALT|SAT",
+      "gerekce": "tek cümle"
+    }
+  ],
+  "tefas_kararlari": [
+    {
+      "ticker": "IIH",
+      "icerik": "%90 hisse yogun",
+      "resesyon_duyarlilik": "YUKSEK",
+      "karar": "AZALT|TUT|ARTIR",
+      "gerekce": "tek cümle"
+    }
+  ],
+  "korelasyon_sigortasi": {
+    "aktif": true,
+    "neden": "VIX 34 + USDJPY 142 — korelasyon artıyor",
+    "nakit_artirim_pp": 5
   },
   "zamanlama": "hemen|kademeli_1hafta|bekle_teyit",
   "zamanlama_gerekce": "neden bu zamanlama",
   "kritik_aksiyonlar": [
-    {"oncelik": 1, "aksiyon": "ne yap", "ticker": "TICKER", "neden": "neden"},
-    {"oncelik": 2, "aksiyon": "ne yap", "ticker": "TICKER", "neden": "neden"},
-    {"oncelik": 3, "aksiyon": "ne yap", "ticker": "TICKER", "neden": "neden"}
+    {"oncelik": 1, "ticker": "...", "aksiyon": "...", "neden": "..."},
+    {"oncelik": 2, "ticker": "...", "aksiyon": "...", "neden": "..."},
+    {"oncelik": 3, "ticker": "...", "aksiyon": "...", "neden": "..."}
   ],
-  "senaryo_sonu_sinyali": "Ne olunca pozisyon değiştirilmeli",
-  "en_buyuk_risk": "Bu analizde en çok yanılabileceğimiz nokta"
+  "senaryo_sonu_sinyali": "Hangi 3-4 gösterge risk-on'a dönüşü teyit eder",
+  "en_buyuk_yanilma_riski": "Bu analizde en çok yanılabileceğimiz nokta"
 }
 Türkçe yaz. Ağırlıklar toplamı %100 olmalı."""
 
@@ -5335,7 +5387,9 @@ Türkçe yaz. Ağırlıklar toplamı %100 olmalı."""
                 pass
 
             if _sim_json:
-                # Direktör yorumu
+                _karar_renk = {"KORU":"#00c48c","ARTIR":"#4fc3f7","AZALT":"#ffb300","SAT":"#e74c3c"}
+
+                # ── 1. Direktör yorumu ───────────────────────────────────
                 st.markdown(
                     f'<div style="background:#111927;border-left:4px solid #4fc3f7;'
                     f'border-radius:6px;padding:1rem;margin:1rem 0;">'
@@ -5345,40 +5399,130 @@ Türkçe yaz. Ağırlıklar toplamı %100 olmalı."""
                     f'</div>',
                     unsafe_allow_html=True)
 
-                # Önerilen ağırlıklar
+                # ── 2. Senaryo olasılıklandırması ────────────────────────
+                _so = _sim_json.get("senaryo_olasiliklari", {})
+                _hs = _sim_json.get("harmonize_strateji", "")
+                if _so:
+                    st.markdown(
+                        '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+                        'letter-spacing:0.1em;margin:0.8rem 0 0.4rem;">🎲 SENARYO OLASILILANDIRMASI</div>',
+                        unsafe_allow_html=True)
+                    _sc1, _sc2, _sc3 = st.columns(3)
+                    for _col, _skey, _slabel, _scolor in [
+                        (_sc1, "baz",        "Baz Senaryo",  "#00c48c"),
+                        (_sc2, "alternatif", "Alternatif",    "#ffb300"),
+                        (_sc3, "kuyruk",     "Kuyruk Riski",  "#e74c3c"),
+                    ]:
+                        _sd = _so.get(_skey, {})
+                        if _sd:
+                            with _col:
+                                st.markdown(
+                                    f'<div style="background:#1a2332;border-top:3px solid {_scolor};'
+                                    f'border-radius:6px;padding:0.7rem;text-align:center;">'
+                                    f'<div style="font-size:0.62rem;color:{_scolor};font-weight:700;">{_slabel}</div>'
+                                    f'<div style="font-size:1.2rem;font-weight:700;color:#e8edf3;">%{_sd.get("olasilik_pct",0)}</div>'
+                                    f'<div style="font-size:0.72rem;color:#b0bec5;">{_sd.get("tanim","")}</div>'
+                                    f'<div style="font-size:0.72rem;color:{_scolor};font-weight:600;">{_sd.get("portfoy_etkisi","")}</div>'
+                                    f'</div>',
+                                    unsafe_allow_html=True)
+                if _hs:
+                    st.markdown(
+                        f'<div style="background:#1a1a2e;border-left:3px solid #ce93d8;'
+                        f'border-radius:0 6px 6px 0;padding:0.6rem 1rem;margin:0.5rem 0;'
+                        f'font-size:0.85rem;color:#e8edf3;">🎯 <b>Harmonize Strateji:</b> {_hs}</div>',
+                        unsafe_allow_html=True)
+
+                # ── 3. Önerilen ağırlıklar ───────────────────────────────
                 st.markdown("**📊 Önerilen Yeniden Ağırlıklandırma:**")
                 _ow = _sim_json.get("onerilen_agirliklar", {})
-                _ac_emoji = {"us_equity":"🇺🇸","crypto":"₿","commodity":"🥇",
-                             "tefas":"🇹🇷","nakit":"💵"}
+                _ac_emoji = {"us_equity":"🇺🇸","crypto":"₿","commodity":"🥇","tefas":"🇹🇷","nakit":"💵"}
                 _ow_cols = st.columns(max(len(_ow), 1))
                 _sim_data_ss = st.session_state.get("simulation_data", {})
                 _cw_now = _sim_data_ss.get("class_weights_now", {})
                 for i, (ac, info) in enumerate(_ow.items()):
                     with _ow_cols[i]:
-                        _pct_now = _cw_now.get(ac, 0)
                         _pct_new = info.get("pct", 0)
-                        _delta   = _pct_new - _pct_now
-                        _dc      = "#00c48c" if _delta >= 0 else "#e74c3c"
+                        _delta   = info.get("degisim_pp", _pct_new - _cw_now.get(ac, 0))
+                        _dc = "#00c48c" if _delta >= 0 else "#e74c3c"
                         st.markdown(
                             f'<div style="background:#1a2332;border-radius:8px;padding:0.7rem;text-align:center;">'
                             f'<div style="font-size:0.7rem;color:#8a9ab0;">{_ac_emoji.get(ac,"📌")} {ac.upper()}</div>'
                             f'<div style="font-size:1.3rem;font-weight:700;color:#e8edf3;">%{_pct_new}</div>'
                             f'<div style="font-size:0.85rem;color:{_dc};font-weight:600;">{_delta:+.0f}pp</div>'
-                            f'<div style="font-size:0.68rem;color:#8a9ab0;margin-top:4px;">{info.get("gerekce","")[:55]}</div>'
+                            f'<div style="font-size:0.68rem;color:#8a9ab0;margin-top:4px;">{info.get("gerekce","")[:60]}</div>'
                             f'</div>',
                             unsafe_allow_html=True)
 
-                # Zamanlama
+                # ── 4. Hisse bazlı mikro kararlar ────────────────────────
+                _hk = _sim_json.get("hisse_bazli_kararlar", [])
+                if _hk:
+                    st.markdown(
+                        '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+                        'letter-spacing:0.1em;margin:0.8rem 0 0.4rem;">🎯 HİSSE BAZLI MİKRO KARARLAR</div>',
+                        unsafe_allow_html=True)
+                    for _hisse in _hk:
+                        _kr   = _hisse.get("karar","KORU")
+                        _kc   = _karar_renk.get(_kr, "#8a9ab0")
+                        _tags = _hisse.get("etiketler", [])
+                        _tag_html = " ".join(
+                            f'<span style="background:#1e2833;border:1px solid #4fc3f755;'
+                            f'border-radius:3px;padding:1px 6px;font-size:0.65rem;color:#4fc3f7;">{t}</span>'
+                            for t in _tags
+                        )
+                        st.markdown(
+                            f'<div style="border-left:3px solid {_kc};padding:0.4rem 0.8rem;'
+                            f'background:#1a2332;border-radius:0 6px 6px 0;margin-bottom:0.3rem;">'
+                            f'<span style="font-weight:700;color:{_kc};">{_kr}</span> '
+                            f'<b style="color:#e8edf3;">{_hisse.get("ticker","")}</b> '
+                            f'{_tag_html} '
+                            f'<span style="color:#8a9ab0;font-size:0.78rem;">'
+                            f'FCF: {_hisse.get("fcf_durumu","N/A")} — {_hisse.get("gerekce","")}</span>'
+                            f'</div>',
+                            unsafe_allow_html=True)
+
+                # ── 5. TEFAS look-through kararları ──────────────────────
+                _tk = _sim_json.get("tefas_kararlari", [])
+                if _tk:
+                    st.markdown(
+                        '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+                        'letter-spacing:0.1em;margin:0.8rem 0 0.4rem;">🇹🇷 TEFAS LOOK-THROUGH</div>',
+                        unsafe_allow_html=True)
+                    for _tf in _tk:
+                        _tkr  = _tf.get("karar","TUT")
+                        _tkc  = _karar_renk.get(_tkr, "#8a9ab0")
+                        _duy  = _tf.get("resesyon_duyarlilik","?")
+                        _duyc = "#e74c3c" if any(x in _duy for x in ["YÜKSEK","YUKSEK","YOK"]) else "#00c48c"
+                        st.markdown(
+                            f'<div style="border-left:3px solid {_tkc};padding:0.4rem 0.8rem;'
+                            f'background:#1a2332;border-radius:0 6px 6px 0;margin-bottom:0.3rem;">'
+                            f'<span style="font-weight:700;color:{_tkc};">{_tkr}</span> '
+                            f'<b style="color:#e8edf3;">{_tf.get("ticker","")}</b> '
+                            f'<span style="color:#8a9ab0;font-size:0.75rem;">{_tf.get("icerik","")}</span> '
+                            f'<span style="background:{_duyc}22;color:{_duyc};border-radius:3px;'
+                            f'padding:1px 5px;font-size:0.65rem;">Resesyon: {_duy}</span> — '
+                            f'<span style="color:#8a9ab0;font-size:0.78rem;">{_tf.get("gerekce","")}</span>'
+                            f'</div>',
+                            unsafe_allow_html=True)
+
+                # ── 6. Korelasyon sigortası ──────────────────────────────
+                _ks = _sim_json.get("korelasyon_sigortasi", {})
+                if _ks and _ks.get("aktif"):
+                    st.warning(
+                        f"⚠️ **Korelasyon Sigortası Aktif** — {_ks.get('neden','')} "
+                        f"| Nakit artırım: +%{_ks.get('nakit_artirim_pp', 0)}")
+
+                # ── 7. Zamanlama ─────────────────────────────────────────
                 _zam = _sim_json.get("zamanlama", "")
-                _zam_color = {"hemen": "#e74c3c", "kademeli_1hafta": "#ffb300",
-                              "bekle_teyit": "#4fc3f7"}.get(_zam, "#8a9ab0")
+                _zam_color = {"hemen":"#e74c3c","kademeli_1hafta":"#ffb300",
+                              "bekle_teyit":"#4fc3f7"}.get(_zam, "#8a9ab0")
                 st.markdown(
                     f'<div style="margin:0.8rem 0;padding:0.6rem 1rem;background:#1a2332;border-radius:6px;">'
-                    f'<span style="color:{_zam_color};font-weight:700;">⏱ {_zam.replace("_"," ").upper()}</span>'
+                    f'<span style="color:{_zam_color};font-weight:700;">'
+                    f'⏱ {_zam.replace("_"," ").upper()}</span>'
                     f' — {_sim_json.get("zamanlama_gerekce","")}</div>',
                     unsafe_allow_html=True)
 
-                # Kritik aksiyonlar
+                # ── 8. Kritik aksiyonlar ─────────────────────────────────
                 _aksiyonlar = _sim_json.get("kritik_aksiyonlar", [])
                 if _aksiyonlar:
                     st.markdown("**🎯 Kritik Aksiyonlar:**")
@@ -5394,14 +5538,13 @@ Türkçe yaz. Ağırlıklar toplamı %100 olmalı."""
                             f'</div>',
                             unsafe_allow_html=True)
 
-                # Alt bilgiler
+                # ── 9. Alt bilgiler ──────────────────────────────────────
                 _rb1, _rb2 = st.columns(2)
                 with _rb1:
                     st.success(f"✅ **Senaryo Sonu:** {_sim_json.get('senaryo_sonu_sinyali','')}")
                 with _rb2:
-                    st.warning(f"⚠️ **Yanılma Riski:** {_sim_json.get('en_buyuk_risk','')}")
-            else:
-                st.markdown(_raw)
+                    _risk_txt = _sim_json.get("en_buyuk_yanilma_riski") or _sim_json.get("en_buyuk_risk","")
+                    st.warning(f"⚠️ **Yanılma Riski:** {_risk_txt}")
 
     # Strateji çalıştır — İKİ AŞAMALI SİSTEM
     if _run_strategy:
