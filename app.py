@@ -1071,24 +1071,51 @@ with tab_portfolio:
                 _us_cached.get("_tk_key") == _us_tk_key):
                 _us_price_map  = _us_cached["price_map"]
                 _us_change_map = _us_cached["change_map"]
+                _us_sector_map = _us_cached.get("sector_map", {})
             else:
-                with st.spinner("ABD hisse fiyatları çekiliyor..."):
+                with st.spinner("ABD hisse fiyatları ve sektörler çekiliyor..."):
                     _us_price_map  = {}
                     _us_change_map = {}
+                    _us_sector_map = {}
                     for _p in _us_all:
                         try:
-                            _fi = _yf_us.Ticker(_p["ticker"]).fast_info
-                            _pr = float(getattr(_fi, "last_price",     0) or 0)
-                            _pv = float(getattr(_fi, "previous_close", _pr) or _pr)
+                            # .info ile sektör + fiyat birlikte alınır
+                            _info = _yf_us.Ticker(_p["ticker"]).info
+                            _pr   = float(_info.get("currentPrice") or
+                                          _info.get("regularMarketPrice") or 0)
+                            _pv   = float(_info.get("previousClose") or _pr or 1)
+                            if _pr <= 0:  # fallback
+                                _fi = _yf_us.Ticker(_p["ticker"]).fast_info
+                                _pr = float(getattr(_fi, "last_price",     0) or 0)
+                                _pv = float(getattr(_fi, "previous_close", _pr) or _pr)
                             _ch = (_pr - _pv) / _pv * 100 if _pv > 0 else 0
                             if _pr > 0:
                                 _us_price_map[_p["ticker"]]  = _pr
                                 _us_change_map[_p["ticker"]] = round(_ch, 2)
+                            # Sektör: yfinance öncelikli, DB fallback
+                            _sec_yf = _info.get("sector") or _info.get("industry") or ""
+                            _sec_db = _p.get("sector", "")
+                            _bad    = {"", "Diğer", "Diger", "Other"}
+                            if _sec_yf and _sec_yf not in _bad:
+                                _us_sector_map[_p["ticker"]] = _sec_yf
+                            elif _sec_db and _sec_db not in _bad:
+                                _us_sector_map[_p["ticker"]] = _sec_db
                         except Exception:
-                            pass
+                            # fast_info ile sadece fiyat al
+                            try:
+                                _fi = _yf_us.Ticker(_p["ticker"]).fast_info
+                                _pr = float(getattr(_fi, "last_price",     0) or 0)
+                                _pv = float(getattr(_fi, "previous_close", _pr) or _pr)
+                                _ch = (_pr - _pv) / _pv * 100 if _pv > 0 else 0
+                                if _pr > 0:
+                                    _us_price_map[_p["ticker"]]  = _pr
+                                    _us_change_map[_p["ticker"]] = round(_ch, 2)
+                            except Exception:
+                                pass
                     st.session_state[_us_cache_key] = {
                         "price_map":  _us_price_map,
                         "change_map": _us_change_map,
+                        "sector_map": _us_sector_map,
                         "_tk_key":    _us_tk_key,
                     }
                     st.session_state[_us_ts_key] = _t_us.time()
@@ -1113,7 +1140,7 @@ with tab_portfolio:
                     "24s %":   f"{_chg:+.1f}%",
                     "Değer":   f"${_val:,.2f}",
                     "K/Z %":   f"{_pnl:+.1f}%",
-                    "Sektör":  _p.get("sector", "—"),
+                    "Sektör":  _us_sector_map.get(_p["ticker"]) or _p.get("sector") or "—",
                 })
 
             st.session_state["enriched_portfolio"] = [
