@@ -159,7 +159,332 @@ SCENARIOS = {
             "tefas":     {"kisa_vade": -8.0,  "orta_vade": -12.0},
         },
     },
+
+    # ══════════════════════════════════════════════════════════════════════
+    # SENARYOLARINIZDAKİ 3 SENARYO
+    # ══════════════════════════════════════════════════════════════════════
+
+    "yavas_kanama": {
+        "isim":   "Yavaş Kanama — Kredi Duvarı ve Zombi Şirketler",
+        "ozet": (
+            "Borsa nominal olarak çökmüyor ama enflasyondan arındırıldığında yıllarca "
+            "yerinde sayıyor. 1970'ler ABD'si ve 1990 sonrası Japonya senaryosu. "
+            "$14T kurumsal borç yeniden finansmanı %5-6 faizle yapılmak zorunda — "
+            "zombi şirketler nakit akışlarını faize veriyor, büyüme sıfır. "
+            "Reel getiri negatif, nominal getiri pozitif görünüyor."
+        ),
+        "tetikleyici": "Kurumsal tahvil vade dolumu + yüksek faiz kalıcılığı + zombi iflas dalgası",
+        "tarihsel_benzer": "1966-1982 ABD (kayıp on yıl), 1990-2010 Japonya (lost decade)",
+        "macro_overrides": {
+            "vix":         {"value": 18.0,  "change_pct": -5.0,  "signal": "green",
+                            "note": "VIX düşük — tehlike görünmüyor, aldatıcı sessizlik"},
+            "treasury_10y":{"value": 5.20,  "change_pct": +8.0,  "signal": "red",
+                            "note": "10Y yüksek faiz kalıcı — refinansman maliyeti artıyor"},
+            "credit_spread":{"value": 580,  "change_pct": +35.0, "signal": "red",
+                             "note": "HY spread 580bp — zombi şirket temerrüt riski yükseliyor"},
+            "gold":        {"value": 3600,  "change_pct": +8.0,  "signal": "green",
+                            "note": "Altın yükseliyor — enflasyon hedge talebi"},
+            "copper":      {"value": 3.85,  "change_pct": -8.0,  "signal": "red",
+                            "note": "Bakır düşüyor — gerçek büyüme zayıf"},
+            "dxy":         {"value": 105.0, "change_pct": +2.0,  "signal": "amber",
+                            "note": "Dolar güçlü — sermaye ABD'de kalıyor ama reel değer eriyor"},
+            "wti_oil":     {"value": 88.0,  "change_pct": +3.0,  "signal": "amber",
+                            "note": "Petrol orta seviyede — talep düşük ama arz kısıtlı"},
+        },
+        "economic_overrides": {
+            "CPI_YOY":  {"value": 4.2,  "prev": 3.1,  "note": "Enflasyon yapışkan — Fed hedefinin üzerinde kalıcı"},
+            "GDP":      {"value": 0.8,  "prev": 2.1,  "note": "Büyüme pozitif ama yetersiz — reel büyüme negatif"},
+            "ISM_MFG":  {"value": 46.5, "prev": 49.2, "note": "İmalat daralıyor — zombi şirketler yatırım yapmıyor"},
+            "NFP":      {"value": 45,   "prev": 180,  "note": "İstihdam yavaşladı — zombi şirketler işe almıyor"},
+            "CORP_DEBT":{"value": 14.2, "prev": 13.8, "note": "$14.2T kurumsal borç vadesi dolmakta — refinansman baskısı"},
+        },
+        "asset_impacts": {
+            "us_equity": {
+                "kisa_vade": +3.0,   # Nominal yükseliş var
+                "orta_vade": -15.0,  # Ama reel kayıp (enflasyon düşüldüğünde)
+                "en_iyi":  ["Temettü aristokratları (FCF güçlü)", "Sağlık/Utilities (fiyatlama gücü)", "Değer hisseleri"],
+                "en_kotu": ["Zombi şirketler (yüksek borç, negatif FCF)", "Büyüme hisseleri (uzun vadeli nakit akışı iskontolar)", "Küçük sermayeli (refinansman riski)"],
+                "not":     "UYARI: Nominal +%3 görünse de enflasyon %4.2 → reel getiri -%1.2",
+            },
+            "crypto": {
+                "kisa_vade": -5.0,
+                "orta_vade": +20.0,  # Bitcoin sabit arz → enflasyon hedge
+                "en_iyi":  ["BTC (sabit arz, enflasyon hedge)"],
+                "en_kotu": ["Spekülatif altcoinler (likidite kurur)"],
+            },
+            "commodity": {
+                "kisa_vade": +6.0,
+                "orta_vade": +25.0,  # En iyi reel koruyan varlık
+                "en_iyi":  ["Altın (merkez bankası alımları devam)", "Gümüş", "TIPS"],
+                "en_kotu": ["Petrol (talep düşük büyümeden)"],
+            },
+            "tefas": {
+                "kisa_vade": +2.0,   # TL nominal yükseliş
+                "orta_vade": -20.0,  # Ama dolar bazında kayıp
+                "en_iyi":  ["Altın fonları (AEY)", "Enflasyona endeksli tahvil fonları"],
+                "en_kotu": ["Hisse yoğun fonlar (IIH — zombi riski)", "TL tahvil fonları (reel negatif)"],
+            },
+        },
+    },
+
+    "likidite_soku": {
+        "isim":   "Likidite Şoku — Dash for Cash (Nakide Hücum)",
+        "ozet": (
+            "Herkes aynı anda nakde dönmek istiyor. VIX saatler içinde 45-50'ye fırlıyor. "
+            "Margin call dalgası başlıyor — fonlar zararına satmak yerine EN LİKİT ve "
+            "KÂRLİ varlıklarını satıyor: Altın, Bitcoin ve büyük teknoloji. "
+            "2008 Eylül ve 2020 Mart'ın tekrarı. Güvenli liman teorisi bu anda çöküyor."
+        ),
+        "tetikleyici": "Büyük hedge fon iflası veya prime brokerage krizi + margin call zinciri",
+        "tarihsel_benzer": "2008 Eylül (Lehman), 2020 Mart (COVID), 2022 Mart (LME nikel)",
+        "macro_overrides": {
+            "vix":          {"value": 48.0,  "change_pct": +95.0, "signal": "red",
+                             "note": "VIX 48 — panik zirvesi. 2020 Mart benzeri"},
+            "move_index":   {"value": 185.0, "change_pct": +55.0, "signal": "red",
+                             "note": "MOVE 185 — tahvil piyasası da donuyor"},
+            "credit_spread":{"value": 820,   "change_pct": +120.0,"signal": "red",
+                             "note": "HY spread 820bp — kredi piyasası dondu"},
+            "gold":         {"value": 2900,  "change_pct": -12.0, "signal": "red",
+                             "note": "ALTIN DÜŞÜYOR — margin call için satılıyor (karşı-sezgisel!)"},
+            "treasury_10y": {"value": 3.20,  "change_pct": -22.0, "signal": "green",
+                             "note": "10Y rallisi — tek güvenli liman kısa ABD tahvili"},
+            "usdjpy":       {"value": 138.0, "change_pct": -10.0, "signal": "red",
+                             "note": "Yen güçleniyor — carry trade çözülüyor, global satış"},
+            "dxy":          {"value": 108.0, "change_pct": +5.0,  "signal": "amber",
+                             "note": "Dolar güçleniyor — nakide hücum = dolara hücum"},
+            "wti_oil":      {"value": 58.0,  "change_pct": -25.0, "signal": "red",
+                             "note": "Petrol çöküyor — talep panik, margin satışı"},
+        },
+        "economic_overrides": {
+            "VIX_TERM":  {"value": 48.0,  "prev": 22.0, "note": "VIX term yapısı backwardation — anlık panik"},
+            "TED_SPREAD":{"value": 185,   "prev": 35,   "note": "TED spread 185bp — bankalar birbirine borç vermiyor"},
+            "LIBOR_OIS": {"value": 145,   "prev": 12,   "note": "Fonlama piyasası dondurulmuş"},
+            "NFP":       {"value": -250,  "prev": 150,  "note": "İstihdam çöküyor — gerçek ekonomi etkilendi"},
+        },
+        "asset_impacts": {
+            "us_equity": {
+                "kisa_vade": -25.0,
+                "orta_vade": +35.0,  # Fed müdahalesi sonrası V şekilli toparlanma mümkün
+                "en_iyi":  ["Kısa ABD tahvili (SHV, BIL)", "Nakit dolar"],
+                "en_kotu": ["Her şey düşüyor — korelasyon 1.0'a gidiyor"],
+                "not":     "KRİTİK: İlk 48 saatte kaliteli varlıklar da düşer. Fed müdahalesi bekle.",
+            },
+            "crypto": {
+                "kisa_vade": -40.0,
+                "orta_vade": +60.0,
+                "en_iyi":  ["BTC (kısa vade düşer ama uzun vade toparlanır)"],
+                "en_kotu": ["Tüm altcoinler — likidite yokluğunda %70-80 düşebilir"],
+            },
+            "commodity": {
+                "kisa_vade": -15.0,  # ALTIN DA DÜŞER — margin satışı
+                "orta_vade": +20.0,
+                "en_iyi":  ["Sonraki aşamada altın — Fed QE sonrası"],
+                "en_kotu": ["Altın bile kısa vadede satılır (karşı-sezgisel!)"],
+                "not":     "ALTIN PARADOKSU: Likidite krizinde altın önce düşer, sonra toparlanır",
+            },
+            "tefas": {
+                "kisa_vade": -18.0,
+                "orta_vade": -5.0,
+                "en_iyi":  ["Kamu tahvil fonları (GAF)"],
+                "en_kotu": ["IIH, TTE — hisse yoğun fonlar"],
+            },
+        },
+    },
+
+    "mali_dominans": {
+        "isim":   "Mali Dominans — İtibari Para Çöküşü (Nominal Melt-Up)",
+        "ozet": (
+            "Fed bağımsızlığını kaybediyor, devlet borçlarını finanse etmek için "
+            "para basıyor. Borsa düşmüyor — çıldırmış gibi yükseliyor (nominal). "
+            "Ama ekmek fiyatı borsadan daha hızlı artıyor. "
+            "Reel getiri negatif. Türkiye 2021-2022, Weimar, Venezuela örnekleri. "
+            "Sabit arzlı varlıklar (BTC, altın) gerçek kazanan."
+        ),
+        "tetikleyici": "Kongre bütçe krizi + Fed YCC (Yield Curve Control) açıklaması + dolar güven kaybı",
+        "tarihsel_benzer": "Türkiye 2021-2022, 1970'ler ABD, Weimar 1921-1923, Venezuela 2016+",
+        "macro_overrides": {
+            "vix":          {"value": 22.0,  "change_pct": +5.0,  "signal": "amber",
+                             "note": "VIX orta — piyasa panik değil, enflasyonla yaşıyor"},
+            "gold":         {"value": 5200,  "change_pct": +35.0, "signal": "green",
+                             "note": "Altın $5200 — para değer kaybı hedge"},
+            "treasury_10y": {"value": 2.80,  "change_pct": -35.0, "signal": "amber",
+                             "note": "10Y yapay baskıda — Fed YCC uyguluyor, gerçek faiz negatif"},
+            "dxy":          {"value": 88.0,  "change_pct": -12.0, "signal": "red",
+                             "note": "Dolar çöküyor — güven kaybı, rezerv para statüsü sorgulanıyor"},
+            "wti_oil":      {"value": 145.0, "change_pct": +45.0, "signal": "red",
+                             "note": "Petrol $145 — dolar zayıflığı + talep enflasyonu"},
+            "copper":       {"value": 6.20,  "change_pct": +25.0, "signal": "green",
+                             "note": "Bakır $6.20 — nominal büyüme + dolar zayıflığı"},
+            "usdjpy":       {"value": 175.0, "change_pct": +15.0, "signal": "amber",
+                             "note": "Dolar-yen yükseliyor — yen de değer kaybediyor"},
+        },
+        "economic_overrides": {
+            "CPI_YOY":   {"value": 12.5, "prev": 3.1,  "note": "CPI %12.5 — çift haneli enflasyon"},
+            "GDP_NOMINAL":{"value": 8.5, "prev": 2.1,  "note": "Nominal GDP +%8.5 ama reel +%0.5"},
+            "M2_GROWTH": {"value": 18.0, "prev": 4.5,  "note": "M2 para arzı +%18 — para basımı hızlandı"},
+            "REAL_RATE":  {"value": -7.5, "prev": 1.2, "note": "Reel faiz -%7.5 — paradan kaç!"},
+            "DEBT_GDP":   {"value": 145, "prev": 125,   "note": "Kamu borcu/GDP %145 — sürdürülemez"},
+        },
+        "asset_impacts": {
+            "us_equity": {
+                "kisa_vade": +18.0,  # Nominal yükseliş
+                "orta_vade": +45.0,  # Nominal çok yüksek ama reel?
+                "en_iyi":  ["Reel varlık şirketleri (madencilik, enerji, gayrimenkul)", "Uluslararası geliri yüksek şirketler"],
+                "en_kotu": ["Nakit tutan şirketler", "Uzun vadeli sabit gelirli kontratlar"],
+                "not":     "UYARI: Nominal +%45 görünse de enflasyon %12.5 → reel getiri sadece +%29",
+            },
+            "crypto": {
+                "kisa_vade": +35.0,
+                "orta_vade": +150.0,  # Bitcoin sabit arz — en iyi enflasyon hedge
+                "en_iyi":  ["BTC (21M sabit arz — dijital altın)", "ETH (deflationary post-merge)"],
+                "en_kotu": ["Stablecoin (dolar değer kaybı direkt yansır)"],
+                "not":     "BTC bu senaryoda en iyi varlık — sabit arz vs sonsuz para basımı",
+            },
+            "commodity": {
+                "kisa_vade": +25.0,
+                "orta_vade": +80.0,
+                "en_iyi":  ["Altın (MB alımları + güven kaybı)", "Gümüş", "Petrol", "Bakır"],
+                "en_kotu": ["Nakit (dolar cinsinden tutulan)"],
+            },
+            "tefas": {
+                "kisa_vade": +10.0,   # TL nominal yükseliş
+                "orta_vade": -35.0,   # Dolar bazında yıkım
+                "en_iyi":  ["Altın fonları (AEY — TL'den kaç)", "Döviz/Eurobond fonları"],
+                "en_kotu": ["TL tahvil fonları (GAF)", "Hisse fonları (TL bazlı nominal yükseliş ama dolar kaybı)"],
+                "not":     "TEFAS yatırımcısı için en tehlikeli senaryo — TL değer kaybı tüm getiriyi siler",
+            },
+        },
+    },
+
+    # ══════════════════════════════════════════════════════════════════════
+    # BENİM ÖNERDİĞİM 3 SENARYO
+    # ══════════════════════════════════════════════════════════════════════
+
+    "risk_on_pivot": {
+        "isim":   "Risk-On Pivot — Büyüme Patlaması",
+        "ozet": (
+            "Fed faiz artışı beklenirken enflasyon ani düştü (%2.1'e). "
+            "İstihdam güçlü, yapay zeka yatırımları patladı, GDP sürprizi pozitif. "
+            "Piyasa tam risk-on moda geçiyor. Direktör defansiften agresife "
+            "geçebiliyor mu?"
+        ),
+        "tetikleyici": "CPI sürpriz düşüş + güçlü NFP + NVDA kazanç patlaması",
+        "tarihsel_benzer": "2023 Kasım rallisi, 1995 Soft Landing, 2009 toparlanma başlangıcı",
+        "macro_overrides": {
+            "vix":         {"value": 13.5,  "change_pct": -38.0, "signal": "green",
+                            "note": "VIX 13.5 — tam risk-on, korku yok"},
+            "copper":      {"value": 5.40,  "change_pct": +18.0, "signal": "green",
+                            "note": "Bakır $5.40 — güçlü büyüme beklentisi"},
+            "treasury_10y":{"value": 3.80,  "change_pct": -15.0, "signal": "green",
+                            "note": "10Y faiz düşüyor — Fed pivot beklentisi"},
+            "dxy":         {"value": 96.0,  "change_pct": -4.5,  "signal": "amber",
+                            "note": "Dolar zayıflıyor — risk-on, EM avantajlı"},
+            "gold":        {"value": 2800,  "change_pct": -8.0,  "signal": "amber",
+                            "note": "Altın düşüyor — risk-on, güvenli liman terk ediliyor"},
+            "wti_oil":     {"value": 82.0,  "change_pct": +8.0,  "signal": "amber",
+                            "note": "Petrol yükseliyor — güçlü büyüme talebi"},
+            "usdjpy":      {"value": 152.0, "change_pct": +3.0,  "signal": "neutral",
+                            "note": "Yen zayıfladı — carry trade yeniden aktif"},
+        },
+        "economic_overrides": {
+            "CPI_YOY": {"value": 2.1,  "prev": 3.8, "note": "CPI %2.1 — Fed hedefine ulaştı, sürpriz düşüş"},
+            "NFP":     {"value": 320,  "prev": 180, "note": "İstihdam güçlü — %320K, beklenti %190K"},
+            "GDP":     {"value": 3.8,  "prev": 2.1, "note": "GDP %3.8 — sürpriz güçlü büyüme"},
+            "ISM_MFG": {"value": 54.5, "prev": 48.2,"note": "İmalat genişliyor — yeni siparişler artıyor"},
+        },
+        "asset_impacts": {
+            "us_equity": {
+                "kisa_vade": +12.0,
+                "orta_vade": +28.0,
+                "en_iyi":  ["Yarı iletken (NVDA, AVGO, AMD)", "Yazılım (MSFT, NOW)", "Küçük sermayeli (IWM)"],
+                "en_kotu": ["Defansif (XLP, XLU — para çıkışı)", "Altın madencileri"],
+            },
+            "crypto": {
+                "kisa_vade": +25.0,
+                "orta_vade": +80.0,
+                "en_iyi":  ["BTC", "ETH", "SOL — risk-on altcoinler canlanır"],
+                "en_kotu": ["Stablecoin (fırsat maliyeti artar)"],
+            },
+            "commodity": {
+                "kisa_vade": -5.0,   # Altın düşer
+                "orta_vade": +8.0,
+                "en_iyi":  ["Petrol (talep artışı)", "Bakır (büyüme)"],
+                "en_kotu": ["Altın (güvenli liman terk edilir)"],
+            },
+            "tefas": {
+                "kisa_vade": +8.0,
+                "orta_vade": +15.0,
+                "en_iyi":  ["Hisse yoğun fonlar (IIH, TTE)", "Büyüme hisse fonları"],
+                "en_kotu": ["Altın fonları (AEY — geride kalır)"],
+            },
+        },
+    },
+
+    "turkey_shock": {
+        "isim":   "Türkiye Spesifik Şok — TL Krizi",
+        "ozet": (
+            "TL ani %30 değer kaybı. BIST dolar bazında çöküyor. "
+            "TCMB acil faiz artışı yapıyor. Türkiye'ye özgü şok — "
+            "ABD ve kripto piyasaları görece sakin. "
+            "Direktör portföyün Türkiye bacağını bağımsız yönetebiliyor mu?"
+        ),
+        "tetikleyici": "Siyasi kriz + döviz rezervi erimesi + TCMB güven kaybı",
+        "tarihsel_benzer": "Türkiye 2018 (Brunson krizi), 2021 (TCMB başkan değişimi), 2022",
+        "macro_overrides": {
+            "vix":         {"value": 19.0,  "change_pct": +8.0,  "signal": "amber",
+                            "note": "VIX orta — global piyasa sakin, Türkiye spesifik"},
+            "usdjpy":      {"value": 149.0, "change_pct": -1.0,  "signal": "neutral",
+                            "note": "Yen stabil — carry trade etkilenmiyor"},
+            "dxy":         {"value": 104.0, "change_pct": +2.0,  "signal": "amber",
+                            "note": "Dolar hafif güçlü — EM baskısı var ama sınırlı"},
+            "gold":        {"value": 3420,  "change_pct": +5.0,  "signal": "green",
+                            "note": "Altın yükseliyor — EM krizi hedge talebi"},
+            "usdtry":      {"value": 52.0,  "change_pct": +30.0, "signal": "red",
+                            "note": "USD/TRY 52 — TL %30 değer kaybı (38'den 52'ye)"},
+            "bist100":     {"value": 8500,  "change_pct": -25.0, "signal": "red",
+                            "note": "BIST dolar bazında -%25 çöktü"},
+            "copper":      {"value": 4.50,  "change_pct": 0.0,   "signal": "neutral",
+                            "note": "Bakır stabil — Türkiye global büyümeyi etkilemiyor"},
+        },
+        "economic_overrides": {
+            "USDTRY":     {"value": 52.0,  "prev": 38.0,  "note": "TL %36 değer kaybı"},
+            "TR_ENFLASYON":{"value": 75.0, "prev": 48.0,  "note": "Türkiye enflasyonu %75'e tırmandı"},
+            "TCMB_FAIZ":  {"value": 55.0,  "prev": 47.5,  "note": "TCMB acil 750bp faiz artışı"},
+            "CDS_TURKEY": {"value": 520,   "prev": 280,   "note": "Türkiye CDS 520bp — kredi riski arttı"},
+            "NFP":        {"value": 180,   "prev": 180,   "note": "ABD istihdamı normal — izole şok"},
+        },
+        "asset_impacts": {
+            "us_equity": {
+                "kisa_vade": -2.0,   # Minimal etki
+                "orta_vade": +3.0,
+                "en_iyi":  ["Büyük ABD şirketleri (Türkiye'ye ihracat minimal)"],
+                "en_kotu": ["Türkiye'de büyük operasyonu olan şirketler"],
+                "not":     "ABD hisseleri bu senaryoda görece güvenli",
+            },
+            "crypto": {
+                "kisa_vade": +5.0,   # TL'den kaçış kripto'ya
+                "orta_vade": +10.0,
+                "en_iyi":  ["BTC (Türkiye'de dolarizasyon artıyor)", "USDT kullanımı artar"],
+                "en_kotu": [],
+            },
+            "commodity": {
+                "kisa_vade": +8.0,
+                "orta_vade": +15.0,
+                "en_iyi":  ["Altın gram TRY (hem dolar hem TL bazında kazanır)", "Dolar bazlı emtia"],
+                "en_kotu": [],
+                "not":     "ALTIN_GRAM_TRY bu senaryoda çift motorlu kazanır: hem dolar artışı hem TL düşüşü",
+            },
+            "tefas": {
+                "kisa_vade": -35.0,  # TL bazlı nominal, dolar bazında çöküş
+                "orta_vade": -45.0,
+                "en_iyi":  ["Altın fonları (AEY — TL değer kaybına karşı korur)", "Döviz fonları"],
+                "en_kotu": ["IIH (BIST çöküşü + TL değer kaybı çift darbe)", "TL tahvil fonları (reel negatif)"],
+                "not":     "Türkiye şokunda TEFAS portföyü ciddi risk altında — hızlı aksiyon gerekiyor",
+            },
+        },
+    },
 }
+
 
 
 def build_scenario_data(
