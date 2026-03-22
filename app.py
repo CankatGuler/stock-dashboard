@@ -5515,6 +5515,26 @@ SADECE aşağıdaki JSON'u döndür (açıklama ekleme, toplam ağırlık %100 o
                     _rt = _sim_json.get("en_buyuk_yanilma_riski") or _sim_json.get("en_buyuk_risk","")
                     st.warning(f"⚠️ **Yanılma Riski:** {_rt}")
 
+                # 10. Nakit Realizasyon Planı
+                _nrp = _sim_json.get("nakit_realizasyon_plani", {})
+                if _nrp:
+                    _tutarli = _nrp.get("tutarli_mi","")
+                    _nc = "#00c48c" if _tutarli == "evet" else "#ffb300"
+                    st.markdown(
+                        f'<div style="background:#111927;border-left:3px solid {_nc};'
+                        f'border-radius:0 6px 6px 0;padding:0.7rem 1rem;margin-top:0.5rem;">'
+                        f'<div style="font-size:0.65rem;color:#5a6a7a;font-weight:700;margin-bottom:4px;">'
+                        f'💵 NAKİT REALİZASYON PLANI</div>'
+                        f'<div style="display:flex;gap:1.5rem;flex-wrap:wrap;font-size:0.82rem;">'
+                        f'<span>T+0: <b>{_nrp.get("bugun_t0","?")}</b></span>'
+                        f'<span>T+2: <b>{_nrp.get("t2_tefas","?")}</b></span>'
+                        f'<span>Hedef: <b>{_nrp.get("toplam_hedef","?")}</b></span>'
+                        f'<span style="color:{_nc};">Tutarlı: <b>{_tutarli.upper()}</b></span>'
+                        f'</div>'
+                        + (f'<div style="color:#ffb300;font-size:0.75rem;margin-top:4px;">'
+                           f'⚠️ {_nrp.get("not","")}</div>' if _tutarli == "hayir" else "")
+                        + '</div>', unsafe_allow_html=True)
+
     # Strateji çalıştır — İKİ AŞAMALI SİSTEM
     if _run_strategy:
         # Progress takibi için
@@ -6025,6 +6045,27 @@ SADECE aşağıdaki JSON'u döndür (açıklama ekleme, toplam ağırlık %100 o
                     + f'<div style="font-size:0.75rem;color:#8a9ab0;">{_tf.get("gerekce","")}</div>'
                     f'</div>',
                     unsafe_allow_html=True)
+
+        # ── Nakit Realizasyon Planı ───────────────────────────────────────
+        _nrp = _dir.get("nakit_realizasyon_plani", {})
+        if _nrp:
+            _tutarli = _nrp.get("tutarli_mi", "")
+            _nrp_color = "#00c48c" if _tutarli == "evet" else "#ffb300"
+            st.markdown(
+                f'<div style="background:#111927;border-left:3px solid {_nrp_color};'
+                f'border-radius:0 6px 6px 0;padding:0.7rem 1rem;margin:0.8rem 0;">'
+                f'<div style="font-size:0.65rem;color:#5a6a7a;font-weight:700;margin-bottom:4px;">'
+                f'💵 NAKİT REALİZASYON PLANI</div>'
+                f'<div style="display:flex;gap:1.5rem;flex-wrap:wrap;font-size:0.82rem;">'
+                f'<span>T+0 Bugün: <b>{_nrp.get("bugun_t0","?")}</b></span>'
+                f'<span>T+2 TEFAS: <b>{_nrp.get("t2_tefas","?")}</b></span>'
+                f'<span>Toplam Hedef: <b>{_nrp.get("toplam_hedef","?")}</b></span>'
+                f'<span style="color:{_nrp_color};">Tutarlı: <b>{_tutarli.upper()}</b></span>'
+                f'</div>'
+                + (f'<div style="font-size:0.75rem;color:#ffb300;margin-top:4px;">'
+                   f'⚠️ {_nrp.get("not","")}</div>' if _tutarli == "hayir" else "")
+                + f'</div>',
+                unsafe_allow_html=True)
 
         # ── HTML Export ───────────────────────────────────────────────────
         st.markdown('<div style="margin-top:1rem;"></div>', unsafe_allow_html=True)

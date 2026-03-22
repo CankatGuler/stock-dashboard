@@ -898,6 +898,14 @@ Eğer portföydeki varlık sınıfları arasındaki 30 günlük korelasyon 0.7'y
 • VALÖR KURALI: TEFAS satışı T+2 valörlüdür. "IIH sat" derken
   "nakit 2 gün sonra gelir → bugün mevcut nakitle altın/GLD al" şeklinde
   zamanlama talimatı ver. Kripto ve ABD hisseleri T+0.
+• NAKİT MİKRO-KURALI (Pratik Uygulama):
+  - Eğer mevcut nakit <%5 ve piyasalar kapalıysa (UTC 21:00-14:30):
+    SHV/BIL gibi ETF almayı önerme — işlem beklemede kalır, spread riski var.
+    Bunun yerine "nakiti USD mevduat/para piyasasında tut, piyasa açılışında al" de.
+  - Eğer nakit <%2 ve acil likidite gerekiyorsa:
+    Kripto (7/24 likit) önce sat, ETF ikinci adım olsun.
+  - İşlem maliyeti eşiği: $100'ın altındaki nakit hareketleri için ETF önerme,
+    komisyon getiriyi yer.
 • SPESİFİK TICKER: Portföydeki her hisseyi listede gördüğüne göre
   sınıf değil ticker bazlı karar ver.
 • TEFAS HALÜSINASYON YASAĞI: Sözlükte (TEFAS_DB) olmayan fon için
@@ -967,8 +975,20 @@ Eğer portföydeki varlık sınıfları arasındaki 30 günlük korelasyon 0.7'y
     "aktif": false, "neden": "...", "nakit_artirim_pct": 0
   },
   "bir_sonraki_kontrol": {
-    "tarih": "YYYY-MM-DD", "neden": "...",
-    "tetikleyiciler": [{"tip": "fiyat|takvim|durum", "aciklama": "...", "esik": "..."}]
+    "tarih": "YYYY-MM-DD",
+    "neden": "...",
+    "kontrol_sikligi": "günlük|haftalık|aylık",
+    "tetikleyiciler": [
+      {"tip": "fiyat|takvim|durum", "aciklama": "...", "esik": "...",
+       "kontrol_suresi": "24 saat|1 hafta|1 ay içinde"}
+    ]
+  },
+  "nakit_realizasyon_plani": {
+    "bugun_t0": "Bugün T+0 ile elde edilecek nakit ($)",
+    "t2_tefas":  "T+2'de TEFAS'tan gelecek nakit ($)",
+    "toplam_hedef": "Toplam nakit hedefi ($)",
+    "tutarli_mi": "evet|hayir",
+    "not": "Tutarsızsa fark ve çözüm"
   }
 }"""
 
@@ -1124,7 +1144,15 @@ def _build_director_message(
             elif ac == "commodity":
                 extra = " | " + _COMM_LABELS.get(tk, "[Emtia]")
             elif ac == "tefas":
-                extra = " | " + _TEFAS_LABELS.get(tk.upper(), "[TEFAS fonu]")
+                _db = TEFAS_DB.get(tk.upper(), TEFAS_UNKNOWN_RULE)
+                _tip, _icerik, _ress, _kur, _beta, _not = _db
+                _bilinmiyor = (_tip == "BİLİNMEYEN")
+                extra = (
+                    f" | [{_tip}] {_icerik} | "
+                    f"Resesyon:{_ress} | Beta:{_beta} | Kur:{_kur}"
+                    + (f" | ⚠️ BİLİNMEYEN: {_not[:60]}" if _bilinmiyor
+                       else f" | 📋 {_not[:50]}")
+                )
             else:
                 extra = ""
             lines.append(base + extra)
@@ -1132,6 +1160,26 @@ def _build_director_message(
     lines.append("")
     lines.append("KURAL: Yukarıdaki spesifik ticker listesini kullanarak karar ver.")
     lines.append("'ABD hisselerini azalt' değil → 'AVGO sat, SCHD koru' gibi.")
+
+    # ── Nakit realizasyon kontrolü ─────────────────────────────────────
+    # Direktör nakit hedefi belirlediğinde bunun matematiksel olarak
+    # mevcut satışlarla karşılanıp karşılanamayacağını kontrol et
+    lines.append("")
+    lines.append("═══ NAKİT REALİZASYON KONTROLÜ ═══")
+    _us_val    = sum(p["val"] for p in class_groups.get("us_equity", []))
+    _crypto_val= sum(p["val"] for p in class_groups.get("crypto", []))
+    _comm_val  = sum(p["val"] for p in class_groups.get("commodity", []))
+    _tefas_val = sum(p["val"] for p in class_groups.get("tefas", []))
+    lines.append(
+        f"Mevcut nakit: ${cash:,.0f} (%{cash/max(total_val,1)*100:.1f}) | "
+        f"Satılabilir (T+0): ABD hisse ${_us_val:,.0f} + Kripto ${_crypto_val:,.0f} = ${_us_val+_crypto_val:,.0f} | "
+        f"Satılabilir (T+2): TEFAS ${_tefas_val:,.0f} | "
+        f"Satılabilir (T+0/T+1): Emtia ETF ${_comm_val:,.0f}"
+    )
+    lines.append(
+        "KURAL: Nakit hedefi belirlerken hangi varlığın ne zaman nakde döneceğini belirt. "
+        "'%40 nakit hedefle' diyorsan: bugün kripto sat (T+0) + TEFAS T+2'de gelecek + toplam ne kadar nakit?"
+    )
 
     # ── Yaklaşan Önemli Olaylar ─────────────────────────────────────────
     if financial_calendar:
