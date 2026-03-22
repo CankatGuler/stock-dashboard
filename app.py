@@ -5484,6 +5484,23 @@ SADECE aşağıdaki JSON'u döndür (açıklama ekleme, toplam ağırlık %100 o
                 if _ks and _ks.get("aktif"):
                     st.warning(f"⚠️ **Korelasyon Sigortası Aktif** — {_ks.get('neden','')} | Nakit artırım: +%{_ks.get('nakit_artirim_pp',0)}")
 
+                # 6b. Hard Cap İhlal uyarısı
+                _hci = _sim_json.get("hard_cap_ihlal",{})
+                if _hci and _hci.get("var_mi"):
+                    st.markdown(
+                        f'<div style="background:#2a1a0a;border:1px solid #ff8c00;'
+                        f'border-radius:6px;padding:0.7rem 1rem;margin:0.5rem 0;">'
+                        f'<div style="font-size:0.65rem;color:#ff8c00;font-weight:700;margin-bottom:4px;">'
+                        f'⚠️ HARD CAP İHLALİ — GEREKÇELİ</div>'
+                        f'<div style="font-size:0.82rem;">'
+                        f'<b>{_hci.get("ihlal_eden_sinif","").upper()}</b>: '
+                        f'%{_hci.get("onerilen_pct",0)} → Limit %{_hci.get("limit_pct",0)}</div>'
+                        f'<div style="font-size:0.78rem;color:#ffb300;margin-top:3px;">'
+                        f'📋 {_hci.get("senaryo_istisnasi","")}</div>'
+                        f'<div style="font-size:0.78rem;color:#e74c3c;margin-top:3px;">'
+                        f'🎯 {_hci.get("alternatif_risk","")}</div>'
+                        f'</div>', unsafe_allow_html=True)
+
                 # 7. Zamanlama
                 _zam = _sim_json.get("zamanlama","")
                 _zc  = {"hemen":"#e74c3c","kademeli_1hafta":"#ffb300","bekle_teyit":"#4fc3f7"}.get(_zam,"#8a9ab0")
@@ -5991,6 +6008,25 @@ SADECE aşağıdaki JSON'u döndür (açıklama ekleme, toplam ağırlık %100 o
                 f"⚠️ **Korelasyon Sigortası Aktif** — {_ks.get('neden','')} "
                 f"| Nakit artırım önerisi: +%{_ks.get('nakit_artirim_pct',0)}"
             )
+
+        # ── Hard Cap İhlal Uyarısı ────────────────────────────────────────
+        _hci = _dir.get("hard_cap_ihlal", {})
+        if _hci and _hci.get("var_mi"):
+            st.markdown(
+                f'<div style="background:#2a1a0a;border:1px solid #ff8c00;'
+                f'border-radius:6px;padding:0.7rem 1rem;margin:0.5rem 0;">'
+                f'<div style="font-size:0.65rem;color:#ff8c00;font-weight:700;margin-bottom:4px;">'
+                f'⚠️ HARD CAP İHLALİ — GEREKÇELİ</div>'
+                f'<div style="font-size:0.82rem;color:#e8edf3;">'
+                f'<b>{_hci.get("ihlal_eden_sinif","").upper()}</b>: '
+                f'Önerilen %{_hci.get("onerilen_pct",0)} → Limit %{_hci.get("limit_pct",0)}'
+                f'</div>'
+                f'<div style="font-size:0.78rem;color:#ffb300;margin-top:3px;">'
+                f'📋 Gerekçe: {_hci.get("senaryo_istisnasi","")}</div>'
+                f'<div style="font-size:0.78rem;color:#e74c3c;margin-top:3px;">'
+                f'🎯 Risk: {_hci.get("alternatif_risk","")}</div>'
+                f'</div>',
+                unsafe_allow_html=True)
 
         # ── Hisse Bazlı Mikro Kararlar ────────────────────────────────────
         _hk = _dir.get("hisse_mikro_analiz", [])

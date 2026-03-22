@@ -854,6 +854,12 @@ risk_senaryosu: Kötü senaryo tetikleyici + somut adımlar
 vade_planlari: Kısa/orta/uzun vade için baz ve risk senaryoları
 yil_sonu_hedefi: Hedefe ulaşmak için ne kadar risk gerekiyor?
 bir_sonraki_kontrol: Tarih + tetikleyiciler (max 3)
+nakit_realizasyon_plani: [ZORUNLU — BOŞ BIRAKILAMAZ]
+  bugun_t0: Kripto + ABD hisse satışından bugün T+0'da elde edilecek nakit miktarı ($)
+  t2_tefas: TEFAS satışından T+2'de gelecek nakit miktarı ($)
+  toplam_hedef: Öneri edilen nakit ağırlığına karşılık gelen toplam $ hedef
+  tutarli_mi: T+0 + T+2 toplamı hedefe ulaşıyor mu? (evet/hayir)
+  not: Tutarsızsa farkı ve nasıl kapatılacağını açıkla
 
 ═══ SENARYO OLASILILANDIRMASI (KRİTİK) ═══
 Tek bir senaryoya %100 güvenme. Her kararı üç olasılığın matematiksel harmanı yap:
@@ -886,6 +892,17 @@ RISK-ON senaryosunda:
 
 Bu sınırları aştığında portföy önerisini revize et ve neden sınırı aştığını açıkla.
 
+HARD CAP İHLAL KURALI — ÇOK ÖNEMLİ:
+Eğer herhangi bir limiti aşıyorsan, JSON çıktısında şu alanı ZORUNLU doldur:
+"hard_cap_ihlal": {
+  "ihlal_eden_sinif": "örn: crypto",
+  "onerilen_pct": 35,
+  "limit_pct": 15,
+  "senaryo_istisnasi": "Mali Dominans'ta BTC sabit arzlı varlık kategorisinde değerlendirilmeli",
+  "alternatif_risk": "Volcker pivot gelirse %35 kripto %30 düşer = portföy -%10.5"
+}
+Gerekçesiz hard cap ihlali YASAKTIR. Ya limiti aş (ve gerekçe yaz), ya da limiti doldur.
+
 ═══ KORElASYON SİGORTASI ═══
 Eğer portföydeki varlık sınıfları arasındaki 30 günlük korelasyon 0.7'yi geçiyorsa
 (likidite krizinde hepsi birlikte düşüyorsa), nakit oranı otomatik olarak
@@ -914,6 +931,16 @@ Eğer portföydeki varlık sınıfları arasındaki 30 günlük korelasyon 0.7'y
 • ZOMBİ KURALI: FCF < 0 VE (Current Ratio < 1.0 VEYA Borç/ÖK > 200)
   ise şirket zombi — sat. Sadece FCF negatifliği yeterli değil,
   şirkette 3 yıllık nakit varsa zombi değildir.
+• SENARYO-SPESİFİK DEĞERLEME MANTIKI:
+  - YAVAŞ KANAMA / YÜKSEK FAİZ: Büyüme hisseleri iskonto oranı artar → değerleme
+    baskısı gerçek. FCF'si pozitif olan büyüme hisseleri bile P/E sıkışır.
+  - MALİ DOMINANS / NEGATİF REEL FAİZ: Tam TERSİ geçerli. Negatif reel faizde
+    büyüme hisselerinin DCF değeri ARTAR (iskonto oranı düşer). 2020-2021'de
+    teknoloji hisseleri negatif reel faizde 3-5x kazandı. Bu ortamda yüksek
+    değerlemeli büyüme hisselerini sadece "çarpan yüksek" diye satma — yanlış.
+    Bunun yerine: FCF üretimi var mı? Dolar bazlı geliri var mı? Reel varlık mı?
+  - STAGFLASYON: Ne büyüme ne değer işe yarar. Sadece emtia + fiyatlama gücü.
+  Bu mantığı her hisse kararında uygula — senaryo tipini değerleme çerçevesine yansıt.
 • Türkçe yaz
 • JSON formatında yanıt ver — aşağıdaki şemayı kullan:
 
@@ -984,11 +1011,19 @@ Eğer portföydeki varlık sınıfları arasındaki 30 günlük korelasyon 0.7'y
     ]
   },
   "nakit_realizasyon_plani": {
-    "bugun_t0": "Bugün T+0 ile elde edilecek nakit ($)",
-    "t2_tefas":  "T+2'de TEFAS'tan gelecek nakit ($)",
-    "toplam_hedef": "Toplam nakit hedefi ($)",
+    "bugun_t0": "Kripto+ABD hisse satışı — bugün T+0'da elde edilecek nakit ($)",
+    "t2_tefas": "TEFAS satışından T+2'de gelecek nakit ($)",
+    "toplam_hedef": "Önerilen nakit ağırlığına karşılık $ hedef",
     "tutarli_mi": "evet|hayir",
-    "not": "Tutarsızsa fark ve çözüm"
+    "not": "Tutarsızsa farkı ve nasıl kapatılacağını açıkla"
+  },
+  "hard_cap_ihlal": {
+    "var_mi": false,
+    "ihlal_eden_sinif": "",
+    "onerilen_pct": 0,
+    "limit_pct": 0,
+    "senaryo_istisnasi": "Neden bu senaryoda limit aşılabilir?",
+    "alternatif_risk": "İhlal edilirse kötü senaryoda portföy ne kadar zarar görür?"
   }
 }"""
 
