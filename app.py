@@ -5267,16 +5267,21 @@ with tab_strategy:
                         "ABD hisse, kripto, emtia ve TEFAS fonlarını aynı anda yönetiyorsun. "
                         "Bu bir SENARYO SİMÜLASYONU — senaryo şu an GERÇEKLEŞIYOR.\n\n"
                         "GÖREVLER:\n"
-                        "1. MİKRO ETİKETLEME: Her ABD hissesi için "
-                        "[Faiz_indirim_pozitif/negatif] ve [Resesyon_defansif/hassas] etiketle.\n"
-                        "2. TEFAS LOOK-THROUGH: IIH=%90 hisse (YÜKSEK resesyon riski), "
-                        "AEY=%80 altın (DÜŞÜK resesyon riski). Her fona ayrı karar ver.\n"
-                        "3. SENARYO OLASILILANDIRMASI: Baz(%55 soft landing), "
+                        "1. SPESİFİK TICKER KARARLARI: Sana portföyün DETAYLI DÖKÜMÜ verilecek. "
+                        "'ABD hisselerini azalt' değil, 'AVGO'yu sat, SCHD'yi koru' gibi "
+                        "her hisse için ayrı karar ver.\\n"
+                        "2. MİKRO ETİKETLEME: Her ABD hissesi için "
+                        "[Faiz_indirim_pozitif/negatif] ve [Resesyon_defansif/hassas] etiketle.\\n"
+                        "3. TEFAS LOOK-THROUGH: IIH=%90 hisse (YÜKSEK resesyon riski), "
+                        "AEY=%80 altın (DÜŞÜK resesyon riski). Her fona ayrı karar ver.\\n"
+                        "4. SENARYO OLASILILANDIRMASI: Baz(%55 soft landing), "
                         "Alternatif(%35 hard landing), Kuyruk(%10 kriz). "
-                        "Ağırlıklı ortalama strateji üret.\n"
-                        "4. KORElASYON SİGORTASI: VIX 34 + USDJPY 142 ortamında "
-                        "nakit önerisini 1.5x artır.\n\n"
-                        "SADECE JSON döndür, başka metin ekleme:\n"
+                        "Ağırlıklı ortalama strateji üret.\\n"
+                        "5. KORElASYON SİGORTASI: VIX 34 + USDJPY 142 ortamında "
+                        "nakit önerisini 1.5x artır.\\n"
+                        "6. VALÖR GERÇEKLİĞİ: TEFAS satışı T+2 valörlüdür. "
+                        "IIH satış emri ver → bugün mevcut nakitle altın al (T+0). "
+                        "Kripto ve ABD hisseleri T+0, önce bunları işle.\\n\\n"
                         "{\n"
                         '  "senaryo_yorumu": "2-3 cümle",\n'
                         '  "senaryo_olasiliklari": {\n'
@@ -5933,6 +5938,60 @@ with tab_strategy:
                 f"⚠️ **Korelasyon Sigortası Aktif** — {_ks.get('neden','')} "
                 f"| Nakit artırım önerisi: +%{_ks.get('nakit_artirim_pct',0)}"
             )
+
+        # ── Hisse Bazlı Mikro Kararlar ────────────────────────────────────
+        _hk = _dir.get("hisse_mikro_analiz", [])
+        if _hk:
+            st.markdown(
+                '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+                'letter-spacing:0.1em;margin:1rem 0 0.4rem;">🎯 HİSSE BAZLI MİKRO KARARLAR</div>',
+                unsafe_allow_html=True)
+            _krenk = {"KORU":"#00c48c","ARTIR":"#4fc3f7","AZALT":"#ffb300","SAT":"#e74c3c"}
+            for _h in _hk:
+                _kr  = _h.get("karar","KORU")
+                _kc  = _krenk.get(_kr,"#8a9ab0")
+                _tags = " ".join(
+                    f'<span style="background:#1e2833;border:1px solid #4fc3f755;'
+                    f'border-radius:3px;padding:1px 5px;font-size:0.62rem;'
+                    f'color:#4fc3f7;">{t}</span>'
+                    for t in _h.get("etiketler",[])
+                )
+                st.markdown(
+                    f'<div style="border-left:3px solid {_kc};padding:0.4rem 0.8rem;'
+                    f'background:#1a2332;border-radius:0 6px 6px 0;margin-bottom:0.3rem;">'
+                    f'<b style="color:{_kc};">{_kr}</b> '
+                    f'<b style="color:#e8edf3;">{_h.get("ticker","")}</b> {_tags} '
+                    f'<span style="color:#8a9ab0;font-size:0.78rem;">'
+                    f'FCF:{_h.get("fcf_durumu","N/A")} — {_h.get("gerekce","")}</span>'
+                    f'</div>',
+                    unsafe_allow_html=True)
+
+        # ── TEFAS Look-Through Kararları ──────────────────────────────────
+        _tk = _dir.get("tefas_kararlari", [])
+        if _tk:
+            st.markdown(
+                '<div style="font-size:0.65rem;color:#5a6a7a;text-transform:uppercase;'
+                'letter-spacing:0.1em;margin:0.8rem 0 0.4rem;">🇹🇷 TEFAS LOOK-THROUGH</div>',
+                unsafe_allow_html=True)
+            _krenk2 = {"KORU":"#00c48c","ARTIR":"#4fc3f7","AZALT":"#ffb300","SAT":"#e74c3c","TUT":"#8a9ab0"}
+            for _tf in _tk:
+                _tkr = _tf.get("karar","TUT")
+                _tkc = _krenk2.get(_tkr,"#8a9ab0")
+                _duy = _tf.get("resesyon_risk", _tf.get("resesyon_duyarlilik","?"))
+                _dc  = "#e74c3c" if any(x in _duy.upper() for x in ["YÜKSEK","YUKSEK","COK"]) else "#00c48c"
+                _valor = _tf.get("valor_notu","")
+                st.markdown(
+                    f'<div style="border-left:3px solid {_tkc};padding:0.4rem 0.8rem;'
+                    f'background:#1a2332;border-radius:0 6px 6px 0;margin-bottom:0.3rem;">'
+                    f'<b style="color:{_tkc};">{_tkr}</b> '
+                    f'<b style="color:#e8edf3;">{_tf.get("ticker","")}</b> '
+                    f'<span style="color:#8a9ab0;font-size:0.75rem;">{_tf.get("icerik","")}</span> '
+                    f'<span style="background:{_dc}22;color:{_dc};border-radius:3px;'
+                    f'padding:1px 5px;font-size:0.65rem;">Resesyon:{_duy}</span>'
+                    + (f'<div style="font-size:0.72rem;color:#ffb300;margin-top:3px;">⏱ {_valor}</div>' if _valor else '')
+                    + f'<div style="font-size:0.75rem;color:#8a9ab0;">{_tf.get("gerekce","")}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True)
 
         # ── HTML Export ───────────────────────────────────────────────────
         st.markdown('<div style="margin-top:1rem;"></div>', unsafe_allow_html=True)
