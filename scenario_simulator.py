@@ -680,13 +680,25 @@ def build_scenario_director_prompt(scenario_data: dict) -> str:
         "CL=F": "WTI Petrol [Resesyon_hassas|Jeopolitik_pozitif]",
     }
     _TEFAS_LABELS = {
-        "IIH": "%90 Hisse [Resesyon_YUKSEK_risk]",
-        "AEY": "%80 Altın [Resesyon_DUSUK_risk]",
-        "TTE": "%85 Teknoloji Hisse [Resesyon_YUKSEK_risk]",
-        "MAC": "%80 Banka [Resesyon_COK_YUKSEK_risk]",
-        "GAF": "%90 Devlet Tahvili [Resesyon_DUSUK_risk]",
-        "YAC": "%50 Hisse %50 Tahvil [Resesyon_ORTA_risk]",
+        "IIH": "%90 BIST+Yabancı Hisse [Resesyon_YUKSEK|Beta_YÜKSEK] — Zombi riskine maruz",
+        "NNF": "%90+ BIST Hisse, BİRİNCİ FON [Resesyon_YUKSEK|Beta_YÜKSEK] — TAHVİL DEĞİL, agresif hisse",
+        "TTE": "%85 Teknoloji Hisse [Resesyon_YUKSEK|Beta_COK_YÜKSEK] — Faiz hassas",
+        "MAC": "%80 Bankacılık [Resesyon_COK_YUKSEK|Beta_YÜKSEK] — Kredi döngüsüne hassas",
+        "AEY": "%80 Fiziksel Altın [Resesyon_DUSUK|Beta_ORTA] — Enflasyon hedge",
+        "AOY": "%75 Fiziksel Altın [Resesyon_DUSUK|Beta_ORTA] — Enflasyon hedge",
+        "GAF": "%90 Devlet Tahvili TL [Resesyon_DUSUK|Beta_DUSUK] — Kur riski var",
+        "YAC": "%50 Hisse %50 Tahvil [Resesyon_ORTA|Beta_ORTA]",
+        "TI1": "Kısa Vadeli TL Tahvil [Resesyon_DUSUK|Beta_COK_DUSUK]",
+        "TSI": "Para Piyasası benzeri [Resesyon_DUSUK|Beta_COK_DUSUK]",
+        "URA": "Uranyum/Nükleer [Resesyon_ORTA|Beta_YÜKSEK] — Yapısal tema",
+        "NNM": "Karma Fon [Resesyon_ORTA|Beta_ORTA] — İçerik teyit gerekli",
     }
+    # Bilinmeyen fon kuralı
+    def _tefas_label(kod):
+        return _TEFAS_LABELS.get(kod,
+            f"⚠️ BİLİNMEYEN FON [{kod}] — İçerik tahmin yapılmaz, koru veya küçük azalt"
+        )
+
 
     holdings = sc.get("holdings_detail", {})
     for ac, pos_list in sorted(holdings.items(), key=lambda x: -sum(p["val_usd"] for p in x[1])):
@@ -710,7 +722,7 @@ def build_scenario_director_prompt(scenario_data: dict) -> str:
             elif ac == "commodity":
                 extra = " | " + _COMM_LABELS.get(p["ticker"], "Emtia")
             elif ac == "tefas":
-                extra = " | " + _TEFAS_LABELS.get(p["ticker"].upper(), "TEFAS fonu")
+                extra = " | " + _tefas_label(p["ticker"].upper())
             else:
                 extra = ""
             lines.append(base + extra)

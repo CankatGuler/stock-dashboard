@@ -189,6 +189,63 @@ SECTOR_ETF_PROXY = {
 }
 
 
+# ─── Merkezi TEFAS Fon Veri Tabanı ───────────────────────────────────────────
+# KAP ve fonun resmi tanıtım belgelerinden derlendi.
+# Bilinmeyen fonlar için ASLA tahmin yapma — "BILINMIYOR_SAT" kuralı geçerli.
+# Format: kod → (tip, içerik_özeti, resesyon_riski, kur_riski, beta_seviyesi, notlar)
+
+TEFAS_DB = {
+    # ── Hisse Senedi Fonları ─────────────────────────────────────────────────
+    "IIH":  ("Hisse Yoğun",           "BIST + Yabancı Hisse ~%90",      "YÜKSEK",     "ORTA",   "YÜKSEK",
+             "Hedef Portföy. Büyük ölçekli BIST + seçici yabancı hisse. Zombi riskine yüksek maruz."),
+    "NNF":  ("Hisse Senedi (Birinci)", "BIST Hisse ~%90-95",             "YÜKSEK",     "ORTA",   "YÜKSEK",
+             "Hedef Portföy NNF. %90+ BIST hissesi — TAHVİL DEĞIL. Agresif hisse fonu. Yüksek beta."),
+    "TTE":  ("Hisse (Teknoloji)",      "Teknoloji ve Bilişim Hisse ~%85","YÜKSEK",     "ORTA",   "ÇOK_YÜKSEK",
+             "Teknoloji ağırlıklı, yüksek faiz ortamında iskonto baskısı en yüksek fon."),
+    "MAC":  ("Hisse (Banka/Finans)",   "Bankacılık ve Finans ~%80",      "ÇOK_YÜKSEK", "ORTA",   "YÜKSEK",
+             "Bankacılık yoğunluğu, kredi kalitesi döngüsüne çok hassas."),
+    "YAS":  ("Hisse (Karma)",          "Çeşitlendirilmiş BIST ~%80",     "YÜKSEK",     "ORTA",   "YÜKSEK",
+             "Çeşitlendirilmiş BIST hisse fonu."),
+    # ── Altın / Kıymetli Maden Fonları ──────────────────────────────────────
+    "AEY":  ("Altın/Kıymetli Maden",  "Fiziksel Altın + Altın ETF ~%80","DÜŞÜK",      "DÜŞÜK",  "ORTA",
+             "Altın ağırlıklı. Enflasyon ve döviz hedge. Resesyonda defansif."),
+    "AOY":  ("Altın/Kıymetli Maden",  "Fiziksel Altın + Altın ETF ~%75","DÜŞÜK",      "DÜŞÜK",  "ORTA",
+             "Altın ağırlıklı fon. AEY benzeri profil. Enflasyon koruyucu."),
+    "GLD":  ("Altın ETF",             "Fiziksel Altın ~%99",            "DÜŞÜK",      "DÜŞÜK",  "ORTA",
+             "Uluslararası altın ETF. Dolar bazlı altın maruziyeti."),
+    # ── Dengeli / Karma Fonlar ───────────────────────────────────────────────
+    "YAC":  ("Dengeli",               "Hisse %50 + Tahvil %50",         "ORTA",       "DÜŞÜK",  "ORTA",
+             "Dengeli fon. Hisse ve tahvil karışımı. Orta risk profili."),
+    "NNM":  ("Dengeli (Karma)",        "Hisse + Tahvil + Altın karışık", "ORTA",       "DÜŞÜK",  "ORTA",
+             "Karma strateji. Gerçek dağılım için KAP teyidi önerilir."),
+    # ── Tahvil / Sabit Getirili Fonlar ──────────────────────────────────────
+    "GAF":  ("Kamu Menkul Kıymet",    "Devlet Tahvili ~%90",            "DÜŞÜK",      "YÜKSEK", "DÜŞÜK",
+             "TL devlet tahvili ağırlıklı. Kur riskine dikkat — TL zayıflarsa reel zarar."),
+    "TI1":  ("Tahvil (Kısa Vade)",    "Kısa vadeli TL tahvil ~%90",     "DÜŞÜK",      "YÜKSEK", "DÜŞÜK",
+             "Kısa vadeli tahvil, faiz riskine düşük maruz."),
+    "TSI":  ("Tahvil/Para Piyasası",  "Kısa vadeli TL menkul kıymet",   "DÜŞÜK",      "YÜKSEK", "ÇOK_DÜŞÜK",
+             "Para piyasası benzeri. Düşük getiri, düşük risk."),
+    # ── Uranyum / Enerji / Emtia ─────────────────────────────────────────────
+    "URA":  ("Uranyum/Nükleer Enerji","Uranyum şirketleri + ETF ~%80",  "ORTA",       "DÜŞÜK",  "YÜKSEK",
+             "Nükleer rönesans teması. CCJ benzeri şirketler. Volatil ama yapısal trend güçlü."),
+    # ── Bilinmeyen Fonlar ────────────────────────────────────────────────────
+    # Kural: Sözlükte olmayan fon için ASLA tahmin yapma.
+    # Direktöre bildir: "Fon içeriği doğrulanmadı — içerik teyit edilene kadar KORU/KÜÇÜK_AZALT"
+}
+
+# Sözlükte olmayan fonlar için güvenli fallback
+TEFAS_UNKNOWN_RULE = (
+    "BİLİNMEYEN",
+    "İçerik doğrulanmadı — KAP teyidi gerekli",
+    "BELİRSİZ",
+    "BELİRSİZ",
+    "BELİRSİZ",
+    "⚠️ UYARI: Bu fon için içerik tahmini YAPILMAMALI. "
+    "Pozisyon küçükse koru, büyükse içerik netleşene kadar küçük azalt. "
+    "Direktör halüsinasyon üretmemeli."
+)
+
+
 def _fetch_sector_proxy_metrics(ticker: str, sector: str) -> dict:
     """
     Hisse bazlı metrik yoksa sektör ETF proxy'si kullan.
@@ -377,41 +434,60 @@ def analyze_us_equity_with_claude(economic_data: dict, portfolio_positions: list
                     info = {}
 
                 def _safe(val, default="N/A"):
-                    """None, NaN, 0 gibi geçersiz değerler için fallback."""
                     import math
-                    if val is None:
-                        return default
+                    if val is None: return default
                     try:
-                        if isinstance(val, float) and math.isnan(val):
-                            return default
-                    except Exception:
-                        pass
+                        if isinstance(val, float) and math.isnan(val): return default
+                    except Exception: pass
                     return val
 
                 try:
-                    beta       = _safe(info.get("beta"), "N/A")
-                    beta_str   = f"{beta:.1f}" if isinstance(beta, float) else str(beta)
+                    beta      = _safe(info.get("beta"), "N/A")
+                    beta_str  = f"{beta:.1f}" if isinstance(beta, float) else str(beta)
 
-                    fcf        = float(_safe(info.get("freeCashflow"), 0) or 0)
-                    mktcap     = float(_safe(info.get("marketCap"),    0) or 0)
-                    fcf_yield  = round(fcf / mktcap * 100, 1) if mktcap > 0 and fcf != 0 else 0
-                    fcf_str    = f"{fcf_yield:+.1f}%" if fcf_yield != 0 else "N/A"
+                    fcf       = float(_safe(info.get("freeCashflow"), 0) or 0)
+                    mktcap    = float(_safe(info.get("marketCap"),    0) or 0)
+                    fcf_yield = round(fcf / mktcap * 100, 1) if mktcap > 0 and fcf != 0 else 0
+                    fcf_str   = f"{fcf_yield:+.1f}%" if fcf_yield != 0 else "N/A"
 
-                    de_raw     = _safe(info.get("debtToEquity"), None)
-                    de_str     = f"{float(de_raw):.1f}" if de_raw is not None else "N/A"
+                    de_raw    = _safe(info.get("debtToEquity"), None)
+                    de_str    = f"{float(de_raw):.1f}" if de_raw is not None else "N/A"
 
-                    rev        = float(_safe(info.get("totalRevenue"),      0) or 0)
-                    emp        = float(_safe(info.get("fullTimeEmployees"), 0) or 0)
-                    if rev > 0 and emp > 0:
-                        rpe_str = f"Gelir/Çalışan: ${rev/emp/1000:.0f}K"
-                    else:
-                        rpe_str = "Gelir/Çalışan: N/A"
+                    # ── Current Ratio (Cari Oran) — Zombi filtresi ────────
+                    # FCF negatif VEYA Current Ratio < 1.0 → Zombi adayı
+                    cr_raw    = _safe(info.get("currentRatio"), None)
+                    cr_val    = float(cr_raw) if cr_raw is not None else None
+                    cr_str    = f"{cr_val:.2f}" if cr_val is not None else "N/A"
+
+                    # Zombi skoru: 0=sağlıklı, 1=dikkat, 2=zombi
+                    zombi_score = 0
+                    zombi_flags = []
+                    if fcf < 0:
+                        zombi_score += 1
+                        zombi_flags.append("FCF<0")
+                    if cr_val is not None and cr_val < 1.0:
+                        zombi_score += 1
+                        zombi_flags.append(f"CariOran<1({cr_val:.2f})")
+                    if de_raw is not None and float(de_raw) > 200:
+                        zombi_score += 1
+                        zombi_flags.append("AşırıBorç")
+
+                    zombi_tag = (
+                        "🧟 ZOMBİ"   if zombi_score >= 2 else
+                        "⚠️ DİKKAT"  if zombi_score == 1 else
+                        "✅ SAĞLIKLI"
+                    )
+                    zombi_note = f"[{zombi_tag}: {', '.join(zombi_flags)}]" if zombi_flags else f"[{zombi_tag}]"
+
+                    rev       = float(_safe(info.get("totalRevenue"),      0) or 0)
+                    emp       = float(_safe(info.get("fullTimeEmployees"), 0) or 0)
+                    rpe_str   = f"Gelir/Çalışan:${rev/emp/1000:.0f}K" if rev > 0 and emp > 0 else ""
 
                     lines.append(
-                        f"• {ticker}: K/Z %{pnl:+.0f} | Değer: ${val:,.0f} | "
-                        f"Beta: {beta_str} | FCF Getirisi: {fcf_str} | "
-                        f"Borç/Özkaynak: {de_str} | {rpe_str} | "
-                        f"Sektör: {p.get('sector','?')}"
+                        f"• {ticker}: K/Z %{pnl:+.0f} | Değer:${val:,.0f} | "
+                        f"Beta:{beta_str} | FCF:{fcf_str} | CariOran:{cr_str} | "
+                        f"Borç/ÖK:{de_str} | {rpe_str} | {zombi_note} | "
+                        f"Sektör:{p.get('sector','?')}"
                     )
                 except Exception:
                     # yfinance başarısız → sektör proxy kullan
@@ -697,26 +773,20 @@ def analyze_turkey_with_claude(turkey_data: dict, portfolio_positions: list,
     if tefas_pos:
         lines.append("\n=== TEFAS POZİSYONLARI (LOOK-THROUGH ANALİZİ) ===")
         # Bilinen fon içerik haritası — KAP aylık raporlarından derlendi
-        TEFAS_MAP = {
-            "IIH":  ("Hisse Yoğun",          "Büyük Şirket ~%90",         "YÜKSEK", "ORTA"),
-            "AEY":  ("Altın/Kıymetli Maden", "Altın ~%80",                "DÜŞÜK",  "DÜŞÜK"),
-            "YAC":  ("Dengeli",               "Hisse %50 Tahvil %50",      "ORTA",   "DÜŞÜK"),
-            "TTE":  ("Hisse (Teknoloji)",     "Teknoloji ~%85",            "YÜKSEK", "ORTA"),
-            "GAF":  ("Kamu Menkul Kıymet",   "Devlet Tahvili ~%90",       "DÜŞÜK",  "YÜKSEK"),
-            "MAC":  ("Hisse (Banka)",         "Bankacılık ~%80",           "ÇOK YÜK","ORTA"),
-            "NNF":  ("Hisse (Büyüme)",        "Küçük/Orta Şirket ~%85",   "YÜKSEK", "ORTA"),
-        }
+        # TEFAS_DB merkezi veri tabanından çek — bilinmeyende UYARI ver
         for p in tefas_pos:
-            kod  = p["ticker"].upper()
-            tip, icerik, ress_duy, kur_risk = TEFAS_MAP.get(
-                kod, ("Bilinmiyor", "KAP'tan kontrol et", "?", "?")
-            )
-            val_tl = float(p.get("shares", 0)) * float(p.get("current_price", p.get("avg_cost", 0)))
+            kod     = p["ticker"].upper()
+            db_entry = TEFAS_DB.get(kod, TEFAS_UNKNOWN_RULE)
+            tip, icerik, ress_duy, kur_risk, beta, notlar = db_entry
+            val_tl  = float(p.get("shares", 0)) * float(p.get("current_price", p.get("avg_cost", 0)))
+            bilinmiyor = (tip == "BİLİNMEYEN")
             lines.append(
                 f"• {kod} [{tip}]: {p['shares']:,.0f} adet | ~{val_tl:,.0f} TL | "
-                f"İçerik: {icerik} | Resesyon Duyar.: {ress_duy} | Kur Riski: {kur_risk}"
+                f"İçerik: {icerik} | Resesyon: {ress_duy} | Beta: {beta} | Kur: {kur_risk}"
+                + (f"\n  ⚠️ {notlar}" if bilinmiyor else f"\n  📋 {notlar[:80]}")
             )
-        lines.append("Analiz: Her fonun içeriğine göre resesyon/kur riskini ayrı ayrı değerlendir.")
+        lines.append("KURAL: Bilinmeyen fon için halüsinasyon/tahmin YASAK. "
+                     "İçerik doğrulanana kadar koru veya küçük azalt.")
 
     tr_sig = signal_summary.get("turkey", {})
     if tr_sig:
@@ -792,15 +862,29 @@ Tek bir senaryoya %100 güvenme. Her kararı üç olasılığın matematiksel ha
 2. ALTERNATİF SENARYO — %20-35 ihtimalle gerçekleşebilecek zıt senaryo  
 3. KUYRUK RİSKİ — %5-15 ihtimalle ancak çok yıkıcı uç senaryo
 
-Örnek format:
-"senaryo_olasılıkları": {
-  "baz": {"tanim": "Soft landing", "olasilik_pct": 55, "portfoy_etkisi": "+8%"},
-  "alternatif": {"tanim": "Hard landing resesyon", "olasilik_pct": 35, "portfoy_etkisi": "-18%"},
-  "kuyruk": {"tanim": "Likidite krizi", "olasilik_pct": 10, "portfoy_etkisi": "-45%"}
-}
-"harmonize_strateji": "Bu üç olasılığın ağırlıklı ortalamasına göre önerim şu..."
-
 Ağırlıklı beklenen getiri = Σ(olasılık × etki). Negatif beklenen değerde agresif pozisyon alma.
+
+═══ DİNAMİK RİSK BÜTÇESİ — SERT LİMİTLER ═══
+Piyasa rejimine göre aşılmaması gereken risk sınırları:
+
+RISK-OFF / CAUTION / YAVAŞ KANAMA / LİKİDİTE ŞOKU senaryolarında:
+• Kripto (tüm) + Yüksek Beta Hisse (Beta > 1.5) toplamı → ASLA %15'i geçemez
+• Nakit + Kısa Tahvil → minimum %15 olmalı
+• Hisse yoğun TEFAS (IIH, TTE, NNF, MAC) → toplam TEFAS'ın max %30'u
+
+STAGFLASYON senaryosunda:
+• Enerji + Altın + Emtia toplamı → minimum %25 olmalı
+• Uzun vadeli tahvil → maksimum %10
+
+MALİ DOMINANS / MELT-UP senaryosunda:
+• Nakit (TL) → minimum %0 (nakit TL tutmak en kötü seçim)
+• Sabit arzlı varlık (BTC + Altın) → minimum %30 önerilir
+
+RISK-ON senaryosunda:
+• Defansif (XLP, XLU benzeri) → maksimum %20 (geri kalmayı önle)
+• Kripto + Büyüme Hisse → %40'a kadar çıkabilir
+
+Bu sınırları aştığında portföy önerisini revize et ve neden sınırı aştığını açıkla.
 
 ═══ KORElASYON SİGORTASI ═══
 Eğer portföydeki varlık sınıfları arasındaki 30 günlük korelasyon 0.7'yi geçiyorsa
@@ -816,6 +900,12 @@ Eğer portföydeki varlık sınıfları arasındaki 30 günlük korelasyon 0.7'y
   zamanlama talimatı ver. Kripto ve ABD hisseleri T+0.
 • SPESİFİK TICKER: Portföydeki her hisseyi listede gördüğüne göre
   sınıf değil ticker bazlı karar ver.
+• TEFAS HALÜSINASYON YASAĞI: Sözlükte (TEFAS_DB) olmayan fon için
+  içerik TAHMİNİ YAPMA. "Tahvil ağırlıklı gibi görünüyor" demek yasak.
+  Bilinmeyen fon → "İçerik doğrulanmadı, koru" de.
+• ZOMBİ KURALI: FCF < 0 VE (Current Ratio < 1.0 VEYA Borç/ÖK > 200)
+  ise şirket zombi — sat. Sadece FCF negatifliği yeterli değil,
+  şirkette 3 yıllık nakit varsa zombi değildir.
 • Türkçe yaz
 • JSON formatında yanıt ver — aşağıdaki şemayı kullan:
 
@@ -990,14 +1080,10 @@ def _build_director_message(
         "SI=F":  "[Sanayi_baglantili|Enflasyon_koruyucu]",
         "CL=F":  "[Resesyon_hassas|Jeopolitik_pozitif]",
     }
+    # TEFAS_DB'den dinamik etiket üret
     _TEFAS_LABELS = {
-        "IIH": "%90 Hisse Yoğun → [Resesyon_YUKSEK_risk]",
-        "AEY": "%80 Altın → [Resesyon_DUSUK_risk]",
-        "TTE": "%85 Teknoloji Hisse → [Resesyon_YUKSEK_risk]",
-        "MAC": "%80 Bankacılık → [Resesyon_COK_YUKSEK_risk]",
-        "GAF": "%90 Devlet Tahvili → [Resesyon_DUSUK_risk]",
-        "YAC": "%50 Hisse %50 Tahvil → [Resesyon_ORTA_risk]",
-        "NNF": "%85 Büyüme Hisse → [Resesyon_YUKSEK_risk]",
+        kod: f"{v[1]} → [Resesyon_{v[2]}_risk|Beta_{v[4]}]"
+        for kod, v in TEFAS_DB.items()
     }
 
     # Sınıf bazında grupla ve listele
