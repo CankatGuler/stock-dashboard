@@ -6084,9 +6084,10 @@ SADECE aşağıdaki JSON'u döndür (açıklama ekleme, toplam ağırlık %100 o
 
         # ── Nakit Realizasyon Planı ───────────────────────────────────────
         _nrp = _dir.get("nakit_realizasyon_plani", {})
-        if _nrp:
-            _tutarli = _nrp.get("tutarli_mi", "")
-            _nrp_color = "#00c48c" if _tutarli == "evet" else "#ffb300"
+        _nrp_color = "#ffb300"  # varsayılan: doldurulmamış uyarı
+        if _nrp and _nrp.get("bugun_t0","?") not in ("?",""):
+            _tutarli   = _nrp.get("tutarli_mi","")
+            _nrp_color = "#00c48c" if "evet" in _tutarli.lower() else "#ffb300"
             st.markdown(
                 f'<div style="background:#111927;border-left:3px solid {_nrp_color};'
                 f'border-radius:0 6px 6px 0;padding:0.7rem 1rem;margin:0.8rem 0;">'
@@ -6099,8 +6100,17 @@ SADECE aşağıdaki JSON'u döndür (açıklama ekleme, toplam ağırlık %100 o
                 f'<span style="color:{_nrp_color};">Tutarlı: <b>{_tutarli.upper()}</b></span>'
                 f'</div>'
                 + (f'<div style="font-size:0.75rem;color:#ffb300;margin-top:4px;">'
-                   f'⚠️ {_nrp.get("not","")}</div>' if _tutarli == "hayir" else "")
+                   f'⚠️ {_nrp.get("not","")}</div>' if "hayir" in _tutarli.lower() else "")
                 + f'</div>',
+                unsafe_allow_html=True)
+        else:
+            # Nakit planı boş geldi — uyarı göster
+            st.markdown(
+                '<div style="background:#2a1a0a;border-left:3px solid #ffb300;'
+                'border-radius:0 6px 6px 0;padding:0.5rem 1rem;margin:0.5rem 0;">'
+                '<span style="font-size:0.75rem;color:#ffb300;">⚠️ Nakit realizasyon planı direktör '
+                'tarafından doldurulmadı — analizi tekrar çalıştır.</span>'
+                '</div>',
                 unsafe_allow_html=True)
 
         # ── HTML Export ───────────────────────────────────────────────────

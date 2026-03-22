@@ -854,12 +854,12 @@ risk_senaryosu: Kötü senaryo tetikleyici + somut adımlar
 vade_planlari: Kısa/orta/uzun vade için baz ve risk senaryoları
 yil_sonu_hedefi: Hedefe ulaşmak için ne kadar risk gerekiyor?
 bir_sonraki_kontrol: Tarih + tetikleyiciler (max 3)
-nakit_realizasyon_plani: [ZORUNLU — BOŞ BIRAKILAMAZ]
-  bugun_t0: Kripto + ABD hisse satışından bugün T+0'da elde edilecek nakit miktarı ($)
-  t2_tefas: TEFAS satışından T+2'de gelecek nakit miktarı ($)
-  toplam_hedef: Öneri edilen nakit ağırlığına karşılık gelen toplam $ hedef
-  tutarli_mi: T+0 + T+2 toplamı hedefe ulaşıyor mu? (evet/hayir)
-  not: Tutarsızsa farkı ve nasıl kapatılacağını açıkla
+nakit_realizasyon_plani: [ZORUNLU — BOŞ BIRAKILAMAZ — BU ALAN EKSİKSE JSON GEÇERSİZ]
+  bugun_t0: "Bugün T+0'da elde edilecek nakit: $X (hangi varlık satılıyor?)"
+  t2_tefas: "T+2'de TEFAS'tan gelecek nakit: $X (hangi fon satılıyor?)"
+  toplam_hedef: "Nakit hedefi: $X (%Y portföy)"
+  tutarli_mi: "evet" veya "hayir — $X eksik, şöyle kapatılıyor: ..."
+  not: Direktör mesajındaki NAKİT REALİZASYON TABLOSUNDAN ilgili satırı kopyala
 
 ═══ SENARYO OLASILILANDIRMASI (KRİTİK) ═══
 Tek bir senaryoya %100 güvenme. Her kararı üç olasılığın matematiksel harmanı yap:
@@ -1011,11 +1011,11 @@ Eğer portföydeki varlık sınıfları arasındaki 30 günlük korelasyon 0.7'y
     ]
   },
   "nakit_realizasyon_plani": {
-    "bugun_t0": "Kripto+ABD hisse satışı — bugün T+0'da elde edilecek nakit ($)",
-    "t2_tefas": "TEFAS satışından T+2'de gelecek nakit ($)",
-    "toplam_hedef": "Önerilen nakit ağırlığına karşılık $ hedef",
-    "tutarli_mi": "evet|hayir",
-    "not": "Tutarsızsa farkı ve nasıl kapatılacağını açıkla"
+    "bugun_t0": "örn: $8,500 — BTC %50 + AVGO + SOFI satışından",
+    "t2_tefas": "örn: $15,000 — IIH+TTE satış emri bugün, nakit T+2",
+    "toplam_hedef": "örn: $25,000 (%35 portföy)",
+    "tutarli_mi": "örn: evet — T+0 $8500 + T+2 $15000 = $23500, hedef $25000, $1500 eksik",
+    "not": "Eksikse farkı ve kapatma yöntemini yaz. Bu alan ZORUNLU."
   },
   "hard_cap_ihlal": {
     "var_mi": false,
@@ -1196,6 +1196,33 @@ def _build_director_message(
     lines.append("KURAL: Yukarıdaki spesifik ticker listesini kullanarak karar ver.")
     lines.append("'ABD hisselerini azalt' değil → 'AVGO sat, SCHD koru' gibi.")
 
+    # Mikro-maliyet uyarısı — küçük pozisyonlar için
+    _kucuk_pozisyonlar = [
+        p for ac in class_groups.values()
+        for p in ac
+        if p["val"] < 500 and p["val"] > 0
+    ]
+    if _kucuk_pozisyonlar:
+        lines.append("")
+        lines.append("═══ MİKRO-MALİYET UYARISI ═══")
+        lines.append(
+            "Aşağıdaki pozisyonlar $500 altında. SAT kararı vermeden önce "
+            "komisyon + spread + vergi etkisini hesapla. "
+            "Net kazanç < $20 ise işlem maliyetine değmeyebilir — 'KORU' tercih et:"
+        )
+        for p in sorted(_kucuk_pozisyonlar, key=lambda x: x["val"]):
+            _komisyon_tahmini = max(1.0, p["val"] * 0.001)  # ~%0.1 komisyon tahmini
+            _min_fayda = _komisyon_tahmini * 3  # En az 3x komisyon fayda olmalı
+            lines.append(
+                f"  • {p['ticker']:12s}: ${p['val']:,.0f} | "
+                f"Tahmini komisyon: ~${_komisyon_tahmini:.1f} | "
+                f"Satış için minimum fayda gereksinimi: ~${_min_fayda:.0f}"
+            )
+        lines.append(
+            "KURAL: Pozisyon değeri < $500 ve beklenen fayda < $50 ise SAT önerme. "
+            "Bunun yerine 'Yeni alım yaparken bu pozisyonu birleştir' de."
+        )
+
     # ── Nakit realizasyon kontrolü ─────────────────────────────────────
     # Direktör nakit hedefi belirlediğinde bunun matematiksel olarak
     # mevcut satışlarla karşılanıp karşılanamayacağını kontrol et
@@ -1205,15 +1232,41 @@ def _build_director_message(
     _crypto_val= sum(p["val"] for p in class_groups.get("crypto", []))
     _comm_val  = sum(p["val"] for p in class_groups.get("commodity", []))
     _tefas_val = sum(p["val"] for p in class_groups.get("tefas", []))
+    # Olası nakit hedeflerine göre önceden hesaplama yap
+    _t0_max   = _us_val + _crypto_val + _comm_val
+    _t2_max   = _tefas_val
+    _total_liq = cash + _t0_max + _t2_max
+
     lines.append(
-        f"Mevcut nakit: ${cash:,.0f} (%{cash/max(total_val,1)*100:.1f}) | "
-        f"Satılabilir (T+0): ABD hisse ${_us_val:,.0f} + Kripto ${_crypto_val:,.0f} = ${_us_val+_crypto_val:,.0f} | "
-        f"Satılabilir (T+2): TEFAS ${_tefas_val:,.0f} | "
-        f"Satılabilir (T+0/T+1): Emtia ETF ${_comm_val:,.0f}"
+        f"Mevcut nakit: ${cash:,.0f} (%{cash/max(total_val,1)*100:.1f})"
     )
     lines.append(
-        "KURAL: Nakit hedefi belirlerken hangi varlığın ne zaman nakde döneceğini belirt. "
-        "'%40 nakit hedefle' diyorsan: bugün kripto sat (T+0) + TEFAS T+2'de gelecek + toplam ne kadar nakit?"
+        f"T+0 satılabilir maksimum: ${_t0_max:,.0f} "
+        f"(ABD hisse ${_us_val:,.0f} + Kripto ${_crypto_val:,.0f} + Emtia ${_comm_val:,.0f})"
+    )
+    lines.append(f"T+2 satılabilir maksimum: ${_t2_max:,.0f} (TEFAS)")
+    lines.append(f"Toplam likidite potansiyeli: ${_total_liq:,.0f}")
+    lines.append("")
+
+    # Nakit hedef senaryoları — direktöre hazır matematik
+    for _hedef_pct in [15, 25, 40, 55]:
+        _hedef_dolar = total_val * _hedef_pct / 100
+        _ek_ihtiyac  = max(0, _hedef_dolar - cash)
+        _t0_karsilar = min(_ek_ihtiyac, _t0_max)
+        _t2_karsilar = min(max(0, _ek_ihtiyac - _t0_karsilar), _t2_max)
+        _karsilanamaz = max(0, _ek_ihtiyac - _t0_karsilar - _t2_karsilar)
+        _durum = "✅ Karşılanabilir" if _karsilanamaz == 0 else f"❌ ${_karsilanamaz:,.0f} eksik"
+        lines.append(
+            f"  %{_hedef_pct} nakit hedefi = ${_hedef_dolar:,.0f} | "
+            f"Ek ihtiyaç: ${_ek_ihtiyac:,.0f} | "
+            f"T+0'dan: ${_t0_karsilar:,.0f} | T+2'den: ${_t2_karsilar:,.0f} | {_durum}"
+        )
+
+    lines.append("")
+    lines.append(
+        "ZORUNLU: nakit_realizasyon_plani alanını doldur. "
+        "Hangi nakit hedefini seçtiysen yukarıdaki tablodaki T+0/T+2 dağılımını kullan. "
+        "Bu alan BOŞ BIRAKILAMAZ."
     )
 
     # ── Yaklaşan Önemli Olaylar ─────────────────────────────────────────
