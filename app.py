@@ -5260,59 +5260,56 @@ with tab_strategy:
             if not _api_key:
                 st.error("❌ ANTHROPIC_API_KEY eksik — Streamlit Cloud secrets kontrol et.")
             else:
-                with st.spinner("🧭 Direktör analiz yapıyor (~30 sn)..."):
+                with st.spinner("🧭 Direktör analiz yapıyor (~45 sn)..."):
                     _sim_prompt  = build_scenario_director_prompt(_sim_data)
-                    _sim_system  = (
-                        "Sen çok varlıklı portföy yönetiminde uzmanlaşmış strateji direktörüsün. "
-                        "ABD hisse, kripto, emtia ve TEFAS fonlarını aynı anda yönetiyorsun. "
-                        "Bu bir SENARYO SİMÜLASYONU — senaryo şu an GERÇEKLEŞIYOR.\n\n"
-                        "GÖREVLER:\n"
-                        "1. SPESİFİK TICKER KARARLARI: Sana portföyün DETAYLI DÖKÜMÜ verilecek. "
-                        "'ABD hisselerini azalt' değil, 'AVGO'yu sat, SCHD'yi koru' gibi "
-                        "her hisse için ayrı karar ver.\\n"
-                        "2. MİKRO ETİKETLEME: Her ABD hissesi için "
-                        "[Faiz_indirim_pozitif/negatif] ve [Resesyon_defansif/hassas] etiketle.\\n"
-                        "3. TEFAS LOOK-THROUGH: IIH=%90 hisse (YÜKSEK resesyon riski), "
-                        "AEY=%80 altın (DÜŞÜK resesyon riski). Her fona ayrı karar ver.\\n"
-                        "4. SENARYO OLASILILANDIRMASI: Baz(%55 soft landing), "
-                        "Alternatif(%35 hard landing), Kuyruk(%10 kriz). "
-                        "Ağırlıklı ortalama strateji üret.\\n"
-                        "5. KORElASYON SİGORTASI: VIX 34 + USDJPY 142 ortamında "
-                        "nakit önerisini 1.5x artır.\\n"
-                        "6. VALÖR GERÇEKLİĞİ: TEFAS satışı T+2 valörlüdür. "
-                        "IIH satış emri ver → bugün mevcut nakitle altın al (T+0). "
-                        "Kripto ve ABD hisseleri T+0, önce bunları işle.\\n\\n"
-                        "{\n"
-                        '  "senaryo_yorumu": "2-3 cümle",\n'
-                        '  "senaryo_olasiliklari": {\n'
-                        '    "baz":        {"tanim":"...", "olasilik_pct":55, "portfoy_etkisi":"..."},\n'
-                        '    "alternatif": {"tanim":"...", "olasilik_pct":35, "portfoy_etkisi":"..."},\n'
-                        '    "kuyruk":     {"tanim":"...", "olasilik_pct":10, "portfoy_etkisi":"..."}\n'
-                        "  },\n"
-                        '  "harmonize_strateji": "tek cümle net karar",\n'
-                        '  "onerilen_agirliklar": {\n'
-                        '    "us_equity": {"pct":0,"onceki_pct":19,"degisim_pp":0,"gerekce":"..."},\n'
-                        '    "crypto":    {"pct":0,"onceki_pct":20,"degisim_pp":0,"gerekce":"..."},\n'
-                        '    "commodity": {"pct":0,"onceki_pct":17,"degisim_pp":0,"gerekce":"..."},\n'
-                        '    "tefas":     {"pct":0,"onceki_pct":40,"degisim_pp":0,"gerekce":"..."},\n'
-                        '    "nakit":     {"pct":0,"onceki_pct": 4,"degisim_pp":0,"gerekce":"..."}\n'
-                        "  },\n"
-                        '  "hisse_bazli_kararlar": [{"ticker":"...","etiketler":["..."],'
-                        '"fcf_durumu":"...","karar":"KORU|ARTIR|AZALT|SAT","gerekce":"..."}],\n'
-                        '  "tefas_kararlari": [{"ticker":"IIH","icerik":"...","resesyon_duyarlilik":"YUKSEK","karar":"AZALT","gerekce":"..."}],\n'
-                        '  "korelasyon_sigortasi": {"aktif":true,"neden":"...","nakit_artirim_pp":5},\n'
-                        '  "zamanlama": "hemen|kademeli_1hafta|bekle_teyit",\n'
-                        '  "zamanlama_gerekce": "...",\n'
-                        '  "kritik_aksiyonlar": [{"oncelik":1,"ticker":"...","aksiyon":"...","neden":"..."}],\n'
-                        '  "senaryo_sonu_sinyali": "...",\n'
-                        '  "en_buyuk_yanilma_riski": "..."\n'
-                        "}\nTürkçe yaz. Ağırlıklar toplamı %100 olmalı."
-                    )
+                    _sim_system  = """Sen çok varlıklı portföy yönetiminde uzmanlaşmış strateji direktörüsün.
+ABD hisse, kripto, emtia ve TEFAS fonlarını aynı anda yönetiyorsun.
+Bu bir SENARYO SİMÜLASYONU — senaryo şu an GERÇEKLEŞIYOR.
+
+GÖREVLER:
+1. SPESİFİK TICKER: Portföy dökümündeki her ticker için ayrı karar ver. Sınıf değil ticker bazlı.
+2. MİKRO ETİKETLEME: Her ABD hissesi için [Faiz_indirim_pozitif/negatif][Resesyon_defansif/hassas] etiketle.
+3. TEFAS LOOK-THROUGH: IIH=%90 hisse(YÜKSEK risk), AEY=%80 altın(DÜŞÜK risk). Ayrı karar ver.
+4. SENARYO OLASILILANDIRMASI: Baz/Alternatif/Kuyruk olasılıklarına göre ağırlıklı ortalama strateji üret.
+5. KORELASYON SİGORTASI: VIX>30 ortamında nakit önerisini 1.5x artır.
+6. VALÖR: TEFAS T+2, kripto/ABD hisse T+0. Zamanlama önerilerinde bunu yansıt.
+
+SADECE aşağıdaki JSON'u döndür (açıklama ekleme, toplam ağırlık %100 olmalı):
+{
+  "senaryo_yorumu": "2-3 cümle",
+  "senaryo_olasiliklari": {
+    "baz":        {"tanim":"...","olasilik_pct":55,"portfoy_etkisi":"..."},
+    "alternatif": {"tanim":"...","olasilik_pct":35,"portfoy_etkisi":"..."},
+    "kuyruk":     {"tanim":"...","olasilik_pct":10,"portfoy_etkisi":"..."}
+  },
+  "harmonize_strateji": "tek cümle",
+  "onerilen_agirliklar": {
+    "us_equity": {"pct":0,"onceki_pct":0,"degisim_pp":0,"gerekce":"..."},
+    "crypto":    {"pct":0,"onceki_pct":0,"degisim_pp":0,"gerekce":"..."},
+    "commodity": {"pct":0,"onceki_pct":0,"degisim_pp":0,"gerekce":"..."},
+    "tefas":     {"pct":0,"onceki_pct":0,"degisim_pp":0,"gerekce":"..."},
+    "nakit":     {"pct":0,"onceki_pct":0,"degisim_pp":0,"gerekce":"..."}
+  },
+  "hisse_bazli_kararlar": [
+    {"ticker":"...","etiketler":["..."],"fcf_durumu":"...","karar":"KORU|ARTIR|AZALT|SAT","gerekce":"..."}
+  ],
+  "tefas_kararlari": [
+    {"ticker":"...","icerik":"...","resesyon_duyarlilik":"...","karar":"...","gerekce":"...","valor_notu":"..."}
+  ],
+  "korelasyon_sigortasi": {"aktif":true,"neden":"...","nakit_artirim_pp":0},
+  "zamanlama": "hemen|kademeli_1hafta|bekle_teyit",
+  "zamanlama_gerekce": "...",
+  "kritik_aksiyonlar": [
+    {"oncelik":1,"ticker":"...","aksiyon":"...","neden":"..."}
+  ],
+  "senaryo_sonu_sinyali": "...",
+  "en_buyuk_yanilma_riski": "..."
+}"""
                     try:
                         import anthropic as _ant_sim
                         _sim_resp = _ant_sim.Anthropic(api_key=_api_key).messages.create(
                             model="claude-opus-4-5",
-                            max_tokens=4000,
+                            max_tokens=8000,
                             system=_sim_system,
                             messages=[{"role":"user","content":_sim_prompt}]
                         )
@@ -5325,23 +5322,59 @@ with tab_strategy:
         # ── Sonuçları göster (session_state'den) ─────────────────────────
         _raw_result = st.session_state.get("simulation_result")
         if _raw_result:
-            # JSON parse — robust
+            # JSON parse — çok katmanlı recovery
             _sim_json = {}
             try:
                 _cleaned = _raw_result.strip()
+                # Markdown kod bloğu temizle
                 if "```json" in _cleaned:
                     _cleaned = _cleaned.split("```json")[1].split("```")[0].strip()
                 elif "```" in _cleaned:
                     _cleaned = _cleaned.split("```")[1].split("```")[0].strip()
+                # İlk { ile son } arasını al
                 _fi = _cleaned.find("{")
                 _la = _cleaned.rfind("}")
                 if _fi >= 0 and _la > _fi:
-                    _sim_json = _json_sim.loads(_cleaned[_fi:_la+1])
+                    _candidate = _cleaned[_fi:_la+1]
+                    try:
+                        _sim_json = _json_sim.loads(_candidate)
+                    except _json_sim.JSONDecodeError:
+                        # Brace recovery — yanıt kesilmişse eksik } ekle
+                        _ob = _candidate.count("{")
+                        _cb = _candidate.count("}")
+                        if _ob > _cb:
+                            _fixed = _candidate + "}" * (_ob - _cb)
+                            try:
+                                _sim_json = _json_sim.loads(_fixed)
+                            except Exception:
+                                pass
+                        # Hâlâ başarısızsa — kısmi alanları kurtarmaya çalış
+                        if not _sim_json:
+                            import re as _re_fix
+                            # Sadece senaryo_yorumu ve temel alanları çıkar
+                            _partial = {}
+                            for _field in ["senaryo_yorumu","harmonize_strateji","zamanlama","zamanlama_gerekce",
+                                           "senaryo_sonu_sinyali","en_buyuk_yanilma_riski"]:
+                                _m = _re_fix.search(
+                                    rf'"{_field}"\s*:\s*"([^"]*)"', _candidate
+                                )
+                                if _m:
+                                    _partial[_field] = _m.group(1)
+                            # onerilen_agirliklar ayrıca çıkar
+                            _oa_m = _re_fix.search(r'"onerilen_agirliklar"\s*:\s*(\{[^}]+(?:\{[^}]*\}[^}]*)*\})', _candidate)
+                            if _oa_m:
+                                try:
+                                    _partial["onerilen_agirliklar"] = _json_sim.loads(_oa_m.group(1))
+                                except Exception:
+                                    pass
+                            if _partial:
+                                _sim_json = _partial
+                                st.info("⚠️ JSON kısmen kurtarıldı — tam analiz için tekrar çalıştır")
             except Exception as _je:
                 st.warning(f"JSON parse hatası: {_je}")
-                st.markdown(_raw_result)
 
             if not _sim_json:
+                st.markdown("**Ham yanıt (parse edilemedi):**")
                 st.markdown(_raw_result)
             else:
                 _krenk = {"KORU":"#00c48c","ARTIR":"#4fc3f7","AZALT":"#ffb300","SAT":"#e74c3c"}
