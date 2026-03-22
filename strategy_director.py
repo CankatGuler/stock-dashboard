@@ -132,6 +132,98 @@ YANIT FORMATI: Aşağıdaki JSON formatında yanıt ver, hiçbir alanı boş bı
 }"""
 
 
+
+# ─── Sektör Proxy Haritası ────────────────────────────────────────────────────
+# yfinance hisse bazlı FCF/metrik bulamazsa, sektör ETF'i proxy olarak kullanılır
+
+SECTOR_ETF_PROXY = {
+    # Sektör adı → (Proxy ETF, açıklama)
+    "Technology":           ("XLK",  "Teknoloji sektörü"),
+    "Financial Services":   ("XLF",  "Finans sektörü"),
+    "Healthcare":           ("XLV",  "Sağlık sektörü"),
+    "Energy":               ("XLE",  "Enerji sektörü"),
+    "Industrials":          ("XLI",  "Sanayi sektörü"),
+    "Consumer Cyclical":    ("XLY",  "Döngüsel tüketim"),
+    "Consumer Defensive":   ("XLP",  "Defansif tüketim"),
+    "Real Estate":          ("XLRE", "Gayrimenkul"),
+    "Utilities":            ("XLU",  "Kamu hizmetleri"),
+    "Communication Services":("XLC", "İletişim"),
+    "Basic Materials":      ("XLB",  "Hammadde"),
+    # Kripto varlıklar — bireysel proxy eşlemesi
+    "Cryptocurrency":       ("IBIT", "Geniş kripto proxy"),
+    "BTC-USD":              ("IBIT", "Bitcoin spot proxy"),
+    "ETH-USD":              ("ETHA", "Ethereum ETF proxy"),
+    "SOL-USD":              ("IBIT", "Solana — büyük kripto sepeti proxy"),
+    "BNB-USD":              ("IBIT", "BNB — büyük kripto sepeti proxy"),
+    "XRP-USD":              ("IBIT", "XRP — büyük kripto sepeti proxy"),
+    "AVAX-USD":             ("IBIT", "Avalanche — kripto sepeti proxy"),
+    "DOGE-USD":             ("IBIT", "Dogecoin — spekülatif kripto proxy"),
+    "PEPE-USD":             ("IBIT", "PEPE — spekülatif kripto proxy"),
+    "WIF-USD":              ("IBIT", "WIF — meme kripto proxy"),
+    # Emtia pozisyonları
+    "ALTIN_GRAM_TRY":       ("GLD",  "Altın ETF proxy — TL bazlı altın"),
+    "GUMUS_GRAM_TRY":       ("SLV",  "Gümüş ETF proxy — TL bazlı gümüş"),
+    "GC=F":                 ("GLD",  "Altın futures proxy"),
+    "SI=F":                 ("SLV",  "Gümüş futures proxy"),
+    "CL=F":                 ("USO",  "WTI petrol futures proxy"),
+    # TEFAS fonları — ilgili ETF proxy
+    "IIH":                  ("EWT",  "Hisse yoğun TEFAS — EM hisse proxy"),
+    "AEY":                  ("GLD",  "Altın TEFAS — altın ETF proxy"),
+    "TTE":                  ("XLK",  "Teknoloji TEFAS — teknoloji ETF proxy"),
+    "MAC":                  ("XLF",  "Banka TEFAS — finans ETF proxy"),
+    "GAF":                  ("SHV",  "Kamu tahvil TEFAS — kısa tahvil proxy"),
+    "NNF":                  ("IWM",  "Büyüme TEFAS — küçük sermayeli proxy"),
+    "YAC":                  ("AOM",  "Dengeli TEFAS — dengeli ETF proxy"),
+    # Özel ABD şirket eşlemeleri
+    "PLTR": ("XLK",  "Yazılım/AI — Teknoloji proxy"),
+    "CRWD": ("XLK",  "Siber güvenlik — Teknoloji proxy"),
+    "SOFI": ("XLF",  "Fintech — Finans proxy"),
+    "RKLB": ("XLI",  "Uzay/Savunma — Sanayi proxy"),
+    "VRT":  ("XLI",  "Veri merkezi altyapı — Sanayi proxy"),
+    "AVGO": ("XLK",  "Yarı iletken — Teknoloji proxy"),
+    "AMZN": ("XLY",  "E-ticaret/Bulut — Tüketim/Teknoloji proxy"),
+    "ZETA": ("XLK",  "Ad-tech — Teknoloji proxy"),
+    "NBIS": ("XLK",  "AI chip — Teknoloji proxy"),
+    "SCHD": ("VYM",  "Temettü ETF — yüksek temettü proxy"),
+    "PPA":  ("XLI",  "Savunma ETF — sanayi proxy"),
+}
+
+
+def _fetch_sector_proxy_metrics(ticker: str, sector: str) -> dict:
+    """
+    Hisse bazlı metrik yoksa sektör ETF proxy'si kullan.
+    Döndürür: {beta, fcf_str, note}
+    """
+    import yfinance as _yf_px
+    
+    # Proxy ETF'i belirle
+    proxy_etf, proxy_label = SECTOR_ETF_PROXY.get(
+        ticker,
+        SECTOR_ETF_PROXY.get(sector, ("SPY", "Geniş piyasa proxy"))
+    )
+    
+    try:
+        etf_info = _yf_px.Ticker(proxy_etf).info
+        etf_beta = etf_info.get("beta", "N/A")
+        
+        # ETF'in 3 aylık performansı FCF proxy olarak
+        hist = _yf_px.Ticker(proxy_etf).history(period="3mo")
+        if len(hist) >= 2:
+            perf_3m = (hist["Close"].iloc[-1] / hist["Close"].iloc[0] - 1) * 100
+            perf_str = f"{perf_3m:+.1f}% (3ay)"
+        else:
+            perf_str = "N/A"
+        
+        return {
+            "beta":    etf_beta,
+            "fcf_str": f"Proxy({proxy_etf}): {perf_str}",
+            "note":    f"{proxy_label} → {proxy_etf} proxy kullanıldı",
+            "proxy":   True,
+        }
+    except Exception:
+        return {"beta": "N/A", "fcf_str": "N/A", "note": "Proxy alınamadı", "proxy": True}
+
+
 def analyze_macro_with_claude(macro_data: dict, economic_data: dict) -> dict:
     """Makro analist — Fed, likidite, büyüme, risk ortamı."""
     # Özet veri hazırla — ham sayı değil yorumlanmış metrikler
@@ -322,10 +414,19 @@ def analyze_us_equity_with_claude(economic_data: dict, portfolio_positions: list
                         f"Sektör: {p.get('sector','?')}"
                     )
                 except Exception:
-                    lines.append(
-                        f"• {ticker}: K/Z %{pnl:+.0f} | Değer: ${val:,.0f} | "
-                        f"Beta: N/A | FCF: N/A | Sektör: {p.get('sector','?')}"
-                    )
+                    # yfinance başarısız → sektör proxy kullan
+                    try:
+                        _px = _fetch_sector_proxy_metrics(ticker, p.get("sector",""))
+                        lines.append(
+                            f"• {ticker}: K/Z %{pnl:+.0f} | Değer: ${val:,.0f} | "
+                            f"Beta: {_px['beta']} | FCF: {_px['fcf_str']} | "
+                            f"Sektör: {p.get('sector','?')} | [{_px['note']}]"
+                        )
+                    except Exception:
+                        lines.append(
+                            f"• {ticker}: K/Z %{pnl:+.0f} | Değer: ${val:,.0f} | "
+                            f"Beta: N/A | FCF: N/A | Sektör: {p.get('sector','?')}"
+                        )
         except Exception:
             for p in us_positions[:8]:
                 pnl = ((p.get("current_price", p["avg_cost"]) - p["avg_cost"])
@@ -413,11 +514,37 @@ def analyze_crypto_with_claude(crypto_data: dict, portfolio_positions: list,
     crypto_pos = [p for p in portfolio_positions if p.get("asset_class") == "crypto"
                   and float(p.get("shares", 0)) > 0]
     if crypto_pos:
-        lines.append("\n=== KRİPTO POZİSYONLARI ===")
+        lines.append("\n=== KRİPTO POZİSYONLARI (MİKRO ANALİZ) ===")
+        lines.append("Her token için volatilite seviyesi, beta ve makro duyarlılığını değerlendir.")
+        # Kripto beta haritası (BTC=1.0 bazlı)
+        CRYPTO_BETA = {
+            "BTC-USD": 1.0, "ETH-USD": 1.3, "SOL-USD": 1.8,
+            "BNB-USD": 1.4, "XRP-USD": 1.5, "AVAX-USD": 1.9,
+            "DOGE-USD": 2.2, "PEPE-USD": 3.5, "WIF-USD": 4.0,
+            "JUP-USD": 2.8, "INJ-USD": 2.5, "SUI-USD": 2.3,
+        }
+        crypto_total = sum(float(p.get("shares",0)) * float(p.get("current_price", p["avg_cost"])) for p in crypto_pos)
         for p in crypto_pos:
-            pnl = ((p.get("current_price", p["avg_cost"]) - p["avg_cost"])
-                   / p["avg_cost"] * 100) if p["avg_cost"] > 0 else 0
-            lines.append(f"• {p['ticker']}: {p['shares']:.4f} adet, K/Z %{pnl:+.0f}")
+            cur  = float(p.get("current_price", p["avg_cost"]))
+            avg  = float(p["avg_cost"])
+            pnl  = (cur - avg) / avg * 100 if avg > 0 else 0
+            val  = float(p.get("shares", 0)) * cur
+            pct_in_crypto = val / crypto_total * 100 if crypto_total > 0 else 0
+            beta = CRYPTO_BETA.get(p["ticker"], 2.0)  # bilinmeyenler için 2.0
+            # Spekülatif mi defansif mi?
+            tag = "BTC_DEFANSIF" if p["ticker"] == "BTC-USD" else (
+                  "ETH_ORTA" if p["ticker"] == "ETH-USD" else "SPEKULATIF_YUKSEK_BETA")
+            # Proxy verisi
+            try:
+                _px = _fetch_sector_proxy_metrics(p["ticker"], "Cryptocurrency")
+                proxy_note = f"Proxy: {_px['fcf_str']}"
+            except Exception:
+                proxy_note = ""
+            lines.append(
+                f"• {p['ticker']}: K/Z %{pnl:+.0f} | Değer: ${val:,.0f} "
+                f"(%{pct_in_crypto:.0f} kripto içi) | Beta(BTC=1): {beta:.1f} | "
+                f"[{tag}] | {proxy_note}"
+            )
 
     crypto_sig = signal_summary.get("crypto", {})
     if crypto_sig:
@@ -484,11 +611,36 @@ def analyze_commodity_with_claude(commodity_data: dict, portfolio_positions: lis
     comm_pos = [p for p in portfolio_positions if p.get("asset_class") == "commodity"
                 and float(p.get("shares", 0)) > 0]
     if comm_pos:
-        lines.append("\n=== EMTİA POZİSYONLARI ===")
+        lines.append("\n=== EMTİA POZİSYONLARI (MİKRO ANALİZ) ===")
+        COMM_TAGS = {
+            "ALTIN_GRAM_TRY": ("Altın (TRY gram)",    "GLD",  "Enflasyon_koruyucu Resesyon_defansif Dolar_zayiflama_pozitif"),
+            "GUMUS_GRAM_TRY": ("Gümüş (TRY gram)",    "SLV",  "Enflasyon_koruyucu Sanayi_baglantili"),
+            "GC=F":           ("Altın Futures",         "GLD",  "Enflasyon_koruyucu Resesyon_defansif"),
+            "SI=F":           ("Gümüş Futures",         "SLV",  "Enflasyon_koruyucu Sanayi_baglantili"),
+            "CL=F":           ("WTI Petrol",            "USO",  "Resesyon_hassas Jeopolitik_pozitif"),
+            "NG=F":           ("Doğal Gaz",             "UNG",  "Enerji_baglantili Mevsimsel"),
+        }
         for p in comm_pos:
-            pnl = ((p.get("current_price", p["avg_cost"]) - p["avg_cost"])
-                   / p["avg_cost"] * 100) if p["avg_cost"] > 0 else 0
-            lines.append(f"• {p['ticker']}: K/Z %{pnl:+.0f}")
+            cur  = float(p.get("current_price", p["avg_cost"]))
+            avg  = float(p["avg_cost"])
+            pnl  = (cur - avg) / avg * 100 if avg > 0 else 0
+            val  = float(p.get("shares", 0)) * cur
+            cur_try = p.get("currency") == "TRY"
+            val_note = f"{val:,.0f} TRY" if cur_try else f"${val:,.0f}"
+            tag_info = COMM_TAGS.get(p["ticker"], (p["ticker"], "GLD", "Emtia"))
+            label, proxy_etf, tags = tag_info
+            # Proxy performansı
+            try:
+                import yfinance as _yf_cm
+                hist = _yf_cm.Ticker(proxy_etf).history(period="1mo")
+                proxy_perf = (hist["Close"].iloc[-1]/hist["Close"].iloc[0]-1)*100 if len(hist)>=2 else 0
+                proxy_note = f"Proxy({proxy_etf}): {proxy_perf:+.1f}% (1ay)"
+            except Exception:
+                proxy_note = f"Proxy: {proxy_etf}"
+            lines.append(
+                f"• {p['ticker']} [{label}]: K/Z %{pnl:+.0f} | Değer: {val_note} | "
+                f"[{tags}] | {proxy_note}"
+            )
 
     comm_sig = signal_summary.get("commodity", {})
     if comm_sig:
@@ -659,6 +811,11 @@ Eğer portföydeki varlık sınıfları arasındaki 30 günlük korelasyon 0.7'y
 • Her aksiyon somut olmalı: "risk azalt" değil, "AVGO pozisyonunu %20 küçült"
 • Nakit oranı her zaman belirtilmeli
 • Stop-loss ve hedef fiyat mümkün olduğunda verilmeli
+• VALÖR KURALI: TEFAS satışı T+2 valörlüdür. "IIH sat" derken
+  "nakit 2 gün sonra gelir → bugün mevcut nakitle altın/GLD al" şeklinde
+  zamanlama talimatı ver. Kripto ve ABD hisseleri T+0.
+• SPESİFİK TICKER: Portföydeki her hisseyi listede gördüğüne göre
+  sınıf değil ticker bazlı karar ver.
 • Türkçe yaz
 • JSON formatında yanıt ver — aşağıdaki şemayı kullan:
 
@@ -700,6 +857,24 @@ Eğer portföydeki varlık sınıfları arasındaki 30 günlük korelasyon 0.7'y
     "aktif": true,
     "neden": "...",
     "nakit_artirim_pct": 0
+  },
+  "hisse_mikro_analiz": [
+    {"ticker": "...", "etiketler": ["Faiz_indirim_pozitif", "Resesyon_defansif"],
+     "fcf_durumu": "yüksek|orta|düşük|N/A", "karar": "KORU|ARTIR|AZALT|SAT",
+     "gerekce": "tek cümle"}
+  ],
+  "tefas_kararlari": [
+    {"ticker": "IIH", "icerik": "%90 hisse", "resesyon_risk": "YÜKSEK",
+     "karar": "AZALT|TUT|ARTIR", "gerekce": "tek cümle", "valor_notu": "..."}
+  ],
+  "senaryo_olasiliklari": {
+    "baz":        {"tanim": "...", "olasilik_pct": 0, "portfoy_etkisi": "..."},
+    "alternatif": {"tanim": "...", "olasilik_pct": 0, "portfoy_etkisi": "..."},
+    "kuyruk":     {"tanim": "...", "olasilik_pct": 0, "portfoy_etkisi": "..."}
+  },
+  "harmonize_strateji": "Olasılık ağırlıklı tek cümle net karar",
+  "korelasyon_sigortasi": {
+    "aktif": false, "neden": "...", "nakit_artirim_pct": 0
   },
   "bir_sonraki_kontrol": {
     "tarih": "YYYY-MM-DD", "neden": "...",
@@ -785,25 +960,92 @@ def _build_director_message(
     except Exception:
         pass
 
-    # ── Portföy Mevcut Durumu ────────────────────────────────────────────
-    pa = portfolio_state.get("analytics", {})
-    lines.append("═══ PORTFÖY MEVCUT DURUMU ═══")
-    lines.append(f"Toplam Değer: ${pa.get('total_value',0):,.0f}")
-    lines.append(f"Nakit: ${portfolio_state.get('cash',0):,.0f} (%{portfolio_state.get('cash',0)/(pa.get('total_value',1)+portfolio_state.get('cash',0))*100:.0f})")
-    lines.append(f"K/Z: ${pa.get('total_pnl',0):,.0f} (%{pa.get('total_pnl_pct',0):.1f})")
-
-    # Varlık sınıfı dağılımı
+    # ── Portföy Mevcut Durumu — Detaylı Döküm ───────────────────────────
+    pa        = portfolio_state.get("analytics", {})
     positions = portfolio_state.get("positions", [])
-    class_values = {}
+    cash      = float(portfolio_state.get("cash", 0))
+
+    total_val = (sum(
+        float(p.get("shares",0)) * float(p.get("current_price", p.get("avg_cost",0)))
+        for p in positions
+    ) + cash)
+
+    lines.append("═══ PORTFÖY DETAYLI DÖKÜM (SPESİFİK TICKER KARARLARI İÇİN) ═══")
+    lines.append(
+        f"Toplam: ${total_val:,.0f} | Nakit: ${cash:,.0f} "
+        f"(%{cash/max(total_val,1)*100:.1f}) | "
+        f"K/Z: ${pa.get('total_pnl',0):,.0f} (%{pa.get('total_pnl_pct',0):.1f})"
+    )
+
+    # Yardımcı etiket haritaları
+    _CRYPTO_BETA = {
+        "BTC-USD":0.9,"ETH-USD":1.3,"SOL-USD":1.8,"BNB-USD":1.4,
+        "XRP-USD":1.5,"AVAX-USD":1.9,"DOGE-USD":2.2,"PEPE-USD":3.5,
+        "WIF-USD":4.0,"JUP-USD":2.8,"INJ-USD":2.5,"SUI-USD":2.3,
+    }
+    _COMM_LABELS = {
+        "ALTIN_GRAM_TRY": "[Enflasyon_koruyucu|Resesyon_defansif|Dolar_zayiflama_pozitif]",
+        "GUMUS_GRAM_TRY": "[Enflasyon_koruyucu|Sanayi_baglantili]",
+        "GC=F":  "[Resesyon_defansif|Enflasyon_koruyucu]",
+        "SI=F":  "[Sanayi_baglantili|Enflasyon_koruyucu]",
+        "CL=F":  "[Resesyon_hassas|Jeopolitik_pozitif]",
+    }
+    _TEFAS_LABELS = {
+        "IIH": "%90 Hisse Yoğun → [Resesyon_YUKSEK_risk]",
+        "AEY": "%80 Altın → [Resesyon_DUSUK_risk]",
+        "TTE": "%85 Teknoloji Hisse → [Resesyon_YUKSEK_risk]",
+        "MAC": "%80 Bankacılık → [Resesyon_COK_YUKSEK_risk]",
+        "GAF": "%90 Devlet Tahvili → [Resesyon_DUSUK_risk]",
+        "YAC": "%50 Hisse %50 Tahvil → [Resesyon_ORTA_risk]",
+        "NNF": "%85 Büyüme Hisse → [Resesyon_YUKSEK_risk]",
+    }
+
+    # Sınıf bazında grupla ve listele
+    class_groups = {}
     for p in positions:
-        ac = p.get("asset_class", "us_equity")
-        val = float(p.get("shares",0)) * float(p.get("current_price", p.get("avg_cost",0)))
-        class_values[ac] = class_values.get(ac, 0) + val
-    total_val = sum(class_values.values()) + portfolio_state.get("cash", 0)
-    if total_val > 0:
-        lines.append("Varlık Dağılımı: " + " | ".join(
-            f"{k}: %{v/total_val*100:.0f}" for k, v in class_values.items()
-        ))
+        ac  = p.get("asset_class", "us_equity")
+        cur = float(p.get("current_price", p.get("avg_cost", 0)))
+        avg = float(p.get("avg_cost", 0))
+        val = float(p.get("shares", 0)) * cur
+        pnl = (cur - avg) / avg * 100 if avg > 0 else 0
+        class_groups.setdefault(ac, []).append({
+            "ticker": p.get("ticker",""), "val": val,
+            "pnl": pnl, "cur": cur, "avg": avg,
+            "sector": p.get("sector",""),
+            "currency": p.get("currency","USD"),
+        })
+
+    for ac, pos_list in sorted(class_groups.items(),
+                                key=lambda x: -sum(p["val"] for p in x[1])):
+        ac_total = sum(p["val"] for p in pos_list)
+        ac_pct   = ac_total / max(total_val, 1) * 100
+        lines.append(f"")
+        lines.append(f"[{ac.upper()}] Toplam: ${ac_total:,.0f} (%{ac_pct:.1f})")
+
+        for p in sorted(pos_list, key=lambda x: -x["val"]):
+            tk   = p["ticker"]
+            base = (f"  {tk:16s} | %{p['val']/max(total_val,1)*100:.1f} portföy"
+                    f" | ${p['val']:,.0f} | K/Z:{p['pnl']:+.1f}%")
+
+            if ac == "us_equity":
+                extra = f" | Sektör:{p['sector']}" if p['sector'] else ""
+            elif ac == "crypto":
+                beta = _CRYPTO_BETA.get(tk, 2.0)
+                tag  = ("BTC_DEFANSIF" if tk == "BTC-USD" else
+                        "ETH_ORTA"     if tk == "ETH-USD" else
+                        "SPEKULATIF_YUKSEK_BETA")
+                extra = f" | Beta(BTC=1):{beta:.1f} [{tag}]"
+            elif ac == "commodity":
+                extra = " | " + _COMM_LABELS.get(tk, "[Emtia]")
+            elif ac == "tefas":
+                extra = " | " + _TEFAS_LABELS.get(tk.upper(), "[TEFAS fonu]")
+            else:
+                extra = ""
+            lines.append(base + extra)
+
+    lines.append("")
+    lines.append("KURAL: Yukarıdaki spesifik ticker listesini kullanarak karar ver.")
+    lines.append("'ABD hisselerini azalt' değil → 'AVGO sat, SCHD koru' gibi.")
 
     # ── Yaklaşan Önemli Olaylar ─────────────────────────────────────────
     if financial_calendar:

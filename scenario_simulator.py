@@ -11,6 +11,40 @@
 # 5. Portföy etki analizini hesapla
 
 import logging
+
+
+# ─── İşlem Maliyeti ve Valör Gerçeklikleri ────────────────────────────────────
+# Direktörün zamanlama önerilerine dahil edilir
+
+TRANSACTION_REALITIES = {
+    "us_equity": {
+        "valör_gün":    0,      # T+0 — ABD hisseleri anlık
+        "spread_bps":   5,      # ~5 baz puan alım-satım farkı
+        "likit":        True,
+        "not":          "T+0 işlem, piyasa açıkken anlık gerçekleşir"
+    },
+    "crypto": {
+        "valör_gün":    0,      # 7/24 anlık
+        "spread_bps":   10,     # Kripto spread yüksek olabilir
+        "likit":        True,
+        "not":          "7/24 işlem. VIX 34 ortamında spread genişleyebilir (+%1-2)"
+    },
+    "commodity": {
+        "valör_gün":    1,      # ETF ise T+0, fiziksel ise daha uzun
+        "spread_bps":   3,
+        "likit":        True,
+        "not":          "GLD/IAU ETF: T+0. Fiziksel altın: T+2. Altın gram TRY: borsa saatlerinde"
+    },
+    "tefas": {
+        "valör_gün":    2,      # T+2 standart
+        "spread_bps":   0,      # TEFAS NAV üzerinden, spread yok
+        "likit":        False,  # Günlük valör kısıtı var
+        "not":          "TEFAS satış emri T+2 valörlüdür. Likidite krizi döneminde gecikmeler olabilir. "
+                        "IIH satış → nakit T+2'de gelir → AEY alım T+2 sonrası mümkün. "
+                        "Bu 4 günlük boşlukta hedge: mevcut nakit ile altın (commodity) al."
+    },
+}
+
 from dataclasses import dataclass, field
 from typing import Dict, Any
 
@@ -169,6 +203,30 @@ def build_scenario_data(
         if pos
     }
 
+    # Holdings detayı — her sınıf içindeki pozisyonlar ağırlıklı
+    holdings_detail = {}
+    for ac, pos in pos_by_class.items():
+        if not pos:
+            continue
+        ac_total = sum(p["val_usd"] for p in pos)
+        holdings_detail[ac] = sorted([
+            {
+                "ticker":      p["ticker"],
+                "shares":      float(p.get("shares", 0)),
+                "avg_cost":    float(p.get("avg_cost", 0)),
+                "cur_usd":     round(p["cur_usd"], 2),
+                "val_usd":     round(p["val_usd"], 2),
+                "weight_in_class": round(p["val_usd"] / ac_total * 100, 1) if ac_total > 0 else 0,
+                "weight_in_port":  round(p["val_usd"] / total_with_cash * 100, 2) if total_with_cash > 0 else 0,
+                "pnl_pct":     round((p["cur_usd"] - float(p.get("avg_cost", 0))) /
+                                     float(p.get("avg_cost", 1)) * 100, 1)
+                               if float(p.get("avg_cost", 0)) > 0 else 0,
+                "sector":      p.get("sector", ""),
+                "asset_class": ac,
+            }
+            for p in pos
+        ], key=lambda x: -x["val_usd"])
+
     # Senaryo sonrası tahmini değerler
     asset_impacts = scenario.get("asset_impacts", {})
     projected_weights = {}
@@ -225,6 +283,7 @@ def build_scenario_data(
         "asset_impacts":      asset_impacts,
         "class_weights_now":  class_weights,
         "class_weights_proj": proj_pct,
+        "holdings_detail":    holdings_detail,
         "projected_total":    round(projected_total, 0),
         "projected_loss":     round(projected_total - total_with_cash, 0),
 
@@ -278,9 +337,61 @@ def build_scenario_director_prompt(scenario_data: dict) -> str:
 
     lines.append("")
     lines.append("═══ MEVCUT PORTFÖY DURUMU ═══")
-    lines.append(f"Toplam Değer: ${pa['total_value']:,.0f}")
-    lines.append(f"Nakit: ${sc['portfolio']['cash']:,.0f} (%{sc['portfolio']['cash_ratio']:.1f})")
-    lines.append("Varlık Sınıfı Ağırlıkları (ŞU AN):")
+    lines.append(f"Toplam Değer: ${pa['total_value']:,.0f} | Nakit: ${sc['portfolio']['cash']:,.0f} (%{sc['portfolio']['cash_ratio']:.1f})")
+    lines.append("")
+    lines.append("DETAYLI POZİSYON DÖKÜMÜ (Direktör bu veriyi kullanarak SPESIFIK TICKER kararı üretmeli):")
+
+    # Kripto beta ve emtia etiket haritaları — direktöre ek bağlam
+    _CRYPTO_BETA = {
+        "BTC-USD":0.9,"ETH-USD":1.3,"SOL-USD":1.8,"BNB-USD":1.4,
+        "XRP-USD":1.5,"AVAX-USD":1.9,"DOGE-USD":2.2,"PEPE-USD":3.5,
+        "WIF-USD":4.0,"JUP-USD":2.8,"INJ-USD":2.5,"SUI-USD":2.3,
+    }
+    _COMM_LABELS = {
+        "ALTIN_GRAM_TRY": "Altın(TRY) [Enflasyon_koruyucu|Resesyon_defansif]",
+        "GUMUS_GRAM_TRY": "Gümüş(TRY) [Enflasyon_koruyucu|Sanayi_baglantili]",
+        "GC=F": "Altın Futures [Resesyon_defansif]",
+        "SI=F": "Gümüş Futures [Sanayi_baglantili]",
+        "CL=F": "WTI Petrol [Resesyon_hassas|Jeopolitik_pozitif]",
+    }
+    _TEFAS_LABELS = {
+        "IIH": "%90 Hisse [Resesyon_YUKSEK_risk]",
+        "AEY": "%80 Altın [Resesyon_DUSUK_risk]",
+        "TTE": "%85 Teknoloji Hisse [Resesyon_YUKSEK_risk]",
+        "MAC": "%80 Banka [Resesyon_COK_YUKSEK_risk]",
+        "GAF": "%90 Devlet Tahvili [Resesyon_DUSUK_risk]",
+        "YAC": "%50 Hisse %50 Tahvil [Resesyon_ORTA_risk]",
+    }
+
+    holdings = sc.get("holdings_detail", {})
+    for ac, pos_list in sorted(holdings.items(), key=lambda x: -sum(p["val_usd"] for p in x[1])):
+        ac_total = sum(p["val_usd"] for p in pos_list)
+        ac_pct   = ac_total / max(pa["total_value"] + sc["portfolio"]["cash"], 1) * 100
+        lines.append(f"")
+        lines.append(f"[{ac.upper()}] — Toplam: ${ac_total:,.0f} (%{ac_pct:.1f})")
+        for p in pos_list:
+            base = (
+                f"  {p['ticker']:16s} | %{p['weight_in_port']:.1f} portföy "
+                f"| ${p['val_usd']:,.0f} | K/Z: {p['pnl_pct']:+.1f}%"
+            )
+            # Varlık sınıfına göre ek bilgi
+            if ac == "us_equity":
+                extra = f" | Sektör: {p.get('sector','?')}"
+            elif ac == "crypto":
+                beta = _CRYPTO_BETA.get(p["ticker"], 2.0)
+                tag  = "BTC_DEFANSIF" if p["ticker"]=="BTC-USD" else (
+                       "ETH_ORTA" if p["ticker"]=="ETH-USD" else "SPEKULATIF_YUKSEK_BETA")
+                extra = f" | Beta(BTC=1):{beta:.1f} [{tag}]"
+            elif ac == "commodity":
+                extra = " | " + _COMM_LABELS.get(p["ticker"], "Emtia")
+            elif ac == "tefas":
+                extra = " | " + _TEFAS_LABELS.get(p["ticker"].upper(), "TEFAS fonu")
+            else:
+                extra = ""
+            lines.append(base + extra)
+
+    lines.append("")
+    lines.append("Varlık Sınıfı Özet:")
     for ac, pct in sorted(cw.items(), key=lambda x: -x[1]):
         lines.append(f"  • {ac}: %{pct:.1f}")
 
@@ -307,16 +418,30 @@ def build_scenario_director_prompt(scenario_data: dict) -> str:
     lines.append(f"Zaman ufku: {prof.get('time_horizon','Uzun vade')}")
     lines.append(f"Yıl sonu hedef: %{prof.get('year_target_pct', 40):.0f}")
 
+    # Valör ve işlem maliyeti — gerçek dünya kısıtları
+    lines.append("")
+    lines.append("═══ İŞLEM MALİYETİ VE VALÖR GERÇEKLİKLERİ ═══")
+    for ac, tr in TRANSACTION_REALITIES.items():
+        lines.append(
+            f"  {ac}: Valör T+{tr['valör_gün']} | "
+            f"{'Likit' if tr['likit'] else 'Kısıtlı Likidite'} | "
+            f"{tr['not']}"
+        )
+    lines.append(
+        "  VALÖR BOŞLUĞU KURALI: Uzun valörlü varlık satışı emri ver → "
+        "nakitte hazır para varsa kısa valörlü alternatifi HEMEN al. "
+        "Örn: IIH sat (T+2 nakit) → bugün mevcut nakitle altın (GLD) al."
+    )
+
     lines.append("""
 ═══ DİREKTÖR GÖREVİ ═══
-Bu senaryo gerçekleşiyor. Portföyü 4 varlık sınıfı arasında nasıl yeniden ağırlıklandırmalısın?
+Bu senaryo GERÇEKLEŞIYOR. Yukarıdaki DETAYLI POZİSYON DÖKÜMÜNÜ kullanarak
+spesifik ticker bazlı kararlar ver — "ABD hisselerini azalt" değil,
+"AVGO'yu tamamen sat (%2.0 portföy), SCHD'yi koru" gibi.
 
-Yanıtında şunları belirt:
-1. Senaryonun gerçek anlamı (panik indirim mi, resesyon başlangıcı mı?)
-2. Her varlık sınıfı için önerilen yeni ağırlık (toplam %100)
-3. Geçişin zamanlaması (hemen / kademeli / bekle)
-4. En kritik 3 aksiyon (somut, ticker bazlı)
-5. Bu senaryonun sona ermesinin sinyali (ne olunca pozisyon değişir?)
+Valör gerçekliklerini hesaba kat:
+- TEFAS satışı T+2 → nakdi bugün altın/nakit ile hedge et
+- Kripto 7/24 likit → ilk azaltılacak sınıf
 
 JSON formatında yanıtla — schema sistem promptunda.""")
 
