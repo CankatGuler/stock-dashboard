@@ -1975,6 +1975,7 @@ def _build_director_message(
     signal_summary:   dict,
     financial_calendar: list,
     year_target_pct:  float,
+    all_data:         dict = None,
 ) -> str:
     """
     Direktöre gönderilecek kullanıcı mesajını oluştur.
@@ -2277,6 +2278,7 @@ def run_director(
     financial_calendar: list,
     user_profile:       dict,
     year_target_pct:    float = 40.0,
+    all_data:           dict = None,
 ) -> dict:
     """
     Strateji direktörü — 5 analist raporunu alıp sentezler.
@@ -2287,6 +2289,7 @@ def run_director(
         commodity_report, turkey_report,
         portfolio_state, correlations, signal_summary,
         financial_calendar, year_target_pct,
+        all_data=all_data,
     )
 
     logger.info("Direktör analizi başlıyor...")
@@ -2432,6 +2435,7 @@ def run_two_phase_analysis(
         financial_calendar = all_data.get("calendar",    []),
         user_profile       = user_profile,
         year_target_pct    = year_target,
+        all_data           = all_data,
     )
 
     return {
