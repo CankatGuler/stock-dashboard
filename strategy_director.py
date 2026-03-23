@@ -123,6 +123,10 @@ def _call_claude(system_prompt: str, user_message: str,
     import anthropic
     client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY", ""))
 
+    if not os.getenv("ANTHROPIC_API_KEY", ""):
+        logger.error("ANTHROPIC_API_KEY eksik!")
+        return None
+
     for attempt in range(retries + 1):
         try:
             response = client.messages.create(
@@ -133,9 +137,12 @@ def _call_claude(system_prompt: str, user_message: str,
             )
             return response.content[0].text
         except Exception as e:
-            logger.warning("Claude API attempt %d failed: %s", attempt + 1, e)
+            logger.warning("Claude API attempt %d/%d failed: %s | msg_len=%d",
+                           attempt + 1, retries + 1, e, len(user_message))
             if attempt < retries:
-                time.sleep(2 ** attempt)  # Exponential backoff
+                time.sleep(2 ** attempt)
+    logger.error("Claude API tüm denemeler başarısız. system_len=%d user_len=%d",
+                 len(system_prompt), len(user_message))
     return None
 
 
@@ -501,8 +508,9 @@ def analyze_us_equity_with_claude(economic_data: dict, portfolio_positions: list
                     if p.get("asset_class", "us_equity") == "us_equity"
                     and float(p.get("shares", 0)) > 0]
     if us_positions:
-        lines.append("\n=== PORTFÖYDEKİ ABD HİSSELERİ (MİKRO ANALİZ) ===")
+        lines.append(f"\n=== PORTFÖYDEKİ ABD HİSSELERİ ({len(us_positions)} pozisyon) ===")
         lines.append("Her hisse için FCF yield, beta, borç durumu ve makro duyarlılığını değerlendir.")
+        logger.info("ABD hisse mikro analiz: %d pozisyon", len(us_positions))
         
         # yfinance'ten mikro metrikler çek
         try:
@@ -1436,8 +1444,9 @@ def analyze_us_equity_with_claude(economic_data: dict, portfolio_positions: list
                     if p.get("asset_class", "us_equity") == "us_equity"
                     and float(p.get("shares", 0)) > 0]
     if us_positions:
-        lines.append("\n=== PORTFÖYDEKİ ABD HİSSELERİ (MİKRO ANALİZ) ===")
+        lines.append(f"\n=== PORTFÖYDEKİ ABD HİSSELERİ ({len(us_positions)} pozisyon) ===")
         lines.append("Her hisse için FCF yield, beta, borç durumu ve makro duyarlılığını değerlendir.")
+        logger.info("ABD hisse mikro analiz: %d pozisyon", len(us_positions))
         
         # yfinance'ten mikro metrikler çek
         try:

@@ -549,10 +549,14 @@ def collect_all_strategy_data(
             from economic_data import fetch_all_economic_data, build_economic_context
             r = fetch_all_economic_data()
             return ("layer2", {
-                "economic":         r.get("macro_econ", {}),
-                "sp500_valuation":  r.get("valuation", {}),
-                "sector_rotation":  r.get("sectors", {}),
-                "economic_context": build_economic_context(r),
+                "economic":          r.get("macro_econ", {}),
+                "sp500_valuation":   r.get("valuation", {}),   # economic_data: "valuation"
+                "sector_rotation":   r.get("sectors",   {}),   # economic_data: "sectors"
+                "market_structure":  r.get("market_structure", {}),
+                "housing":           r.get("housing", {}),
+                "financial_stress":  r.get("financial_stress", {}),
+                "systemic_risk":     r.get("systemic_risk", {}),
+                "economic_context":  build_economic_context(r),
             })
         except Exception as e:
             return ("layer2_err", str(e))
@@ -638,12 +642,20 @@ def collect_all_strategy_data(
                 key, val = result
                 if key == "layer2":
                     # economic alt anahtarını ayrıca koru — analistler all_data["economic"] bekliyor
-                    data["economic"]        = val.get("economic", {})
-                    data["sp500_valuation"] = val.get("sp500_valuation", {})
-                    data["sector_rotation"] = val.get("sector_rotation", {})
-                    data["economic_context"]= val.get("economic_context", "")
+                    data["economic"]         = val.get("economic", {})
+                    data["sp500_valuation"]  = val.get("sp500_valuation", {})
+                    data["sector_rotation"]  = val.get("sector_rotation", {})
+                    data["market_structure"] = val.get("market_structure", {})
+                    data["housing"]          = val.get("housing", {})
+                    data["financial_stress"] = val.get("financial_stress", {})
+                    data["systemic_risk"]    = val.get("systemic_risk", {})
+                    data["economic_context"] = val.get("economic_context", "")
                     # Geriye dönük uyumluluk için üst seviye de güncelle
                     data.update({k:v for k,v in val.items() if k != "economic"})
+                    # economic içine de sp500_valuation/sector_rotation ekle
+                    # — ABD hisse analisti economic_data.get("sp500_valuation") bakıyor
+                    data["economic"]["sp500_valuation"] = val.get("sp500_valuation", {})
+                    data["economic"]["sector_rotation"] = val.get("sector_rotation", {})
                     data["veri_kalitesi"]["ekonomik_k2"] = f"ok ({len(val.get('economic',{}))} gösterge)"
                 elif key == "layer3":
                     data["crypto"] = val

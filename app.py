@@ -5939,14 +5939,21 @@ SADECE aşağıdaki JSON'u döndür (açıklama ekleme, toplam ağırlık %100 o
                     _sl     = _item.get("stop_loss")
                     _hedef  = _item.get("hedef")
                     _miktar = _item.get("miktar_pct", 0)
+                    # stop_loss ve hedef sayısal veya string olabilir — güvenli format
+                    def _fmt_price(v):
+                        if v is None: return None
+                        try: return f"${float(v):,.0f}"
+                        except (ValueError, TypeError): return str(v)
+                    _sl_str    = _fmt_price(_sl)
+                    _hedef_str = _fmt_price(_hedef)
                     st.markdown(
                         f'<div style="font-size:0.73rem;padding:5px 0;'
                         f'border-bottom:0.5px solid var(--color-border-tertiary);">'
                         f'<b>{_ticker}</b> — {_eylem}'
                         + (f' %{_miktar}' if _miktar else '')
                         + f'<br><span style="color:var(--color-text-tertiary);font-size:0.65rem;">{_neden}</span>'
-                        + (f'<br><span style="font-size:0.62rem;color:#ffb300;">SL: ${_sl:,.0f}</span>' if _sl else '')
-                        + (f' <span style="font-size:0.62rem;color:#00c48c;">Hedef: ${_hedef:,.0f}</span>' if _hedef else '')
+                        + (f'<br><span style="font-size:0.62rem;color:#ffb300;">SL: {_sl_str}</span>' if _sl_str else '')
+                        + (f' <span style="font-size:0.62rem;color:#00c48c;">Hedef: {_hedef_str}</span>' if _hedef_str else '')
                         + f'</div>',
                         unsafe_allow_html=True,
                     )
