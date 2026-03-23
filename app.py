@@ -4594,6 +4594,128 @@ with tab_targets:
 
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _html_senaryo_block(d: dict) -> str:
+    """Senaryo olasılıklandırması HTML bloğu."""
+    so = d.get("senaryo_olasiliklari", {})
+    hs = d.get("harmonize_strateji", "")
+    if not so and not hs:
+        return ""
+    items = ""
+    colors = {"baz": "#00c48c", "alternatif": "#ffb300", "kuyruk": "#e74c3c"}
+    labels = {"baz": "Baz Senaryo", "alternatif": "Alternatif", "kuyruk": "Kuyruk Riski"}
+    for key in ["baz", "alternatif", "kuyruk"]:
+        sd = so.get(key, {})
+        if sd:
+            c = colors[key]
+            items += f"""<div style="background:#1a2332;border-top:3px solid {c};border-radius:6px;
+                padding:0.7rem 1rem;flex:1;min-width:180px;text-align:center;">
+              <div style="font-size:0.65rem;color:{c};font-weight:700;">{labels[key]}</div>
+              <div style="font-size:1.2rem;font-weight:700;">%{sd.get('olasilik_pct',0)}</div>
+              <div style="font-size:0.75rem;color:#b0bec5;">{sd.get('tanim','')}</div>
+              <div style="font-size:0.75rem;color:{c};">{sd.get('portfoy_etkisi','')}</div>
+            </div>"""
+    harmonize = f"""<div style="background:#1a1a2e;border-left:3px solid #ce93d8;
+        padding:0.6rem 1rem;margin-top:0.7rem;border-radius:0 6px 6px 0;font-size:0.85rem;">
+        🎯 <b>Harmonize:</b> {hs}</div>""" if hs else ""
+    return f"""<div class="section">
+    <h2>🎲 Senaryo Olasılıklandırması</h2>
+    <div style="display:flex;gap:0.8rem;flex-wrap:wrap;">{items}</div>
+    {harmonize}
+  </div>"""
+
+
+def _html_hisse_mikro(d: dict) -> str:
+    """Hisse bazlı mikro kararlar HTML bloğu."""
+    hk = d.get("hisse_mikro_analiz", [])
+    if not hk:
+        return ""
+    colors = {"KORU": "#00c48c", "ARTIR": "#4fc3f7", "AZALT": "#ffb300", "SAT": "#e74c3c"}
+    rows = ""
+    for h in hk:
+        kr = h.get("karar", "KORU")
+        kc = colors.get(kr, "#8a9ab0")
+        tags = " ".join(f'<span style="background:#1e2833;border:1px solid #4fc3f755;border-radius:3px;'
+                        f'padding:1px 5px;font-size:0.65rem;color:#4fc3f7;">{t}</span>'
+                        for t in h.get("etiketler", []))
+        rows += f"""<div style="border-left:3px solid {kc};padding:0.4rem 0.8rem;
+            background:#1a2332;border-radius:0 6px 6px 0;margin-bottom:0.3rem;">
+          <b style="color:{kc};">{kr}</b>
+          <b style="color:#e8edf3;margin-left:6px;">{h.get('ticker','')}</b>
+          <span style="margin-left:6px;">{tags}</span>
+          <span style="color:#8a9ab0;font-size:0.78rem;margin-left:8px;">
+            FCF:{h.get('fcf_durumu','N/A')} — {h.get('gerekce','')}</span>
+        </div>"""
+    return f"""<div class="section">
+    <h2>🎯 Hisse Bazlı Mikro Kararlar</h2>
+    {rows}
+  </div>"""
+
+
+def _html_tefas_lookt(d: dict) -> str:
+    """TEFAS look-through HTML bloğu."""
+    tk = d.get("tefas_kararlari", [])
+    if not tk:
+        return ""
+    colors = {"KORU": "#00c48c", "ARTIR": "#4fc3f7", "AZALT": "#ffb300", "SAT": "#e74c3c", "TUT": "#8a9ab0"}
+    rows = ""
+    for tf in tk:
+        tkr = tf.get("karar", "TUT")
+        tkc = colors.get(tkr, "#8a9ab0")
+        duy = tf.get("resesyon_risk", tf.get("resesyon_duyarlilik", "?"))
+        dc  = "#e74c3c" if any(x in duy.upper() for x in ["YÜKSEK","YUKSEK","COK"]) else "#00c48c"
+        valor = tf.get("valor_notu", "")
+        rows += f"""<div style="border-left:3px solid {tkc};padding:0.4rem 0.8rem;
+            background:#1a2332;border-radius:0 6px 6px 0;margin-bottom:0.3rem;">
+          <b style="color:{tkc};">{tkr}</b>
+          <b style="color:#e8edf3;margin-left:6px;">{tf.get('ticker','')}</b>
+          <span style="color:#8a9ab0;font-size:0.75rem;margin-left:6px;">{tf.get('icerik','')}</span>
+          <span style="background:{dc}22;color:{dc};border-radius:3px;padding:1px 5px;
+            font-size:0.65rem;margin-left:6px;">Resesyon:{duy}</span>
+          {"<div style='font-size:0.72rem;color:#ffb300;margin-top:2px;'>⏱ "+valor+"</div>" if valor else ""}
+          <div style="font-size:0.75rem;color:#8a9ab0;">{tf.get('gerekce','')}</div>
+        </div>"""
+    return f"""<div class="section">
+    <h2>🇹🇷 TEFAS Look-Through</h2>
+    {rows}
+  </div>"""
+
+
+def _html_nakit_plan(d: dict) -> str:
+    """Nakit realizasyon planı HTML bloğu."""
+    nrp = d.get("nakit_realizasyon_plani", {})
+    if not nrp or not nrp.get("bugun_t0"):
+        return ""
+    tutarli = nrp.get("tutarli_mi", "")
+    nc = "#00c48c" if "evet" in str(tutarli).lower() else "#ffb300"
+    extra = f'<div style="color:#ffb300;font-size:0.78rem;margin-top:4px;">⚠️ {nrp.get("not","")}</div>' if "hayir" in str(tutarli).lower() else ""
+    return f"""<div class="section">
+    <h2>💵 Nakit Realizasyon Planı</h2>
+    <div style="display:flex;gap:1.5rem;flex-wrap:wrap;font-size:0.85rem;margin-bottom:6px;">
+      <span>T+0 Bugün: <b>{nrp.get('bugun_t0','?')}</b></span>
+      <span>T+2 TEFAS: <b>{nrp.get('t2_tefas','?')}</b></span>
+      <span>Hedef: <b>{nrp.get('toplam_hedef','?')}</b></span>
+      <span style="color:{nc};">Tutarlı: <b>{str(tutarli).upper()}</b></span>
+    </div>
+    {extra}
+  </div>"""
+
+
+def _html_hardcap(d: dict) -> str:
+    """Hard cap ihlal HTML bloğu."""
+    hci = d.get("hard_cap_ihlal", {})
+    if not hci or not hci.get("var_mi"):
+        return ""
+    return f"""<div class="section" style="border:1px solid #ff8c00;">
+    <h2 style="color:#ff8c00;">⚠️ Hard Cap İhlali — Gerekçeli</h2>
+    <div style="font-size:0.85rem;margin-bottom:4px;">
+      <b>{hci.get('ihlal_eden_sinif','').upper()}</b>:
+      Önerilen %{hci.get('onerilen_pct',0)} → Limit %{hci.get('limit_pct',0)}
+    </div>
+    <div style="color:#ffb300;font-size:0.82rem;">📋 {hci.get('senaryo_istisnasi','')}</div>
+    <div style="color:#e74c3c;font-size:0.82rem;margin-top:4px;">🎯 {hci.get('alternatif_risk','')}</div>
+  </div>"""
+
+
 def _generate_strategy_html(director: dict, analyst_reports: dict, 
                               portfolio_value: float, generated_at: str) -> str:
     """Strateji raporunu güzel HTML formatında üret."""
@@ -4835,6 +4957,21 @@ def _generate_strategy_html(director: dict, analyst_reports: dict,
     <div style="color:#b0bec5;font-size:0.85rem;margin-bottom:0.7rem;">{snk.get('neden','')}</div>
     {tetik_html}
   </div>
+
+  <!-- 9. Senaryo Olasılıklandırması -->
+  {_html_senaryo_block(d)}
+
+  <!-- 10. Hisse Mikro Kararlar -->
+  {_html_hisse_mikro(d)}
+
+  <!-- 11. TEFAS Look-Through -->
+  {_html_tefas_lookt(d)}
+
+  <!-- 12. Nakit Realizasyon Planı -->
+  {_html_nakit_plan(d)}
+
+  <!-- 13. Hard Cap İhlali -->
+  {_html_hardcap(d)}
 
   <div style="text-align:center;color:#2a3a4a;font-size:0.75rem;margin-top:2rem;">
     AI Strateji Direktörü — {generated_at}

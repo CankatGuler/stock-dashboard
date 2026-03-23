@@ -437,10 +437,19 @@ def collect_all_strategy_data(
     }
 
     # ── Portföy özeti (senkron — hızlı, veri gerektirmiyor) ──────────────
+    # USD/TRY kuru çek — TRY varlık gösterimi için
+    _usd_try_curr = 38.0
+    try:
+        import yfinance as _yf_rate
+        _usd_try_curr = float(_yf_rate.Ticker("USDTRY=X").fast_info.last_price or 38.0)
+    except Exception:
+        pass
+
     data["portfolio"] = {
         "positions": positions,
         "cash":      round(cash, 2),
         "analytics": fetch_portfolio_analytics(positions),
+        "usd_try":   _usd_try_curr,
     }
     data["veri_kalitesi"]["portfoy_base"] = "ok"
 
@@ -565,7 +574,13 @@ def collect_all_strategy_data(
                 result = future.result(timeout=45)
                 key, val = result
                 if key == "layer2":
-                    data.update(val)
+                    # economic alt anahtarını ayrıca koru — analistler all_data["economic"] bekliyor
+                    data["economic"]        = val.get("economic", {})
+                    data["sp500_valuation"] = val.get("sp500_valuation", {})
+                    data["sector_rotation"] = val.get("sector_rotation", {})
+                    data["economic_context"]= val.get("economic_context", "")
+                    # Geriye dönük uyumluluk için üst seviye de güncelle
+                    data.update({k:v for k,v in val.items() if k != "economic"})
                     data["veri_kalitesi"]["ekonomik_k2"] = f"ok ({len(val.get('economic',{}))} gösterge)"
                 elif key == "layer3":
                     data["crypto"] = val

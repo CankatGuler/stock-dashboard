@@ -469,13 +469,13 @@ def analyze_us_equity_with_claude(economic_data: dict, portfolio_positions: list
     """ABD hisse analisti — değerleme, sektör rotasyonu, kazanç."""
     lines = ["=== ABD HİSSE PİYASASI ANALİZİ ==="]
 
-    # Değerleme
-    val = economic_data.get("sp500_valuation", {})
+    # Değerleme — economic_data içinde yoksa üst seviye dict'te ara
+    val = economic_data.get("sp500_valuation") or economic_data.get("valuation", {})
     if val:
         lines.append(f"S&P 500 Değerleme: {val.get('note', '')}")
 
     # Sektör rotasyonu
-    sr = economic_data.get("sector_rotation", {})
+    sr = economic_data.get("sector_rotation") or economic_data.get("sectors", {})
     if sr:
         note = sr.get("rotation_note", "")
         if note:
@@ -606,9 +606,9 @@ def analyze_us_equity_with_claude(economic_data: dict, portfolio_positions: list
     result  = _call_claude(US_EQUITY_ANALYST_SYSTEM, message, MAX_TOKENS_ANALYST)
     parsed  = _safe_json(result, {
         "sinyal": "TUT", "guven": 5,
-        "ana_gerekcce": "Veri alınamadı",
-        "sektor_gorusu": "", "deger_leme": "",
-        "destekleyen": [], "riskler": [], "oneri": "", "izle": ""
+        "ana_gerekcce": "ABD hisse verisi çekilemedi — portföy pozisyonları ve makro bağlamla değerlendiriliyor",
+        "sektor_gorusu": "Veri eksik", "deger_leme": "Veri eksik",
+        "destekleyen": [], "riskler": [], "oneri": "Veri eksik — makro bağlama göre değerlendir", "izle": ""
     })
     parsed["_source"] = "claude_us_equity"
     return parsed
@@ -714,13 +714,17 @@ def analyze_crypto_with_claude(crypto_data: dict, portfolio_positions: list,
     if crypto_sig:
         lines.append(f"\nSinyal Motoru: {crypto_sig.get('signal','?')} (güven: {crypto_sig.get('confidence','?')}/10)")
 
+    # Veri yoksa bile portföy pozisyonları üzerinden analiz yap
+    if len(lines) <= 3:
+        lines.append("Not: Piyasa verisi çekilemedi. Portföy pozisyonları ve genel makro bağlamla analiz yapılıyor.")
+
     message = "\n".join(lines)
     result  = _call_claude(CRYPTO_ANALYST_SYSTEM, message, MAX_TOKENS_ANALYST)
     parsed  = _safe_json(result, {
         "sinyal": "BEKLE", "guven": 5,
-        "ana_gerekcce": "Veri alınamadı",
-        "dongu_pozisyonu": "", "onchain_ozet": "", "btc_vs_altcoin": "",
-        "destekleyen": [], "riskler": [], "oneri": "", "izle": ""
+        "ana_gerekcce": "Kripto verisi çekilemedi — genel makro bağlamla değerlendiriliyor",
+        "dongu_pozisyonu": "Veri eksik", "onchain_ozet": "Veri eksik", "btc_vs_altcoin": "Veri eksik",
+        "destekleyen": [], "riskler": [], "oneri": "Veri eksik — makro bağlama göre değerlendir", "izle": ""
     })
     parsed["_source"] = "claude_crypto"
     return parsed
@@ -1400,13 +1404,13 @@ def analyze_us_equity_with_claude(economic_data: dict, portfolio_positions: list
     """ABD hisse analisti — değerleme, sektör rotasyonu, kazanç."""
     lines = ["=== ABD HİSSE PİYASASI ANALİZİ ==="]
 
-    # Değerleme
-    val = economic_data.get("sp500_valuation", {})
+    # Değerleme — economic_data içinde yoksa üst seviye dict'te ara
+    val = economic_data.get("sp500_valuation") or economic_data.get("valuation", {})
     if val:
         lines.append(f"S&P 500 Değerleme: {val.get('note', '')}")
 
     # Sektör rotasyonu
-    sr = economic_data.get("sector_rotation", {})
+    sr = economic_data.get("sector_rotation") or economic_data.get("sectors", {})
     if sr:
         note = sr.get("rotation_note", "")
         if note:
@@ -1537,9 +1541,9 @@ def analyze_us_equity_with_claude(economic_data: dict, portfolio_positions: list
     result  = _call_claude(US_EQUITY_ANALYST_SYSTEM, message, MAX_TOKENS_ANALYST)
     parsed  = _safe_json(result, {
         "sinyal": "TUT", "guven": 5,
-        "ana_gerekcce": "Veri alınamadı",
-        "sektor_gorusu": "", "deger_leme": "",
-        "destekleyen": [], "riskler": [], "oneri": "", "izle": ""
+        "ana_gerekcce": "ABD hisse verisi çekilemedi — portföy pozisyonları ve makro bağlamla değerlendiriliyor",
+        "sektor_gorusu": "Veri eksik", "deger_leme": "Veri eksik",
+        "destekleyen": [], "riskler": [], "oneri": "Veri eksik — makro bağlama göre değerlendir", "izle": ""
     })
     parsed["_source"] = "claude_us_equity"
     return parsed
@@ -1645,13 +1649,17 @@ def analyze_crypto_with_claude(crypto_data: dict, portfolio_positions: list,
     if crypto_sig:
         lines.append(f"\nSinyal Motoru: {crypto_sig.get('signal','?')} (güven: {crypto_sig.get('confidence','?')}/10)")
 
+    # Veri yoksa bile portföy pozisyonları üzerinden analiz yap
+    if len(lines) <= 3:
+        lines.append("Not: Piyasa verisi çekilemedi. Portföy pozisyonları ve genel makro bağlamla analiz yapılıyor.")
+
     message = "\n".join(lines)
     result  = _call_claude(CRYPTO_ANALYST_SYSTEM, message, MAX_TOKENS_ANALYST)
     parsed  = _safe_json(result, {
         "sinyal": "BEKLE", "guven": 5,
-        "ana_gerekcce": "Veri alınamadı",
-        "dongu_pozisyonu": "", "onchain_ozet": "", "btc_vs_altcoin": "",
-        "destekleyen": [], "riskler": [], "oneri": "", "izle": ""
+        "ana_gerekcce": "Kripto verisi çekilemedi — genel makro bağlamla değerlendiriliyor",
+        "dongu_pozisyonu": "Veri eksik", "onchain_ozet": "Veri eksik", "btc_vs_altcoin": "Veri eksik",
+        "destekleyen": [], "riskler": [], "oneri": "Veri eksik — makro bağlama göre değerlendir", "izle": ""
     })
     parsed["_source"] = "claude_crypto"
     return parsed
@@ -2052,11 +2060,14 @@ def _build_director_message(
         for p in positions
     ) + cash)
 
+    _usd_try_rate = float(portfolio_state.get("usd_try", 0) or 
+                          portfolio_state.get("exchange_rate", 0) or 38.0)
     lines.append("═══ PORTFÖY DETAYLI DÖKÜM (SPESİFİK TICKER KARARLARI İÇİN) ═══")
     lines.append(
         f"Toplam: ${total_val:,.0f} | Nakit: ${cash:,.0f} "
         f"(%{cash/max(total_val,1)*100:.1f}) | "
-        f"K/Z: ${pa.get('total_pnl',0):,.0f} (%{pa.get('total_pnl_pct',0):.1f})"
+        f"K/Z: ${pa.get('total_pnl',0):,.0f} (%{pa.get('total_pnl_pct',0):.1f}) | "
+        f"1 USD = {_usd_try_rate:.1f} TL (TRY varlıklar bu kur ile USD'ye çevrildi)"
     )
 
     # Yardımcı etiket haritaları
@@ -2098,12 +2109,19 @@ def _build_director_message(
         ac_total = sum(p["val"] for p in pos_list)
         ac_pct   = ac_total / max(total_val, 1) * 100
         lines.append(f"")
-        lines.append(f"[{ac.upper()}] Toplam: ${ac_total:,.0f} (%{ac_pct:.1f})")
+        # TRY ağırlıklı sınıflar için TL göster
+        _ac_has_try = any(p.get("currency","USD") == "TRY" for p in pos_list)
+        _ac_total_str = f"{ac_total:,.0f} TL" if (_ac_has_try and ac in ("tefas","commodity")) else f"${ac_total:,.0f}"
+        lines.append(f"[{ac.upper()}] Toplam: {_ac_total_str} (%{ac_pct:.1f})")
 
         for p in sorted(pos_list, key=lambda x: -x["val"]):
-            tk   = p["ticker"]
+            tk       = p["ticker"]
+            is_try   = (p.get("currency","USD") == "TRY")
+            # TRY varlıklar: değeri TL cinsinden göster, USD ağırlık için portföy %'si kullan
+            val_disp = (f"{p['val']:,.0f} TL" if is_try
+                       else f"${p['val']:,.0f}")
             base = (f"  {tk:16s} | %{p['val']/max(total_val,1)*100:.1f} portföy"
-                    f" | ${p['val']:,.0f} | K/Z:{p['pnl']:+.1f}%")
+                    f" | {val_disp} | K/Z:{p['pnl']:+.1f}%")
 
             if ac == "us_equity":
                 extra = f" | Sektör:{p['sector']}" if p['sector'] else ""
