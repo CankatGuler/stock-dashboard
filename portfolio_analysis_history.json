@@ -79,5 +79,31 @@
     "total_value": 5948.9935563,
     "position_count": 13,
     "extra": {}
+  },
+  {
+    "date": "2026-03-23",
+    "timestamp": "2026-03-23T14:09:08",
+    "type": "risk",
+    "analysis": "# 📋 KURUMSAL PORTFÖY ANALİZ RAPORU\n\n## ⚠️ ÖNEMLİ NOT: VERİ TUTARSIZLIĞI\n\nVerilen P&L hesaplamalarında tutarsızlık var. Gerçek durumu manuel hesaplıyorum:\n\n| Hisse | Maliyet | Güncel | Gerçek P&L |\n|-------|---------|--------|------------|\n| **AMD** | $219.97 | $206.60 | **-6.1% ZARAR** |\n| **IREN** | $42.87 | $44.24 | +3.2% Kâr |\n| **CCJ** | $101.66 | $105.54 | +3.8% Kâr |\n| **PPA** | $152.06 | $171.91 | **+13.1% Kâr** |\n| **VRT** | $189.24 | $268.76 | **+42.0% Kâr** |\n| **CRWD** | $475.89 | $411.73 | **-13.5% ZARAR** |\n| **AVGO** | $335.01 | $322.83 | **-3.6% ZARAR** |\n| **ZETA** | $20.32 | $17.51 | **-13.8% ZARAR** |\n| **AMZN** | $223.02 | $211.78 | **-5.0% ZARAR** |\n| **SOFI** | $24.07 | $17.18 | **-28.6% ZARAR** |\n| **NBIS** | $94.47 | $119.92 | **+27.0% Kâr** |\n| **RKLB** | $69.40 | $67.78 | -2.3% Zarar |\n| **SCHD** | $30.86 | $30.67 | -0.6% Nötr |\n\n---\n\n## 🔴 RİSK DEĞERLENDİRMESİ\n\n| Risk Kategorisi | Puan | Açıklama |\n|---|---|---|\n| **Sektörel Yoğunlaşma** | **9/10** | Portföyün %75+'i Teknoloji/AI/Yarı iletken - tek sektör riski kritik |\n| **Korelasyon Riski** | **8/10** | AMD, AVGO, VRT, CRWD, IREN, ZETA hepsi AI/Tech rallisine bağımlı |\n| **Sistematik/Makro Risk** | **7/10** | Faiz hassasiyeti yüksek growth hisseler dominant, Fed riski var |\n| **Likidite Riski** | **5/10** | ZETA, IREN, NBIS, RKLB düşük hacimli - çıkış zor olabilir |\n| **Döviz/Jeopolitik Risk** | **6/10** | Çin-Tayvan gerilimi yarı iletken tedarikini tehdit ediyor |\n\n### **Genel Risk Skoru: 7.5/10** — 🔴 **YÜKSEK**\n\n> Portföy tek bir senaryoya (AI rallisi devamı) aşırı bağımlı. Risk dağılımı acil gerekli.\n\n---\n\n## 📊 SEKTÖREL ANALİZ (Gerçek Dağılım)\n\n```\n┌─────────────────────────────────────────────────────────┐\n│ GERÇEK SEKTÖR DAĞILIMI                                  │\n├─────────────────────────────────────────────────────────┤\n│ 🔵 Yarı İletken/AI Altyapı  │ ████████████████ │ 42%   │\n│    (AMD, AVGO, VRT, IREN)   │                  │$2,082 │\n├──────────────────────────────────────────────",
+    "macro_regime": "",
+    "scenario": "",
+    "tickers": [
+      "AMD",
+      "IREN",
+      "CCJ",
+      "PPA",
+      "VRT",
+      "CRWD",
+      "AVGO",
+      "ZETA",
+      "AMZN",
+      "SOFI",
+      "NBIS",
+      "RKLB",
+      "SCHD"
+    ],
+    "total_value": 5858.90081447,
+    "position_count": 13,
+    "extra": {}
   }
 ]
