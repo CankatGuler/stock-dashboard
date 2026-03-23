@@ -948,5 +948,580 @@
         }
       }
     }
+  },
+  {
+    "id": "2026-03-23_002",
+    "date": "2026-03-23",
+    "generated_at": "2026-03-23T09:32:54.636060+00:00",
+    "portfolio_value": 71452.85,
+    "cash": 1060.57,
+    "summary": "Risk-off modu aktif: SPX sert düşüşü, VIX yüksek, OVX 92 seviyesinde petrol volatilitesi alarm veriyor. Portföy %70 TEFAS ağırlıklı ve hisse yoğun fon",
+    "strategy": {
+      "piyasa_ozeti": "Risk-off modu aktif: SPX sert düşüşü, VIX yüksek, OVX 92 seviyesinde petrol volatilitesi alarm veriyor. Portföy %70 TEFAS ağırlıklı ve hisse yoğun fonlar (IIH, NNF, TTE) resesyon riskine açık. Nakit %0.1 ile kritik düşük seviyede — acil likidite artırımı gerekli.",
+      "analist_sentezi": {
+        "makro": {
+          "sinyal": "AZALT",
+          "gerekce": "VIX yüksek + OVX 92 + SPX düşüşü = risk-off ortamı, pozisyon hafifletmek şart"
+        },
+        "abd_hisse": {
+          "sinyal": "TUT",
+          "gerekce": "Veri eksik ancak makro bağlamda defansif duruş mantıklı"
+        },
+        "kripto": {
+          "sinyal": "BEKLE",
+          "gerekce": "Veri eksik, risk-off ortamında yüksek beta kriptoları azaltmak gerekir"
+        },
+        "emtia": {
+          "sinyal": "TUT",
+          "gerekce": "Reel faiz düşüşü altın için olumlu ancak GLD momentum negatif, ekleme yapma"
+        },
+        "turkiye": {
+          "sinyal": "TUT",
+          "gerekce": "BIST tarihi ucuz ancak XBANK underperformance bankacılık riskini gösteriyor"
+        }
+      },
+      "celiskiler": [
+        {
+          "baslik": "Makro AZALT vs Türkiye/Emtia TUT",
+          "aciklama": "Makro analist pozisyon hafifletme önerirken Türkiye ve Emtia analistleri mevcut pozisyonları korumayı öneriyor",
+          "karar": "Makro rejim üstün — risk-off modunda bireysel varlık sinyalleri ikincil. Hisse yoğun TEFAS azaltılmalı, altın korunmalı",
+          "kazanan": "Makro Analist"
+        },
+        {
+          "baslik": "Nakit %0.1 vs Önerilen %20-25",
+          "aciklama": "Mevcut nakit kritik düşük, makro analist %20-25 nakit öneriyor",
+          "karar": "Acil nakit artırımı — T+0'da kripto ve T+2'de TEFAS satışı ile %20 nakit hedefine ulaşılmalı",
+          "kazanan": "Makro Analist"
+        }
+      ],
+      "portfoy_aksiyonlari": {
+        "hemen_yap": [
+          {
+            "varlik_sinifi": "CRYPTO",
+            "ticker": "Tüm spekülatif altcoinler (WLD, JUP, LINK, VIRTUAL, SOL, TIA, ROSE, SUI, ETHFI, EIGEN, AXL, APT, FET, AIXBT, ENA, ZIL, HGPT, HONEY, ONDO, HYPE, XAI, WIF)",
+            "eylem": "SAT",
+            "miktar_pct": 100,
+            "kaynak": "mevcut pozisyon",
+            "neden": "Risk-off modunda yüksek beta kripto (Beta>1.5) pozisyonları azaltılmalı. Toplam ~$11,000 nakit yaratır",
+            "stop_loss": null,
+            "hedef": null
+          },
+          {
+            "varlik_sinifi": "CRYPTO",
+            "ticker": "XRP-USD",
+            "eylem": "SAT",
+            "miktar_pct": 100,
+            "kaynak": "mevcut pozisyon",
+            "neden": "Beta 1.5, spekülatif — $1,896 nakit",
+            "stop_loss": null,
+            "hedef": null
+          },
+          {
+            "varlik_sinifi": "CRYPTO",
+            "ticker": "ETH-USD",
+            "eylem": "AZALT",
+            "miktar_pct": 50,
+            "kaynak": "mevcut pozisyon",
+            "neden": "Beta 1.3, yarısını sat (~$2,259), yarısını DeFi/L2 teması için tut",
+            "stop_loss": null,
+            "hedef": null
+          },
+          {
+            "varlik_sinifi": "CRYPTO",
+            "ticker": "BTC-USD",
+            "eylem": "TUT",
+            "miktar_pct": 0,
+            "kaynak": "mevcut",
+            "neden": "Beta 0.9, en defansif kripto, $2,364 pozisyon korunur",
+            "stop_loss": "$90,000",
+            "hedef": null
+          },
+          {
+            "varlik_sinifi": "TEFAS",
+            "ticker": "TTE",
+            "eylem": "SAT",
+            "miktar_pct": 100,
+            "kaynak": "mevcut pozisyon",
+            "neden": "Teknoloji ağırlıklı, çok yüksek beta, risk-off'ta en savunmasız. T+2'de ~$4,355 nakit (192,999 TL)",
+            "stop_loss": null,
+            "hedef": null
+          },
+          {
+            "varlik_sinifi": "TEFAS",
+            "ticker": "NNF",
+            "eylem": "AZALT",
+            "miktar_pct": 50,
+            "kaynak": "mevcut pozisyon",
+            "neden": "%90+ BIST hissesi, yüksek beta. Yarısını sat — T+2'de ~$2,290 nakit (101,495 TL)",
+            "stop_loss": null,
+            "hedef": null
+          },
+          {
+            "varlik_sinifi": "TEFAS",
+            "ticker": "IIH",
+            "eylem": "AZALT",
+            "miktar_pct": 30,
+            "kaynak": "mevcut pozisyon",
+            "neden": "Hisse yoğun fon, %30 azalt — T+2'de ~$2,615 nakit (115,791 TL). Kalan %70 korunur",
+            "stop_loss": null,
+            "hedef": null
+          }
+        ],
+        "kosullu_yap": [
+          {
+            "kosul": "VIX > 35 ve 2 gün kalıcı olursa",
+            "eylem": "IIH ve NNF'nin kalan pozisyonlarını da %50 azalt",
+            "ticker": "IIH, NNF",
+            "neden": "Volatilite şoku derinleşiyor demektir"
+          },
+          {
+            "kosul": "SPX 200 günlük ortalamanın %5 altına düşerse",
+            "eylem": "Tüm hisse yoğun TEFAS'tan çık, nakdi TI1'e kaydır",
+            "ticker": "IIH, NNF, TTE",
+            "neden": "Ayı piyasası teyidi — defansif pozisyon şart"
+          },
+          {
+            "kosul": "GLD proxy -%5 seviyesine dönerse ve WTI $90 altına inerse",
+            "eylem": "GLD veya AOY'a %5 ekleme yap",
+            "ticker": "AOY, GLD",
+            "neden": "Altın momentum düzelirse emtia analistinin önerisi aktifleşir"
+          }
+        ],
+        "izle_karar_ver": [
+          {
+            "varlik": "URA",
+            "izlenecek": "CCJ ve uranyum spotunun yönü, nükleer enerji haberleri",
+            "eylem": "Uranyum teması sağlamsa koru, sektör bozulursa %50 sat"
+          },
+          {
+            "varlik": "XBANK/BIST spread",
+            "izlenecek": "Spread'in -%5'e daralması",
+            "eylem": "Daralırsa BIST pozisyonlarına ekleme sinyali"
+          },
+          {
+            "varlik": "ABD Hisse (AMZN, AVGO, CRWD)",
+            "izlenecek": "Q1 kazanç raporları ve rehberlik",
+            "eylem": "FCF pozitif kalırsa koru, negatife dönerse sat"
+          }
+        ],
+        "nakit_orani": {
+          "onerilen_pct": 20,
+          "mevcut_pct": 0.1,
+          "neden": "Risk-off modunda minimum %15-20 nakit şart. Mevcut %0.1 kritik düşük. T+0 kripto satışı (~$15,000) + T+2 TEFAS satışı (~$9,260) ile hedefe ulaşılır"
+        }
+      },
+      "risk_senaryosu": {
+        "tetikleyici": "VIX > 40 + SPX -%10 haftalık düşüş + Petrol $110 üzeri (stagflasyon şoku)",
+        "ilk_24_saat": [
+          "Tüm spekülatif kripto pozisyonlarını sat (7/24 likit)",
+          "Nakdi USD'de tut, TL'ye çevirme",
+          "Panik satma — planlı çıkış noktalarını bekle"
+        ],
+        "savunma": [
+          "TEFAS hisse fonlarının (IIH, NNF, TTE) tamamını sat — T+2 nakit gel",
+          "TI1 ve TSI'yı koru — kısa vadeli tahvil defansif",
+          "AOY ve ALTIN_GRAM_TRY'yi koru — enflasyon hedge",
+          "Nakit oranını %35-40'a çıkar"
+        ],
+        "firsat_listesi": [
+          {
+            "ticker": "BTC-USD",
+            "seviye": 75000,
+            "islem": "AL",
+            "neden": "Panik sonrası %30 iskonto, uzun vadeli tez sağlam"
+          },
+          {
+            "ticker": "SCHD",
+            "seviye": 22,
+            "islem": "AL",
+            "neden": "Temettü aristokratı, defansif değer"
+          },
+          {
+            "ticker": "GLD",
+            "seviye": 200,
+            "islem": "AL",
+            "neden": "Reel faiz düşüşü + risk-off = altın parlar"
+          }
+        ],
+        "toparlanma_sinyali": "VIX < 25'e düşmesi + SPX 200 günlük ortalamanın üzerine çıkması + 2 hafta tutunması"
+      },
+      "vade_planlari": {
+        "kisa": {
+          "sure": "1-3 ay",
+          "baz_senaryo": "Risk-off devam eder, SPX %5-10 daha düşebilir, VIX 25-35 bandında kalır",
+          "risk_senaryosu": "Stagflasyon şoku — petrol $110+, Fed şahinleşir, hisseler %15-20 düşer",
+          "aksiyonlar": [
+            "Nakit oranını %20'de tut",
+            "Hisse yoğun TEFAS'ı azalt (yapıldı)",
+            "Altın pozisyonunu koru — enflasyon hedge",
+            "ABD hisselerinde yeni alım yapma, mevcut defansif pozisyonları koru"
+          ]
+        },
+        "orta": {
+          "sure": "3-12 ay",
+          "baz_senaryo": "Fed faiz indirimi başlar, reel faiz düşer, hisseler toparlanır, altın parlar",
+          "risk_senaryosu": "Stagflasyon kalıcı olur, Fed hareket edemez, hisseler yatay/düşük kalır",
+          "aksiyonlar": [
+            "VIX < 20 ve SPX trend dönüşü sonrası hisse yoğun TEFAS'a kademeli dönüş",
+            "GLD/AOY'a ekleme yap — reel faiz düşüşü tezi güçlenir",
+            "BTC pozisyonunu %3-5 portföye çıkar — halving sonrası boğa döngüsü",
+            "URA/CCJ temasını koru — nükleer rönesans uzun vadeli"
+          ]
+        },
+        "uzun": {
+          "sure": "1-3 yıl",
+          "tema": "Finansal baskı + negatif reel faiz = sabit arzlı varlıklar (BTC, altın) outperform eder",
+          "pozisyonlama": "Portföyün %30'u altın + BTC, %30'u kaliteli büyüme hisseleri (FCF pozitif), %20'si emtia/enerji, %20'si nakit/tahvil döngüsel"
+        }
+      },
+      "yil_sonu_hedefi": {
+        "hedef_pct": 40,
+        "mevcut_pct": -15.5,
+        "kalan_pct": 55.5,
+        "gerekan_aylik_pct": 5.0,
+        "risk_degerlendirmesi": "YÜKSEK — Mevcut -%15.5 zarardan %40 hedefe ulaşmak için %55.5 getiri gerekiyor. Aylık %5 bileşik getiri agresif bir hedef. Risk-off ortamında bu hedefe ulaşmak için aşırı risk almak gerekir.",
+        "tavsiye": "Hedefi %20-25'e revize et. Önce sermayeyi koru, sonra fırsat pencerelerinde (VIX düşüşü, Fed pivotu) agresifleş. %40 hedef için kuyruk riski senaryolarına %30+ maruz kalman gerekir — bu müşteri profiline uygun değil."
+      },
+      "senaryo_olasiliklari": {
+        "baz": {
+          "tanim": "Risk-off 2-3 ay devam eder, SPX %5-10 düşer, Fed beklentide kalır, altın yatay-yukarı",
+          "olasilik_pct": 55,
+          "portfoy_etkisi": "Portföy -%5 ila +5% bandında yatay, nakit koruması işe yarar"
+        },
+        "alternatif": {
+          "tanim": "Fed erken pivot yapar, risk-on döner, hisseler %15-20 toparlanır, kripto %30+ çıkar",
+          "olasilik_pct": 25,
+          "portfoy_etkisi": "Portföy +15-25% toparlanır, ancak nakit fazlası fırsat kaybına neden olur"
+        },
+        "kuyruk": {
+          "tanim": "Stagflasyon şoku — petrol $120+, resesyon + enflasyon birlikte, tüm riskli varlıklar -%30",
+          "olasilik_pct": 20,
+          "portfoy_etkisi": "Portföy -%20-30 düşer, sadece altın ve nakit korur. Hisse yoğun TEFAS ağır hasar alır"
+        }
+      },
+      "harmonize_strateji": "Ağırlıklı beklenen değer: (0.55 × 0%) + (0.25 × 20%) + (0.20 × -25%) = 0% + 5% - 5% = 0%. Nötr beklenti + yüksek belirsizlik = DEFANSIF DURUŞ. Nakit artır, spekülatif azalt, altın koru. Fırsat için bekle.",
+      "korelasyon_sigortasi": {
+        "aktif": false,
+        "neden": "Portföy çeşitlendirme skoru %69 (ORTA). Korelasyon 0.7 eşiğinin altında. Ancak hisse yoğun TEFAS'lar (IIH, NNF, TTE) birbirleriyle yüksek korelasyonlu — bu zaten azaltma önerisinde dikkate alındı.",
+        "nakit_artirim_pct": 0
+      },
+      "hisse_mikro_analiz": [
+        {
+          "ticker": "AMZN",
+          "etiketler": [
+            "Buyume_hisse",
+            "FCF_pozitif"
+          ],
+          "fcf_durumu": "yüksek",
+          "karar": "KORU",
+          "gerekce": "FCF güçlü, e-ticaret + AWS çift motor, risk-off'ta bile kaliteli"
+        },
+        {
+          "ticker": "AVGO",
+          "etiketler": [
+            "Yarim_iletken",
+            "AI_tema"
+          ],
+          "fcf_durumu": "yüksek",
+          "karar": "KORU",
+          "gerekce": "AI altyapı talebinden faydalanıyor, temettü ödüyor, defansif büyüme"
+        },
+        {
+          "ticker": "CRWD",
+          "etiketler": [
+            "Siber_guvenlik",
+            "Buyume_hisse"
+          ],
+          "fcf_durumu": "orta",
+          "karar": "KORU",
+          "gerekce": "Siber güvenlik talebi resesyona dayanıklı, ancak değerleme yüksek — izle"
+        },
+        {
+          "ticker": "SOFI",
+          "etiketler": [
+            "Fintech",
+            "Spekulatif"
+          ],
+          "fcf_durumu": "düşük",
+          "karar": "KORU",
+          "gerekce": "Pozisyon $389 — işlem maliyeti değmez, stratejik olarak izle"
+        },
+        {
+          "ticker": "IREN",
+          "etiketler": [
+            "Bitcoin_madencilik",
+            "Spekulatif"
+          ],
+          "fcf_durumu": "N/A",
+          "karar": "KORU",
+          "gerekce": "BTC korelasyonu yüksek, $480 pozisyon küçük — BTC tezi sağlamsa tut"
+        },
+        {
+          "ticker": "RKLB",
+          "etiketler": [
+            "Uzay",
+            "Spekulatif"
+          ],
+          "fcf_durumu": "düşük",
+          "karar": "KORU",
+          "gerekce": "Uzay teması uzun vadeli, $301 küçük pozisyon — satış maliyeti değmez"
+        },
+        {
+          "ticker": "SCHD",
+          "etiketler": [
+            "Temettu",
+            "Defansif"
+          ],
+          "fcf_durumu": "yüksek",
+          "karar": "KORU",
+          "gerekce": "Temettü aristokratları ETF'i, risk-off'ta defansif — arttırmayı düşün"
+        },
+        {
+          "ticker": "CCJ",
+          "etiketler": [
+            "Uranyum",
+            "Emtia"
+          ],
+          "fcf_durumu": "orta",
+          "karar": "KORU",
+          "gerekce": "Nükleer rönesans teması sağlam, URA ile tamamlayıcı"
+        },
+        {
+          "ticker": "AMD",
+          "etiketler": [
+            "Yarim_iletken",
+            "AI_tema"
+          ],
+          "fcf_durumu": "orta",
+          "karar": "KORU",
+          "gerekce": "$294 küçük pozisyon, AI talebi devam ediyor — satış maliyeti değmez"
+        },
+        {
+          "ticker": "VRT",
+          "etiketler": [
+            "Veri_merkezi",
+            "AI_altyapi"
+          ],
+          "fcf_durumu": "orta",
+          "karar": "KORU",
+          "gerekce": "$295 küçük pozisyon, veri merkezi soğutma teması güçlü"
+        },
+        {
+          "ticker": "ZETA",
+          "etiketler": [
+            "Pazarlama_teknolojisi"
+          ],
+          "fcf_durumu": "düşük",
+          "karar": "KORU",
+          "gerekce": "$372 küçük pozisyon — satış maliyeti > beklenen fayda"
+        },
+        {
+          "ticker": "PPA",
+          "etiketler": [
+            "Savunma_ETF"
+          ],
+          "fcf_durumu": "N/A",
+          "karar": "KORU",
+          "gerekce": "Savunma sektörü defansif, jeopolitik risk hedge'i"
+        },
+        {
+          "ticker": "NBIS",
+          "etiketler": [
+            "Spekulatif"
+          ],
+          "fcf_durumu": "N/A",
+          "karar": "KORU",
+          "gerekce": "$211 — işlem maliyetine değmez"
+        }
+      ],
+      "tefas_kararlari": [
+        {
+          "ticker": "IIH",
+          "icerik": "BIST + Yabancı Hisse ~%90",
+          "resesyon_risk": "YÜKSEK",
+          "karar": "AZALT",
+          "gerekce": "Risk-off modunda hisse yoğun fon savunmasız, %30 sat",
+          "valor_notu": "T+2 valör — satış emri bugün, nakit 2 gün sonra"
+        },
+        {
+          "ticker": "AOY",
+          "icerik": "Fiziksel Altın + Altın ETF ~%75",
+          "resesyon_risk": "DÜŞÜK",
+          "karar": "TUT",
+          "gerekce": "Enflasyon ve dolar bazlı koruma sağlıyor, azaltma",
+          "valor_notu": "Gerek yok"
+        },
+        {
+          "ticker": "NNF",
+          "icerik": "BIST Hisse ~%90-95",
+          "resesyon_risk": "YÜKSEK",
+          "karar": "AZALT",
+          "gerekce": "Yüksek beta BIST fonu, %50 sat",
+          "valor_notu": "T+2 valör — satış emri bugün, nakit 2 gün sonra"
+        },
+        {
+          "ticker": "TTE",
+          "icerik": "Teknoloji ve Bilişim Hisse ~%85",
+          "resesyon_risk": "YÜKSEK",
+          "karar": "SAT",
+          "gerekce": "Çok yüksek beta, risk-off'ta en savunmasız — tamamını sat",
+          "valor_notu": "T+2 valör — satış emri bugün, nakit 2 gün sonra"
+        },
+        {
+          "ticker": "URA",
+          "icerik": "Uranyum şirketleri + ETF ~%80",
+          "resesyon_risk": "ORTA",
+          "karar": "TUT",
+          "gerekce": "Nükleer rönesans uzun vadeli tez, sektör haberleri izle",
+          "valor_notu": "Gerek yok"
+        },
+        {
+          "ticker": "TI1",
+          "icerik": "Kısa vadeli TL tahvil ~%90",
+          "resesyon_risk": "DÜŞÜK",
+          "karar": "TUT",
+          "gerekce": "Defansif, faiz riskine düşük maruz, koru",
+          "valor_notu": "Gerek yok"
+        },
+        {
+          "ticker": "TSI",
+          "icerik": "Kısa vadeli TL menkul kıymet",
+          "resesyon_risk": "DÜŞÜK",
+          "karar": "TUT",
+          "gerekce": "Para piyasası benzeri, likit nakit alternatifi",
+          "valor_notu": "Gerek yok"
+        }
+      ],
+      "bir_sonraki_kontrol": {
+        "tarih": "2026-04-03",
+        "neden": "NFP işsizlik verisi — resesyon sinyali açısından kritik. Ayrıca T+2 TEFAS satışı nakit olarak yerleşmiş olacak",
+        "kontrol_sikligi": "haftalık",
+        "tetikleyiciler": [
+          {
+            "tip": "fiyat",
+            "aciklama": "VIX > 35 kalıcı çıkış",
+            "esik": "35",
+            "kontrol_suresi": "24 saat içinde"
+          },
+          {
+            "tip": "fiyat",
+            "aciklama": "SPX 200 günlük ortalamanın altına düşmesi",
+            "esik": "~4800 seviyesi",
+            "kontrol_suresi": "1 hafta içinde"
+          },
+          {
+            "tip": "takvim",
+            "aciklama": "10 Nisan CPI verisi — enflasyon sürprizi",
+            "esik": "CPI > %3.5 YoY",
+            "kontrol_suresi": "veri açıklanınca"
+          }
+        ]
+      },
+      "nakit_realizasyon_plani": {
+        "bugun_t0": "$15,155 — Spekülatif kripto satışı (~$13,000) + ETH %50 satışı (~$2,259). BTC korunur.",
+        "t2_tefas": "$9,260 — TTE tamamı ($4,355) + NNF %50 ($2,290) + IIH %30 ($2,615) satış emri bugün verilir",
+        "toplam_hedef": "$25,476 (%20 portföy = ~$401,000 × 0.20 hedeflenmiyor, $60,371 portföy × 0.20 = ~$12,000 minimum)",
+        "tutarli_mi": "evet — T+0 $15,155 + T+2 $9,260 = $24,415 toplam nakit. Mevcut $1,061 ile $25,476. Hedef %20 = ~$12,000, fazlasıyla karşılanıyor. Fazla nakit fırsat için bekletilecek.",
+        "not": "Kripto satışı anında T+0, TEFAS satışı bugün emir ver — nakit 2 gün sonra gelir. Nakit USD olarak tut, TL'ye çevirme."
+      },
+      "hard_cap_ihlal": {
+        "var_mi": false,
+        "ihlal_eden_sinif": "",
+        "onerilen_pct": 0,
+        "limit_pct": 0,
+        "senaryo_istisnasi": "Risk-off senaryosunda Kripto + Yüksek Beta Hisse toplamı %15 limiti altında kalıyor. Satış sonrası kripto ~%0.3, yüksek beta hisse minimal.",
+        "alternatif_risk": "Limitler dahilinde — ihlal yok"
+      },
+      "_generated_at": "2026-03-23T09:32:54.430365+00:00",
+      "_analyst_reports": {
+        "makro": {
+          "sinyal": "AZALT",
+          "guven": 7,
+          "ana_gerekcce": "SPX sert düşüşü, yüksek VIX ve OVX volatilitesi birlikte risk-off ortamını teyit ediyor — pozisyon hafifletmek mantıklı.",
+          "destekleyen": [
+            "VIX yüksek belirsizlik gösteriyor, piyasa stresi devam ediyor",
+            "OVX 92 seviyesi ciddi petrol volatilitesi ve jeopolitik risk sinyali veriyor",
+            "Yield curve pozitif (+0.77%) — resesyon sinyali yok, bu panik değil düzeltme",
+            "Credit spread stabil — sistemik kredi krizi riski düşük",
+            "Zayıf dolar ve düşen altın risk iştahının tamamen ölmediğini gösteriyor"
+          ],
+          "riskler": [
+            "Yüksek petrol fiyatları enflasyonu tetiklerse Fed beklenenden erken sıkılaşabilir",
+            "USD/JPY 159.5 seviyesinde BOJ müdahalesi küresel carry trade pozisyonlarını patlatabilir",
+            "SPX düşüşü hızlanırsa VIX spike yaparak margin call dalgası başlatabilir"
+          ],
+          "oneri": "Hisse pozisyonlarını %15-20 azalt, özellikle yüksek beta ve spekülatif varlıklardan çık. Nakit oranını %20-25'e çıkar. Tamamen satma — yield curve ve credit spread panik ortamı değil düzeltme diyor.",
+          "izle": "VIX'in 30 üzerine kalıcı çıkışı ve SPX'in 200 günlük ortalamasını test etmesi — bu seviyeler kırılırsa AZALT'tan SAT'a geçiş gerekir.",
+          "_source": "claude_macro"
+        },
+        "abd": {
+          "sinyal": "TUT",
+          "guven": 5,
+          "ana_gerekcce": "ABD hisse verisi çekilemedi — portföy pozisyonları ve makro bağlamla değerlendiriliyor",
+          "sektor_gorusu": "Veri eksik",
+          "deger_leme": "Veri eksik",
+          "destekleyen": [],
+          "riskler": [],
+          "oneri": "Veri eksik — makro bağlama göre değerlendir",
+          "izle": "",
+          "_source": "claude_us_equity"
+        },
+        "kripto": {
+          "sinyal": "BEKLE",
+          "guven": 5,
+          "ana_gerekcce": "Kripto verisi çekilemedi — genel makro bağlamla değerlendiriliyor",
+          "dongu_pozisyonu": "Veri eksik",
+          "onchain_ozet": "Veri eksik",
+          "btc_vs_altcoin": "Veri eksik",
+          "destekleyen": [],
+          "riskler": [],
+          "oneri": "Veri eksik — makro bağlama göre değerlendir",
+          "izle": "",
+          "_source": "claude_crypto"
+        },
+        "emtia": {
+          "sinyal": "TUT",
+          "guven": 6,
+          "ana_gerekcce": "Düşen reel faiz altın için yapısal olumlu ancak kısa vadeli teknik zayıflık ve yüksek petrol kaynaklı Fed belirsizliği pozisyon artırmayı erteliyor.",
+          "altin_gorusu": "Reel faiz düşüşü ve merkez bankası alım tezi uzun vadede altını destekliyor; ancak 30 günlük -%9.2 düzeltme ve $4,300 direnci kısa vadede konsolidasyon sinyali veriyor.",
+          "petrol_gorusu": "WTI $98.5 seviyesi kritik eşik üzerinde — Hürmüz Boğazı tehditleri arz riskini artırıyor, bu hem enflasyonu besliyor hem Fed'in elini bağlıyor; enerji hisseleri için pozitif ama geniş piyasa için negatif.",
+          "destekleyen": [
+            "Reel faiz proxy düşüş trendinde — altın için olumlu makro zemin",
+            "ABD altın rezerv değerleme arbitrajı ($1.11T fark) uzun vadeli yeniden değerleme potansiyeli taşıyor",
+            "Altın/Bakır oranı 806 — resesyon koruması talebi yüksek",
+            "Jeopolitik risk primi (Hürmüz, İran) emtialara destek sağlıyor"
+          ],
+          "riskler": [
+            "GLD proxy -%14.1 (1 ay) — momentum negatif, kısa vadeli satış baskısı devam edebilir",
+            "Yüksek petrol ($98.5) Fed'i şahin tutabilir, faiz indirimi beklentisi ertelenirse altın baskılanır",
+            "52 haftalık zirveden %51 yükseliş — kâr realizasyonu riski mevcut"
+          ],
+          "oneri": "Mevcut TRY altın pozisyonunu (530K TRY) koruyun; GLD proxy -%5 seviyesine dönene ve WTI $90 altına inene kadar ekleme yapmayın. Gümüş (XAGTRY) pozisyonunu altına göre düşük performans nedeniyle artırmayın.",
+          "izle": "ABD 10Y TIPS getirisi (reel faiz teyidi) ve WTI'ın $95 desteğini kırıp kırmadığı — bu iki gösterge altın için sonraki yön belirleyici olacak.",
+          "_source": "claude_commodity"
+        },
+        "turkiye": {
+          "sinyal": "TUT",
+          "guven": 6,
+          "ana_gerekce": "BIST dolar bazında tarihi ucuzluk bölgesinde ($288) ancak XBANK'ın BIST'in %9 gerisinde kalması bankacılık sektöründe yapısal sorun sinyali veriyor.",
+          "dolar_bazli_degerleme": "BIST $288 seviyesi 2020 dip seviyeleriyle eşdeğer — uzun vadeli değer yatırımcısı için cazip, ancak kısa vadede kur riski ve sektörel zayıflık dikkat gerektiriyor.",
+          "xbank_gorusu": "XBANK'ın BIST'e göre -%9 underperformance'ı ciddi uyarı. Yüksek faiz ortamında kredi kalitesi bozulması ve NIM baskısı bankacılığı zorluyor. Sektör toparlanmadan BIST'te sürdürülebilir ralli zor.",
+          "kur_riski": "USD/TRY 44.32 ile stabil görünüyor ancak TL fonlarda yıllık dolar bazlı %-20 kayıp tahmini, kur riskinin hâlâ dominant faktör olduğunu gösteriyor. TCMB politika tutarlılığı kritik.",
+          "destekleyen": [
+            "Dolar bazlı BIST tarihi ucuzluk bölgesinde — kontrarian alım fırsatı",
+            "TUR ETF hacminde %76 artış — yabancı ilgisi canlanıyor",
+            "Risk primi stabil, gelişen piyasalarla paralel hareket"
+          ],
+          "riskler": [
+            "XBANK dramatik underperformance — bankacılık sektörü alarm veriyor",
+            "TEFAS fonlarında dolar bazlı %-20 kayıp — TL pozisyonlar reel değer kaybediyor",
+            "Yüksek faiz ortamı teknoloji (TTE) ve hisse fonlarını (IIH, NNF) baskılıyor"
+          ],
+          "oneri": "Mevcut pozisyonları koru, yeni alım için XBANK'ın BIST'e yakınsamasını bekle. AOY (altın) pozisyonu dolar bazlı koruma sağlıyor, azaltma. TTE ve hisse ağırlıklı fonlarda (IIH, NNF) agresif artırım için erken — bankacılık stabilize olmalı.",
+          "izle": "XBANK/BIST spread'i daralması (şu an -%9, %-5'e gelmesi olumlu sinyal) ve TCMB'nin Haziran faiz kararı",
+          "_source": "claude_turkey"
+        }
+      }
+    }
   }
 ]
