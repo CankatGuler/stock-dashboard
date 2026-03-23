@@ -290,43 +290,91 @@ SECTOR_ETF_PROXY = {
 # Format: kod → (tip, içerik_özeti, resesyon_riski, kur_riski, beta_seviyesi, notlar)
 
 TEFAS_DB = {
-    # ── Hisse Senedi Fonları ─────────────────────────────────────────────────
-    "IIH":  ("Hisse Yoğun",           "BIST + Yabancı Hisse ~%90",      "YÜKSEK",     "ORTA",   "YÜKSEK",
-             "Hedef Portföy. Büyük ölçekli BIST + seçici yabancı hisse. Zombi riskine yüksek maruz."),
-    "NNF":  ("Hisse Senedi (Birinci)", "BIST Hisse ~%90-95",             "YÜKSEK",     "ORTA",   "YÜKSEK",
-             "Hedef Portföy NNF. %90+ BIST hissesi — TAHVİL DEĞIL. Agresif hisse fonu. Yüksek beta."),
-    "TTE":  ("Hisse (Teknoloji)",      "Teknoloji ve Bilişim Hisse ~%85","YÜKSEK",     "ORTA",   "ÇOK_YÜKSEK",
-             "Teknoloji ağırlıklı, yüksek faiz ortamında iskonto baskısı en yüksek fon."),
-    "MAC":  ("Hisse (Banka/Finans)",   "Bankacılık ve Finans ~%80",      "ÇOK_YÜKSEK", "ORTA",   "YÜKSEK",
-             "Bankacılık yoğunluğu, kredi kalitesi döngüsüne çok hassas."),
-    "YAS":  ("Hisse (Karma)",          "Çeşitlendirilmiş BIST ~%80",     "YÜKSEK",     "ORTA",   "YÜKSEK",
-             "Çeşitlendirilmiş BIST hisse fonu."),
-    # ── Altın / Kıymetli Maden Fonları ──────────────────────────────────────
-    "AEY":  ("Altın/Kıymetli Maden",  "Fiziksel Altın + Altın ETF ~%80","DÜŞÜK",      "DÜŞÜK",  "ORTA",
-             "Altın ağırlıklı. Enflasyon ve döviz hedge. Resesyonda defansif."),
-    "AOY":  ("Altın/Kıymetli Maden",  "Fiziksel Altın + Altın ETF ~%75","DÜŞÜK",      "DÜŞÜK",  "ORTA",
-             "Altın ağırlıklı fon. AEY benzeri profil. Enflasyon koruyucu."),
-    "GLD":  ("Altın ETF",             "Fiziksel Altın ~%99",            "DÜŞÜK",      "DÜŞÜK",  "ORTA",
-             "Uluslararası altın ETF. Dolar bazlı altın maruziyeti."),
-    # ── Dengeli / Karma Fonlar ───────────────────────────────────────────────
-    "YAC":  ("Dengeli",               "Hisse %50 + Tahvil %50",         "ORTA",       "DÜŞÜK",  "ORTA",
-             "Dengeli fon. Hisse ve tahvil karışımı. Orta risk profili."),
-    "NNM":  ("Dengeli (Karma)",        "Hisse + Tahvil + Altın karışık", "ORTA",       "DÜŞÜK",  "ORTA",
-             "Karma strateji. Gerçek dağılım için KAP teyidi önerilir."),
-    # ── Tahvil / Sabit Getirili Fonlar ──────────────────────────────────────
-    "GAF":  ("Kamu Menkul Kıymet",    "Devlet Tahvili ~%90",            "DÜŞÜK",      "YÜKSEK", "DÜŞÜK",
-             "TL devlet tahvili ağırlıklı. Kur riskine dikkat — TL zayıflarsa reel zarar."),
-    "TI1":  ("Tahvil (Kısa Vade)",    "Kısa vadeli TL tahvil ~%90",     "DÜŞÜK",      "YÜKSEK", "DÜŞÜK",
-             "Kısa vadeli tahvil, faiz riskine düşük maruz."),
-    "TSI":  ("Tahvil/Para Piyasası",  "Kısa vadeli TL menkul kıymet",   "DÜŞÜK",      "YÜKSEK", "ÇOK_DÜŞÜK",
-             "Para piyasası benzeri. Düşük getiri, düşük risk."),
-    # ── Uranyum / Enerji / Emtia ─────────────────────────────────────────────
-    "URA":  ("Uranyum/Nükleer Enerji","Uranyum şirketleri + ETF ~%80",  "ORTA",       "DÜŞÜK",  "YÜKSEK",
-             "Nükleer rönesans teması. CCJ benzeri şirketler. Volatil ama yapısal trend güçlü."),
-    # ── Bilinmeyen Fonlar ────────────────────────────────────────────────────
-    # Kural: Sözlükte olmayan fon için ASLA tahmin yapma.
-    # Direktöre bildir: "Fon içeriği doğrulanmadı — içerik teyit edilene kadar KORU/KÜÇÜK_AZALT"
+    # FORMAT: kod → (tip, içerik, resesyon_riski, kur_riski, beta, not)
+    # KUR_RİSKİ: YÜKSEK=TL bazlı zarar görür | DÜŞÜK=yabancı varlık, kur korumalı
+    # TL KRİZİNDE KURAL: Kur Riski DÜŞÜK → TL değer kaybı fon TL fiyatını ARTTIRIR
+
+    # ── Yerli Ağırlıklı Hisse Fonları ───────────────────────────────────────
+    "IIH":  ("Hisse Yoğun YERLİ",
+             "BIST büyük şirket ~%80 yerli + ~%10 yabancı hisse",
+             "YÜKSEK", "YÜKSEK", "YÜKSEK",
+             "Ağırlıklı BIST yerli hisse. TL krizi = çift darbe (BIST düşer + TL erir)."),
+
+    "NNF":  ("Hisse Senedi Birinci YERLİ",
+             "BIST hisse ~%90-95 tamamen yerli — TAHVİL DEĞİL",
+             "YÜKSEK", "YÜKSEK", "YÜKSEK",
+             "Agresif YERLİ BIST hisse fonu. TL krizi = tam maruz kalım."),
+
+    "MAC":  ("Hisse Banka/Finans YERLİ",
+             "BIST bankacılık ve finans ~%80 yerli",
+             "ÇOK_YÜKSEK", "YÜKSEK", "YÜKSEK",
+             "Yerli banka hisseleri. Kredi döngüsü + TL krizine çok hassas."),
+
+    "YAS":  ("Hisse Karma YERLİ",
+             "Çeşitlendirilmiş BIST ~%80 yerli",
+             "YÜKSEK", "YÜKSEK", "YÜKSEK",
+             "Çeşitlendirilmiş BIST yerli hisse fonu. TL krizinde korumasız."),
+
+    # ── Yabancı Ağırlıklı (Kur Korumalı) Hisse Fonları ──────────────────────
+    "TTE":  ("Hisse Teknoloji YABANCI/KUR_KORUMALI",
+             "Yabancı teknoloji ~%70-80 (Nasdaq/S&P tekno) + yerli tekno ~%20-30",
+             "ORTA", "DÜŞÜK", "ÇOK_YÜKSEK",
+             "⚠️ KUR KORUMALI: Ağırlıklı yabancı (Nasdaq) hisse. "
+             "TL %30 değer kaybında fon TL fiyatı YUKARI gider. "
+             "Türkiye şokunda SATMA — resesyon riski var ama kur koruması sağlar."),
+
+    "AOY":  ("ALTERNATİF ENERJİ YABANCI — ALTIN FONU DEĞİL",
+             "Yabancı alternatif/temiz enerji hisseleri ~%80-90 (solar, rüzgar, EV)",
+             "ORTA", "DÜŞÜK", "YÜKSEK",
+             "⚠️ KRİTİK UYARI: AOY ALTIN FONU DEĞİL. "
+             "Alternatif/Temiz Enerji yabancı hisse fonudur — enflasyon hedge değil. "
+             "KUR KORUMALI: TL değer kaybında TL fiyatı artar."),
+
+    # ── Altın / Kıymetli Maden Fonları (Kur Korumalı) ────────────────────────
+    "AEY":  ("Altın/Kıymetli Maden KUR_KORUMALI",
+             "Fiziksel altın + altın ETF ~%80, dolar bazlı",
+             "DÜŞÜK", "DÜŞÜK", "ORTA",
+             "Gerçek altın fonu. Enflasyon ve döviz hedge. TL değer kaybında TL fiyatı ARTAR."),
+
+    "GLD":  ("Altın ETF KUR_KORUMALI",
+             "Fiziksel altın ~%99, dolar bazlı",
+             "DÜŞÜK", "DÜŞÜK", "ORTA",
+             "Uluslararası altın ETF. Kur korumalı."),
+
+    # ── Dengeli / Karma Fonlar ────────────────────────────────────────────────
+    "YAC":  ("Dengeli Karma",
+             "Hisse %50 (karma yerli/yabancı) + Tahvil %50",
+             "ORTA", "ORTA", "ORTA",
+             "Dengeli fon. Yabancı hisse oranı için KAP teyidi önerilir."),
+
+    "NNM":  ("Dengeli Karma",
+             "Hisse + Tahvil + Altın — oranlar değişken",
+             "ORTA", "ORTA", "ORTA",
+             "Karma strateji. KAP aylık raporu teyidi gerekli."),
+
+    # ── TL Bazlı Tahvil / Para Piyasası Fonları ───────────────────────────────
+    "GAF":  ("Kamu Menkul Kıymet TL_BAZLI",
+             "TL devlet tahvili ~%90",
+             "DÜŞÜK", "YÜKSEK", "DÜŞÜK",
+             "TL devlet tahvili. TL krizinde dolar bazlı değer erir."),
+
+    "TI1":  ("Tahvil Kısa Vade TL_BAZLI",
+             "Kısa vadeli TL tahvil ~%90",
+             "DÜŞÜK", "YÜKSEK", "DÜŞÜK",
+             "Kısa vadeli TL tahvil. TL krizinde eritici."),
+
+    "TSI":  ("Para Piyasası TL_BAZLI",
+             "Kısa vadeli TL menkul kıymet",
+             "DÜŞÜK", "YÜKSEK", "ÇOK_DÜŞÜK",
+             "Para piyasası benzeri. TL krizinde eritici."),
+
+    # ── Yabancı Emtia / Enerji Fonları (Kur Korumalı) ─────────────────────────
+    "URA":  ("Uranyum/Nükleer Enerji YABANCI/KUR_KORUMALI",
+             "Yabancı uranyum şirketleri + ETF ~%80 (CCJ, NXE vb.)",
+             "ORTA", "DÜŞÜK", "YÜKSEK",
+             "Nükleer rönesans. YABANCI şirketler. KUR KORUMALI. Volatil ama yapısal."),
 }
+
 
 # Sözlükte olmayan fonlar için güvenli fallback
 TEFAS_UNKNOWN_RULE = (
@@ -1046,6 +1094,10 @@ Eğer portföydeki varlık sınıfları arasındaki 30 günlük korelasyon 0.7'y
 • TEFAS HALÜSINASYON YASAĞI: Sözlükte (TEFAS_DB) olmayan fon için
   içerik TAHMİNİ YAPMA. "Tahvil ağırlıklı gibi görünüyor" demek yasak.
   Bilinmeyen fon → "İçerik doğrulanmadı, koru" de.
+• KUR KORUMALI FONLAR (Türkiye şokunda kritik):
+  TTE (yabancı teknoloji) ve URA (yabancı uranyum) TL değer kaybında TL fiyatı ARTAR.
+  AOY ALTIN FONU DEĞİL — alternatif enerji yabancı hisse fonu.
+  Kur Riski DÜŞÜK etiketli fonları TL krizinde SATMA — kur koruması sağlarlar.
 • İZOLASYON HATASI: Türkiye şoku gibi lokal krizlerde bile
   ABD hisselerindeki zombi pozisyonları (negatif FCF + düşük current ratio)
   değerlendir. "Türkiye'den izole" gerekçesi zombi filtresini es geçmez.
@@ -1253,43 +1305,91 @@ SECTOR_ETF_PROXY = {
 # Format: kod → (tip, içerik_özeti, resesyon_riski, kur_riski, beta_seviyesi, notlar)
 
 TEFAS_DB = {
-    # ── Hisse Senedi Fonları ─────────────────────────────────────────────────
-    "IIH":  ("Hisse Yoğun",           "BIST + Yabancı Hisse ~%90",      "YÜKSEK",     "ORTA",   "YÜKSEK",
-             "Hedef Portföy. Büyük ölçekli BIST + seçici yabancı hisse. Zombi riskine yüksek maruz."),
-    "NNF":  ("Hisse Senedi (Birinci)", "BIST Hisse ~%90-95",             "YÜKSEK",     "ORTA",   "YÜKSEK",
-             "Hedef Portföy NNF. %90+ BIST hissesi — TAHVİL DEĞIL. Agresif hisse fonu. Yüksek beta."),
-    "TTE":  ("Hisse (Teknoloji)",      "Teknoloji ve Bilişim Hisse ~%85","YÜKSEK",     "ORTA",   "ÇOK_YÜKSEK",
-             "Teknoloji ağırlıklı, yüksek faiz ortamında iskonto baskısı en yüksek fon."),
-    "MAC":  ("Hisse (Banka/Finans)",   "Bankacılık ve Finans ~%80",      "ÇOK_YÜKSEK", "ORTA",   "YÜKSEK",
-             "Bankacılık yoğunluğu, kredi kalitesi döngüsüne çok hassas."),
-    "YAS":  ("Hisse (Karma)",          "Çeşitlendirilmiş BIST ~%80",     "YÜKSEK",     "ORTA",   "YÜKSEK",
-             "Çeşitlendirilmiş BIST hisse fonu."),
-    # ── Altın / Kıymetli Maden Fonları ──────────────────────────────────────
-    "AEY":  ("Altın/Kıymetli Maden",  "Fiziksel Altın + Altın ETF ~%80","DÜŞÜK",      "DÜŞÜK",  "ORTA",
-             "Altın ağırlıklı. Enflasyon ve döviz hedge. Resesyonda defansif."),
-    "AOY":  ("Altın/Kıymetli Maden",  "Fiziksel Altın + Altın ETF ~%75","DÜŞÜK",      "DÜŞÜK",  "ORTA",
-             "Altın ağırlıklı fon. AEY benzeri profil. Enflasyon koruyucu."),
-    "GLD":  ("Altın ETF",             "Fiziksel Altın ~%99",            "DÜŞÜK",      "DÜŞÜK",  "ORTA",
-             "Uluslararası altın ETF. Dolar bazlı altın maruziyeti."),
-    # ── Dengeli / Karma Fonlar ───────────────────────────────────────────────
-    "YAC":  ("Dengeli",               "Hisse %50 + Tahvil %50",         "ORTA",       "DÜŞÜK",  "ORTA",
-             "Dengeli fon. Hisse ve tahvil karışımı. Orta risk profili."),
-    "NNM":  ("Dengeli (Karma)",        "Hisse + Tahvil + Altın karışık", "ORTA",       "DÜŞÜK",  "ORTA",
-             "Karma strateji. Gerçek dağılım için KAP teyidi önerilir."),
-    # ── Tahvil / Sabit Getirili Fonlar ──────────────────────────────────────
-    "GAF":  ("Kamu Menkul Kıymet",    "Devlet Tahvili ~%90",            "DÜŞÜK",      "YÜKSEK", "DÜŞÜK",
-             "TL devlet tahvili ağırlıklı. Kur riskine dikkat — TL zayıflarsa reel zarar."),
-    "TI1":  ("Tahvil (Kısa Vade)",    "Kısa vadeli TL tahvil ~%90",     "DÜŞÜK",      "YÜKSEK", "DÜŞÜK",
-             "Kısa vadeli tahvil, faiz riskine düşük maruz."),
-    "TSI":  ("Tahvil/Para Piyasası",  "Kısa vadeli TL menkul kıymet",   "DÜŞÜK",      "YÜKSEK", "ÇOK_DÜŞÜK",
-             "Para piyasası benzeri. Düşük getiri, düşük risk."),
-    # ── Uranyum / Enerji / Emtia ─────────────────────────────────────────────
-    "URA":  ("Uranyum/Nükleer Enerji","Uranyum şirketleri + ETF ~%80",  "ORTA",       "DÜŞÜK",  "YÜKSEK",
-             "Nükleer rönesans teması. CCJ benzeri şirketler. Volatil ama yapısal trend güçlü."),
-    # ── Bilinmeyen Fonlar ────────────────────────────────────────────────────
-    # Kural: Sözlükte olmayan fon için ASLA tahmin yapma.
-    # Direktöre bildir: "Fon içeriği doğrulanmadı — içerik teyit edilene kadar KORU/KÜÇÜK_AZALT"
+    # FORMAT: kod → (tip, içerik, resesyon_riski, kur_riski, beta, not)
+    # KUR_RİSKİ: YÜKSEK=TL bazlı zarar görür | DÜŞÜK=yabancı varlık, kur korumalı
+    # TL KRİZİNDE KURAL: Kur Riski DÜŞÜK → TL değer kaybı fon TL fiyatını ARTTIRIR
+
+    # ── Yerli Ağırlıklı Hisse Fonları ───────────────────────────────────────
+    "IIH":  ("Hisse Yoğun YERLİ",
+             "BIST büyük şirket ~%80 yerli + ~%10 yabancı hisse",
+             "YÜKSEK", "YÜKSEK", "YÜKSEK",
+             "Ağırlıklı BIST yerli hisse. TL krizi = çift darbe (BIST düşer + TL erir)."),
+
+    "NNF":  ("Hisse Senedi Birinci YERLİ",
+             "BIST hisse ~%90-95 tamamen yerli — TAHVİL DEĞİL",
+             "YÜKSEK", "YÜKSEK", "YÜKSEK",
+             "Agresif YERLİ BIST hisse fonu. TL krizi = tam maruz kalım."),
+
+    "MAC":  ("Hisse Banka/Finans YERLİ",
+             "BIST bankacılık ve finans ~%80 yerli",
+             "ÇOK_YÜKSEK", "YÜKSEK", "YÜKSEK",
+             "Yerli banka hisseleri. Kredi döngüsü + TL krizine çok hassas."),
+
+    "YAS":  ("Hisse Karma YERLİ",
+             "Çeşitlendirilmiş BIST ~%80 yerli",
+             "YÜKSEK", "YÜKSEK", "YÜKSEK",
+             "Çeşitlendirilmiş BIST yerli hisse fonu. TL krizinde korumasız."),
+
+    # ── Yabancı Ağırlıklı (Kur Korumalı) Hisse Fonları ──────────────────────
+    "TTE":  ("Hisse Teknoloji YABANCI/KUR_KORUMALI",
+             "Yabancı teknoloji ~%70-80 (Nasdaq/S&P tekno) + yerli tekno ~%20-30",
+             "ORTA", "DÜŞÜK", "ÇOK_YÜKSEK",
+             "⚠️ KUR KORUMALI: Ağırlıklı yabancı (Nasdaq) hisse. "
+             "TL %30 değer kaybında fon TL fiyatı YUKARI gider. "
+             "Türkiye şokunda SATMA — resesyon riski var ama kur koruması sağlar."),
+
+    "AOY":  ("ALTERNATİF ENERJİ YABANCI — ALTIN FONU DEĞİL",
+             "Yabancı alternatif/temiz enerji hisseleri ~%80-90 (solar, rüzgar, EV)",
+             "ORTA", "DÜŞÜK", "YÜKSEK",
+             "⚠️ KRİTİK UYARI: AOY ALTIN FONU DEĞİL. "
+             "Alternatif/Temiz Enerji yabancı hisse fonudur — enflasyon hedge değil. "
+             "KUR KORUMALI: TL değer kaybında TL fiyatı artar."),
+
+    # ── Altın / Kıymetli Maden Fonları (Kur Korumalı) ────────────────────────
+    "AEY":  ("Altın/Kıymetli Maden KUR_KORUMALI",
+             "Fiziksel altın + altın ETF ~%80, dolar bazlı",
+             "DÜŞÜK", "DÜŞÜK", "ORTA",
+             "Gerçek altın fonu. Enflasyon ve döviz hedge. TL değer kaybında TL fiyatı ARTAR."),
+
+    "GLD":  ("Altın ETF KUR_KORUMALI",
+             "Fiziksel altın ~%99, dolar bazlı",
+             "DÜŞÜK", "DÜŞÜK", "ORTA",
+             "Uluslararası altın ETF. Kur korumalı."),
+
+    # ── Dengeli / Karma Fonlar ────────────────────────────────────────────────
+    "YAC":  ("Dengeli Karma",
+             "Hisse %50 (karma yerli/yabancı) + Tahvil %50",
+             "ORTA", "ORTA", "ORTA",
+             "Dengeli fon. Yabancı hisse oranı için KAP teyidi önerilir."),
+
+    "NNM":  ("Dengeli Karma",
+             "Hisse + Tahvil + Altın — oranlar değişken",
+             "ORTA", "ORTA", "ORTA",
+             "Karma strateji. KAP aylık raporu teyidi gerekli."),
+
+    # ── TL Bazlı Tahvil / Para Piyasası Fonları ───────────────────────────────
+    "GAF":  ("Kamu Menkul Kıymet TL_BAZLI",
+             "TL devlet tahvili ~%90",
+             "DÜŞÜK", "YÜKSEK", "DÜŞÜK",
+             "TL devlet tahvili. TL krizinde dolar bazlı değer erir."),
+
+    "TI1":  ("Tahvil Kısa Vade TL_BAZLI",
+             "Kısa vadeli TL tahvil ~%90",
+             "DÜŞÜK", "YÜKSEK", "DÜŞÜK",
+             "Kısa vadeli TL tahvil. TL krizinde eritici."),
+
+    "TSI":  ("Para Piyasası TL_BAZLI",
+             "Kısa vadeli TL menkul kıymet",
+             "DÜŞÜK", "YÜKSEK", "ÇOK_DÜŞÜK",
+             "Para piyasası benzeri. TL krizinde eritici."),
+
+    # ── Yabancı Emtia / Enerji Fonları (Kur Korumalı) ─────────────────────────
+    "URA":  ("Uranyum/Nükleer Enerji YABANCI/KUR_KORUMALI",
+             "Yabancı uranyum şirketleri + ETF ~%80 (CCJ, NXE vb.)",
+             "ORTA", "DÜŞÜK", "YÜKSEK",
+             "Nükleer rönesans. YABANCI şirketler. KUR KORUMALI. Volatil ama yapısal."),
 }
+
 
 # Sözlükte olmayan fonlar için güvenli fallback
 TEFAS_UNKNOWN_RULE = (

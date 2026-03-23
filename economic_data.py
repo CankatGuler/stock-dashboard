@@ -16,6 +16,28 @@ import yfinance as yf
 
 logger = logging.getLogger(__name__)
 
+# ─── Thread-Safe Basit Cache ─────────────────────────────────────────────────
+# @st.cache_data background thread'de çalışmaz — bu yüzden manuel TTL cache kullanıyoruz
+import threading as _threading
+import time as _cache_time
+
+_econ_cache: dict = {}
+_econ_cache_lock = _threading.Lock()
+
+def _cached(key: str, ttl: int, fn):
+    """Thread-safe basit TTL cache. fn çağrısını sarmalamak için kullanılır."""
+    now = _cache_time.time()
+    with _econ_cache_lock:
+        if key in _econ_cache:
+            val, ts = _econ_cache[key]
+            if now - ts < ttl:
+                return val
+    result = fn()
+    with _econ_cache_lock:
+        _econ_cache[key] = (result, now)
+    return result
+
+
 FRED_BASE = "https://fred.stlouisfed.org/graph/fredgraph.csv"
 
 
@@ -169,7 +191,6 @@ SECTOR_ETFS = {
 }
 
 
-@st.cache_data(ttl=1800, show_spinner=False)
 def fetch_sector_rotation() -> dict:
     result = {}
     try:
@@ -289,8 +310,6 @@ def fetch_vix_term_structure() -> dict:
         logger.debug("VIX term structure failed: %s", e)
     return {}
 
-
-@st.cache_data(ttl=1800, show_spinner=False)
 
 # ─── Adım 1: Buffett Göstergesi ──────────────────────────────────────────────
 # Wilshire 5000 Toplam Piyasa Değeri / ABD GSYİH
