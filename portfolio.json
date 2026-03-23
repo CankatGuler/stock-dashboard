@@ -503,9 +503,9 @@
       "updated": "2026-03-18 21:32"
     }
   ],
-  "cash": 1060.57,
+  "cash": 2060.57,
   "cash_accounts": {
-    "usd": 1060.57,
+    "usd": 2060.57,
     "commodity_usd": 1000.0,
     "crypto_usd": 1000.0
   }
