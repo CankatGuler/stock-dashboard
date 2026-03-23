@@ -92,11 +92,11 @@ _DIRECTOR_JSON_SCHEMA = """
     ]
   },
   "nakit_realizasyon_plani": {
-    "bugun_t0": "örn: $8,500 — BTC %50 + AVGO + SOFI satışından",
-    "t2_tefas": "örn: $15,000 — IIH+TTE satış emri bugün, nakit T+2",
-    "toplam_hedef": "örn: $25,000 (%35 portföy)",
-    "tutarli_mi": "örn: evet — T+0 $8500 + T+2 $15000 = $23500, hedef $25000, $1500 eksik",
-    "not": "Eksikse farkı ve kapatma yöntemini yaz. Bu alan ZORUNLU."
+    "bugun_t0": "<HESAPLANMIŞ_T0_NAKDE_DÖNÜŞÜM>",
+    "t2_tefas": "<HESAPLANMIŞ_T2_TEFAS_SATIŞI>",
+    "toplam_hedef": "<SEÇİLEN_NAKİT_HEDEFİ>",
+    "tutarli_mi": "<evet_veya_hayir_fark_açıklaması>",
+    "not": "<varsa_ek_not>"
   },
   "hard_cap_ihlal": {
     "var_mi": false,
@@ -445,6 +445,20 @@ Makro görüşün yanında, portföydeki her ABD hissesini aşağıdaki üç fil
    - Resesyon_defansif / Resesyon_hassas
    - Dolar_zayiflama_pozitif / Dolar_zayiflama_negatif
 
+4. ŞİRKET PROFİLİ NÜANSI (kör nokta önleme):
+   Şirketleri yüzeysel kategorizasyonla değil gerçek iş modeline göre değerlendir:
+   - AMZN: e-ticaret DEĞİL — gelirin %70+ AWS (kurumsal bulut). Tüketici harcaması sadece %30.
+     Stagflasyon/resesyonda AWS kurumsal bulut harcaması tüketiciye göre çok daha dayanıklı.
+   - MSFT: Azure + Office SaaS — yapısal talep, resesyon defansif.
+   - GOOGL: Reklam geliri döngüsel AMA bulut büyüyor, iki ayrı iş modeli.
+   - NVDA: Veri merkezi %80 — tüketici GPU döngüsel, datacenter yapısal.
+   - CRWD: SaaS recurring revenue, müşteri churn düşük — siber güvenlik zorunlu harcama.
+     Negatif reel faiz ortamında büyüme hissesi DCF değeri ARTAR (iskonto düşer) — sat değil koru.
+   - SOFI: Tüketici kredisi — faize çok hassas, resesyonda kredi kayıpları artar.
+   - PLTR: Devlet + kurumsal yazılım — resesyona dayanıklı, savunma bütçesi kesilmez.
+   - BTC madencileri (IREN, MARA): Enerji maliyeti yüksek, petrol/enerji fiyatına çok hassas.
+   Bu nüansları her karar gerekçesine yansıt.
+
 YANIT FORMATI (JSON — hiçbir alan boş olamaz):
 {
   "sinyal": "AL|TUT|BEKLE|AZALT|SAT",
@@ -954,12 +968,13 @@ risk_senaryosu: Kötü senaryo tetikleyici + somut adımlar
 vade_planlari: Kısa/orta/uzun vade için baz ve risk senaryoları
 yil_sonu_hedefi: Hedefe ulaşmak için ne kadar risk gerekiyor?
 bir_sonraki_kontrol: Tarih + tetikleyiciler (max 3)
-nakit_realizasyon_plani: [ZORUNLU — BOŞ BIRAKILAMAZ — BU ALAN EKSİKSE JSON GEÇERSİZ]
-  bugun_t0: "Bugün T+0'da elde edilecek nakit: $X (hangi varlık satılıyor?)"
-  t2_tefas: "T+2'de TEFAS'tan gelecek nakit: $X (hangi fon satılıyor?)"
-  toplam_hedef: "Nakit hedefi: $X (%Y portföy)"
-  tutarli_mi: "evet" veya "hayir — $X eksik, şöyle kapatılıyor: ..."
-  not: Direktör mesajındaki NAKİT REALİZASYON TABLOSUNDAN ilgili satırı kopyala
+nakit_realizasyon_plani: [KESİNLİKLE ZORUNLU — BOŞ KALIRSA ANALİZ EKSİK SAYILIR]
+  ⚠️ Mesajdaki "NAKİT REALİZASYON KONTROLÜ" tablosuna bak.
+  Önerilen nakit ağırlığına göre o tablodan doğrudan değerleri kopyala:
+  bugun_t0: Önerilen aksiyon planındaki T+0 satışlarından gelecek nakit (kripto+ABD hisse)
+  t2_tefas: TEFAS satışlarından T+2'de gelecek nakit
+  toplam_hedef: Portföy değeri × önerilen nakit % = $X
+  tutarli_mi: (bugun_t0 + t2_tefas + mevcut_nakit) >= toplam_hedef ise "evet", değilse "hayir — $X eksik"
 
 ═══ SENARYO OLASILILANDIRMASI (KRİTİK) ═══
 Tek bir senaryoya %100 güvenme. Her kararı üç olasılığın matematiksel harmanı yap:
@@ -1023,9 +1038,18 @@ Eğer portföydeki varlık sınıfları arasındaki 30 günlük korelasyon 0.7'y
     komisyon getiriyi yer.
 • SPESİFİK TICKER: Portföydeki her hisseyi listede gördüğüne göre
   sınıf değil ticker bazlı karar ver.
+• ŞİRKET PROFİLİ NÜANSI — yüzeysel kategorizasyondan kaçın:
+  AMZN gelirinin >%70'i AWS (kurumsal bulut) — "tüketici şirketi" değil.
+  CRWD SaaS recurring revenue — negatif reel faizde büyüme hissesi DCF değeri artar.
+  IREN/BTC madencileri — enerji maliyetine doğrudan bağlı (petrol/elektrik).
+  Her hissenin gerçek iş modelini gerekçeye yansıt.
 • TEFAS HALÜSINASYON YASAĞI: Sözlükte (TEFAS_DB) olmayan fon için
   içerik TAHMİNİ YAPMA. "Tahvil ağırlıklı gibi görünüyor" demek yasak.
   Bilinmeyen fon → "İçerik doğrulanmadı, koru" de.
+• İZOLASYON HATASI: Türkiye şoku gibi lokal krizlerde bile
+  ABD hisselerindeki zombi pozisyonları (negatif FCF + düşük current ratio)
+  değerlendir. "Türkiye'den izole" gerekçesi zombi filtresini es geçmez.
+  Zombi hisseler her senaryoda risk taşır — ayrı ayrı değerlendir.
 • ZOMBİ KURALI: FCF < 0 VE (Current Ratio < 1.0 VEYA Borç/ÖK > 200)
   ise şirket zombi — sat. Sadece FCF negatifliği yeterli değil,
   şirkette 3 yıllık nakit varsa zombi değildir.
@@ -1038,7 +1062,10 @@ Eğer portföydeki varlık sınıfları arasındaki 30 günlük korelasyon 0.7'y
     değerlemeli büyüme hisselerini sadece "çarpan yüksek" diye satma — yanlış.
     Bunun yerine: FCF üretimi var mı? Dolar bazlı geliri var mı? Reel varlık mı?
   - STAGFLASYON: Ne büyüme ne değer işe yarar. Sadece emtia + fiyatlama gücü.
-  Bu mantığı her hisse kararında uygula — senaryo tipini değerleme çerçevesine yansıt.
+    Emtia önerisi altınla sınırlı kalmamalı — petrol/enerji (XLE, USO, CL=F),
+    hammadde (XLB, FCX), tarım da stagflasyonda güçlüdür.
+    Portföyde emtia ETF yoksa "ALTIN_GRAM_TRY artır + XLE gibi enerji ETF ekle" de.
+  This mantığı her hisse kararında uygula — senaryo tipini değerleme çerçevesine yansıt.
 • Türkçe yaz
 • JSON formatında yanıt ver — aşağıdaki şemayı kullan:
 """ + _DIRECTOR_JSON_SCHEMA
@@ -1381,6 +1408,20 @@ Makro görüşün yanında, portföydeki her ABD hissesini aşağıdaki üç fil
    - Resesyon_defansif / Resesyon_hassas
    - Dolar_zayiflama_pozitif / Dolar_zayiflama_negatif
 
+4. ŞİRKET PROFİLİ NÜANSI (kör nokta önleme):
+   Şirketleri yüzeysel kategorizasyonla değil gerçek iş modeline göre değerlendir:
+   - AMZN: e-ticaret DEĞİL — gelirin %70+ AWS (kurumsal bulut). Tüketici harcaması sadece %30.
+     Stagflasyon/resesyonda AWS kurumsal bulut harcaması tüketiciye göre çok daha dayanıklı.
+   - MSFT: Azure + Office SaaS — yapısal talep, resesyon defansif.
+   - GOOGL: Reklam geliri döngüsel AMA bulut büyüyor, iki ayrı iş modeli.
+   - NVDA: Veri merkezi %80 — tüketici GPU döngüsel, datacenter yapısal.
+   - CRWD: SaaS recurring revenue, müşteri churn düşük — siber güvenlik zorunlu harcama.
+     Negatif reel faiz ortamında büyüme hissesi DCF değeri ARTAR (iskonto düşer) — sat değil koru.
+   - SOFI: Tüketici kredisi — faize çok hassas, resesyonda kredi kayıpları artar.
+   - PLTR: Devlet + kurumsal yazılım — resesyona dayanıklı, savunma bütçesi kesilmez.
+   - BTC madencileri (IREN, MARA): Enerji maliyeti yüksek, petrol/enerji fiyatına çok hassas.
+   Bu nüansları her karar gerekçesine yansıt.
+
 YANIT FORMATI (JSON — hiçbir alan boş olamaz):
 {
   "sinyal": "AL|TUT|BEKLE|AZALT|SAT",
@@ -1890,12 +1931,13 @@ risk_senaryosu: Kötü senaryo tetikleyici + somut adımlar
 vade_planlari: Kısa/orta/uzun vade için baz ve risk senaryoları
 yil_sonu_hedefi: Hedefe ulaşmak için ne kadar risk gerekiyor?
 bir_sonraki_kontrol: Tarih + tetikleyiciler (max 3)
-nakit_realizasyon_plani: [ZORUNLU — BOŞ BIRAKILAMAZ — BU ALAN EKSİKSE JSON GEÇERSİZ]
-  bugun_t0: "Bugün T+0'da elde edilecek nakit: $X (hangi varlık satılıyor?)"
-  t2_tefas: "T+2'de TEFAS'tan gelecek nakit: $X (hangi fon satılıyor?)"
-  toplam_hedef: "Nakit hedefi: $X (%Y portföy)"
-  tutarli_mi: "evet" veya "hayir — $X eksik, şöyle kapatılıyor: ..."
-  not: Direktör mesajındaki NAKİT REALİZASYON TABLOSUNDAN ilgili satırı kopyala
+nakit_realizasyon_plani: [KESİNLİKLE ZORUNLU — BOŞ KALIRSA ANALİZ EKSİK SAYILIR]
+  ⚠️ Mesajdaki "NAKİT REALİZASYON KONTROLÜ" tablosuna bak.
+  Önerilen nakit ağırlığına göre o tablodan doğrudan değerleri kopyala:
+  bugun_t0: Önerilen aksiyon planındaki T+0 satışlarından gelecek nakit (kripto+ABD hisse)
+  t2_tefas: TEFAS satışlarından T+2'de gelecek nakit
+  toplam_hedef: Portföy değeri × önerilen nakit % = $X
+  tutarli_mi: (bugun_t0 + t2_tefas + mevcut_nakit) >= toplam_hedef ise "evet", değilse "hayir — $X eksik"
 
 ═══ SENARYO OLASILILANDIRMASI (KRİTİK) ═══
 Tek bir senaryoya %100 güvenme. Her kararı üç olasılığın matematiksel harmanı yap:
@@ -1959,9 +2001,18 @@ Eğer portföydeki varlık sınıfları arasındaki 30 günlük korelasyon 0.7'y
     komisyon getiriyi yer.
 • SPESİFİK TICKER: Portföydeki her hisseyi listede gördüğüne göre
   sınıf değil ticker bazlı karar ver.
+• ŞİRKET PROFİLİ NÜANSI — yüzeysel kategorizasyondan kaçın:
+  AMZN gelirinin >%70'i AWS (kurumsal bulut) — "tüketici şirketi" değil.
+  CRWD SaaS recurring revenue — negatif reel faizde büyüme hissesi DCF değeri artar.
+  IREN/BTC madencileri — enerji maliyetine doğrudan bağlı (petrol/elektrik).
+  Her hissenin gerçek iş modelini gerekçeye yansıt.
 • TEFAS HALÜSINASYON YASAĞI: Sözlükte (TEFAS_DB) olmayan fon için
   içerik TAHMİNİ YAPMA. "Tahvil ağırlıklı gibi görünüyor" demek yasak.
   Bilinmeyen fon → "İçerik doğrulanmadı, koru" de.
+• İZOLASYON HATASI: Türkiye şoku gibi lokal krizlerde bile
+  ABD hisselerindeki zombi pozisyonları (negatif FCF + düşük current ratio)
+  değerlendir. "Türkiye'den izole" gerekçesi zombi filtresini es geçmez.
+  Zombi hisseler her senaryoda risk taşır — ayrı ayrı değerlendir.
 • ZOMBİ KURALI: FCF < 0 VE (Current Ratio < 1.0 VEYA Borç/ÖK > 200)
   ise şirket zombi — sat. Sadece FCF negatifliği yeterli değil,
   şirkette 3 yıllık nakit varsa zombi değildir.
@@ -1974,7 +2025,10 @@ Eğer portföydeki varlık sınıfları arasındaki 30 günlük korelasyon 0.7'y
     değerlemeli büyüme hisselerini sadece "çarpan yüksek" diye satma — yanlış.
     Bunun yerine: FCF üretimi var mı? Dolar bazlı geliri var mı? Reel varlık mı?
   - STAGFLASYON: Ne büyüme ne değer işe yarar. Sadece emtia + fiyatlama gücü.
-  Bu mantığı her hisse kararında uygula — senaryo tipini değerleme çerçevesine yansıt.
+    Emtia önerisi altınla sınırlı kalmamalı — petrol/enerji (XLE, USO, CL=F),
+    hammadde (XLB, FCX), tarım da stagflasyonda güçlüdür.
+    Portföyde emtia ETF yoksa "ALTIN_GRAM_TRY artır + XLE gibi enerji ETF ekle" de.
+  This mantığı her hisse kararında uygula — senaryo tipini değerleme çerçevesine yansıt.
 • Türkçe yaz
 • JSON formatında yanıt ver — aşağıdaki şemayı kullan:
 
@@ -2227,11 +2281,23 @@ def _build_director_message(
         )
 
     lines.append("")
+    lines.append("")
+    lines.append("► NAKİT REALİZASYON PLANI DOLDURMA TALİMATI:")
     lines.append(
-        "ZORUNLU: nakit_realizasyon_plani alanını doldur. "
-        "Hangi nakit hedefini seçtiysen yukarıdaki tablodaki T+0/T+2 dağılımını kullan. "
-        "Bu alan BOŞ BIRAKILAMAZ."
+        "1. Portföy aksiyon planındaki önerilen nakit ağırlığını belirle (örn %20)"
     )
+    lines.append(
+        f"2. Yukarıdaki tablodan o satırı bul:"
+        f" T+0'dan gelecek nakit + T+2'den TEFAS nakdi + mevcut nakit = hedef mi?"
+    )
+    lines.append(
+        "3. nakit_realizasyon_plani JSON alanını MUTLAKA doldur:"
+        " bugun_t0 = 'Hangi varlıklar T+0 satılıyor ve ne kadar nakit gelir?'"
+        " t2_tefas = 'Hangi TEFAS fonları satılıyor ve T+2'de ne kadar nakit gelir?'"
+        " toplam_hedef = 'Hedef $ tutarı'"
+        " tutarli_mi = 'Matematik tutuyor mu?'"
+    )
+    lines.append("❌ BU ALAN BOŞ KALIRSA ANALİZ TAMAMLANMIŞ SAYILMAZ.")
 
     # ── Yaklaşan Önemli Olaylar ─────────────────────────────────────────
     if financial_calendar:
