@@ -506,6 +506,7 @@
   "cash": 1060.57,
   "cash_accounts": {
     "usd": 1060.57,
-    "commodity_usd": 1000.0
+    "commodity_usd": 1000.0,
+    "crypto_usd": 1000.0
   }
 }
