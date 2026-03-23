@@ -794,7 +794,7 @@ def fetch_tefas_portfolio(fund_codes: list) -> dict:
         import yfinance as yf
         usd_try = float(yf.Ticker("USDTRY=X").fast_info.last_price or 32.0)
     except Exception:
-        usd_try = 32.0
+        raise RuntimeError('USD/TRY kuru alınamadı — turkey_fetcher')
 
     results = {}
     for code in fund_codes:

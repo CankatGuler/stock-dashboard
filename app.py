@@ -897,7 +897,7 @@ with tab_screener:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _render_asset_summary(positions: list, label: str, usd_try: float = 32.0):
+def _render_asset_summary(positions: list, label: str, usd_try: float = None):
     """Varlık sınıfı KPI özet bar — tüm sekmeler için ortak."""
     if not positions:
         return
@@ -964,7 +964,7 @@ def _render_asset_summary(positions: list, label: str, usd_try: float = 32.0):
 
 
 
-def _render_asset_summary(positions, label, usd_try=32.0):
+def _render_asset_summary(positions, label, usd_try=None):
     """Varlık sınıfı KPI özet bar — tüm sekmeler için ortak."""
     if not positions:
         return
@@ -1385,11 +1385,12 @@ with tab_portfolio:
 
         if _comm_all:
             import yfinance as _yf_c2
-            _usd_try_c = 32.0
             try:
-                _usd_try_c = float(_yf_c2.Ticker("USDTRY=X").fast_info.last_price or 32.0)
-            except Exception:
-                pass
+                from strategy_data import fetch_usd_try_rate as _fkur__usd_try_c
+                _usd_try_c = _fkur__usd_try_c()
+            except Exception as _ke__usd_try_c:
+                st.warning(f'⚠️ Emtia USD/TRY kuru alınamadı: {_ke__usd_try_c}')
+                _usd_try_c = None
 
             _e_rows     = []
             _e_enriched = []
@@ -1536,11 +1537,12 @@ with tab_portfolio:
 
         if _tefas_all:
             import yfinance as _yf_t2
-            _usd_try_t = 32.0
             try:
-                _usd_try_t = float(_yf_t2.Ticker("USDTRY=X").fast_info.last_price or 32.0)
-            except Exception:
-                pass
+                from strategy_data import fetch_usd_try_rate as _fkur__usd_try_t
+                _usd_try_t = _fkur__usd_try_t()
+            except Exception as _ke__usd_try_t:
+                st.warning(f'⚠️ TEFAS USD/TRY kuru alınamadı: {_ke__usd_try_t}')
+                _usd_try_t = None
 
             _t_rows    = []
             _t_enriched= []
@@ -5001,11 +5003,12 @@ with tab_strategy:
     _port_now     = [p for p in load_portfolio() if float(p.get("shares", 0)) > 0]
 
     # USD/TRY kuru — TRY varlıkları dönüştürmek için
-    _usd_try_strat = 32.0
     try:
-        import yfinance as _yf_strat
-        _usd_try_strat = float(_yf_strat.Ticker("USDTRY=X").fast_info.last_price or 32.0)
-    except Exception:
+        from strategy_data import fetch_usd_try_rate as _fkur__usd_try_strat
+        _usd_try_strat = _fkur__usd_try_strat()
+    except Exception as _ke__usd_try_strat:
+        st.error(f'❌ USD/TRY kuru alınamadı: {_ke__usd_try_strat}. Sayfayı yenileyin.')
+        st.stop()
         pass
 
     # Çok sınıflı nakit — portföy sekmesinden girilen değerler

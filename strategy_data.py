@@ -19,6 +19,65 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+# ─── USD/TRY Kur Çekici — Anlık, Çok Kaynaklı ────────────────────────────────
+
+def fetch_usd_try_rate() -> float:
+    """
+    USD/TRY kurunu anlık çeker. Birden fazla yöntem dener.
+    Hepsi başarısız → RuntimeError fırlatır.
+    Hardcoded fallback YOKTUR — hata durumunu çağıran kod yönetmeli.
+    """
+    import yfinance as _yf
+    errors = []
+
+    # Yöntem 1: 5 dakikalık geçmiş — en güncel değer
+    try:
+        _hist = _yf.Ticker("USDTRY=X").history(period="1d", interval="5m")
+        if not _hist.empty:
+            _rate = float(_hist["Close"].iloc[-1])
+            if _rate > 30:
+                return round(_rate, 4)
+            errors.append(f"history şüpheli: {_rate}")
+    except Exception as e:
+        errors.append(f"history: {e}")
+
+    # Yöntem 2: fast_info
+    try:
+        _rate = float(_yf.Ticker("USDTRY=X").fast_info.last_price or 0)
+        if _rate > 30:
+            return round(_rate, 4)
+        errors.append(f"fast_info şüpheli: {_rate}")
+    except Exception as e:
+        errors.append(f"fast_info: {e}")
+
+    # Yöntem 3: info dict — regularMarketPrice
+    try:
+        _info = _yf.Ticker("USDTRY=X").info
+        for _field in ("regularMarketPrice", "bid", "ask"):
+            _v = _info.get(_field)
+            if _v and float(_v) > 30:
+                return round(float(_v), 4)
+        errors.append(f"info tüm alanlar şüpheli")
+    except Exception as e:
+        errors.append(f"info: {e}")
+
+    # Yöntem 4: yfinance download
+    try:
+        _df = _yf.download("USDTRY=X", period="1d", interval="1h",
+                           progress=False, show_errors=False)
+        if not _df.empty:
+            _rate = float(_df["Close"].iloc[-1])
+            if _rate > 30:
+                return round(_rate, 4)
+        errors.append("download boş/şüpheli")
+    except Exception as e:
+        errors.append(f"download: {e}")
+
+    raise RuntimeError(
+        f"USD/TRY kuru çekilemedi. Yöntemler: {' | '.join(errors)}"
+    )
+
+
 
 # ─── 1. MAKRO VERİ ───────────────────────────────────────────────────────────
 
@@ -438,12 +497,16 @@ def collect_all_strategy_data(
 
     # ── Portföy özeti (senkron — hızlı, veri gerektirmiyor) ──────────────
     # USD/TRY kuru çek — TRY varlık gösterimi için
-    _usd_try_curr = 38.0
+    # USD/TRY — anlık, çok kaynaklı, hardcoded fallback yok
     try:
-        import yfinance as _yf_rate
-        _usd_try_curr = float(_yf_rate.Ticker("USDTRY=X").fast_info.last_price or 38.0)
-    except Exception:
-        pass
+        _usd_try_curr = fetch_usd_try_rate()
+        logger.info("USD/TRY kuru: %.4f", _usd_try_curr)
+    except RuntimeError as _kur_err:
+        logger.error("KUR HATASI: %s", _kur_err)
+        raise RuntimeError(
+            f"Strateji analizi başlatılamadı — USD/TRY kuru alınamadı. "
+            f"Detay: {_kur_err}"
+        )
 
     data["portfolio"] = {
         "positions": positions,
@@ -608,6 +671,25 @@ def collect_all_strategy_data(
                     layer = key.replace("_err", "")
                     data["veri_kalitesi"][layer] = f"⚠️ HATA: {str(val)[:80]}"
                     logger.warning("Paralel katman hatası [%s]: %s", layer, val)
+                    # Kripto layer başarısız → yfinance'ten minimal fiyat verisi çek
+                    if layer == "layer3":
+                        try:
+                            import yfinance as _yf_fb
+                            _btc_t = _yf_fb.Ticker("BTC-USD")
+                            _btc_p = float(_btc_t.fast_info.last_price or 0)
+                            _eth_p = float(_yf_fb.Ticker("ETH-USD").fast_info.last_price or 0)
+                            data["crypto"] = {
+                                "prices": {
+                                    "BTC": {"price": _btc_p, "change_24h": 0, "52h_pos": 50},
+                                    "ETH": {"price": _eth_p, "change_24h": 0, "52h_pos": 50},
+                                },
+                                "fear_greed": {"note": "Veri çekilemedi — yfinance fallback"},
+                                "_fallback": True,
+                            }
+                            data["veri_kalitesi"][layer] = f"⚠️ FALLBACK: yfinance BTC={_btc_p:,.0f}"
+                        except Exception as _fb_e:
+                            data["crypto"] = {"_fallback": True, "prices": {}}
+                            logger.warning("Kripto fallback da başarısız: %s", _fb_e)
             except Exception as e:
                 logger.warning("Future exception [%s]: %s", futures[future], e)
 

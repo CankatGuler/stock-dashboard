@@ -565,7 +565,9 @@ def add_to_cash_account(account: str, amount: float) -> bool:
         return False
 
 
-def get_total_cash_usd(usd_try: float = 32.0) -> dict:
+def get_total_cash_usd(usd_try: float = None) -> dict:
+    if usd_try is None:
+        raise ValueError("get_total_cash_usd: usd_try parametresi zorunludur — fetch_usd_try_rate() ile çekin")
     """
     Tüm nakit hesaplarını USD bazında topla.
     Returns: {total_usd, breakdown, usd_try}
