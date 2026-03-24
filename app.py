@@ -971,6 +971,11 @@ def _render_asset_summary(positions: list, label: str, usd_try: float = None):
     worst = min(rows, key=lambda x: x["pnl_pct"])
     pc = "#00c48c" if total_pnl >= 0 else "#e74c3c"
     ps = "+" if total_pnl >= 0 else ""
+    # Session state'e yaz — strateji sekmesi okuyacak
+    import unicodedata as _ud
+    _lnorm = _ud.normalize("NFKD", label).encode("ascii","ignore").decode().lower()
+    _skey  = f"portfoy_ozet_{_lnorm.replace(' ','_').replace('/','_')}"
+    st.session_state[_skey] = {"val": total_val, "pnl": total_pnl, "pct": total_pct}
     k1, k2, k3, k4, k5 = st.columns(5)
     with k1:
         st.markdown(
@@ -5183,18 +5188,29 @@ with tab_strategy:
     }
 
     def _pos_value_usd(pos):
-        shares   = float(pos.get("shares", 0))
-        avg_cost = float(pos.get("avg_cost", 0))
-        currency = pos.get("currency", "USD")
-        ticker   = pos.get("ticker", "")
+        """Pozisyonun anlık USD değerini hesapla."""
+        shares    = float(pos.get("shares", 0))
+        avg_cost  = float(pos.get("avg_cost", 0))
+        currency  = pos.get("currency", "USD")
+        ticker    = pos.get("ticker", "")
         cur_price = float(pos.get("current_price", 0) or 0)
+
         if cur_price <= 0:
+            # Anlık fiyat yok — maliyetle hesapla
             return shares * avg_cost / _usd_try_strat if currency == "TRY" else shares * avg_cost
+
         if currency == "TRY":
-            if ticker in _GRAM_MAP_STRAT and cur_price > 500:
-                cur_price_tl = cur_price * _usd_try_strat / 31.1035
-                return shares * cur_price_tl / _usd_try_strat
-            return shares * cur_price / _usd_try_strat
+            # TRY bazlı varlıklar
+            if ticker in _GRAM_MAP_STRAT:
+                # Altın/Gümüş: _price_map'te GC=F oz fiyatı var,
+                # _port_now_enriched'de current_price = TL/gram olarak set edildi
+                # TL/gram × shares = toplam TL → /usd_try_strat = USD
+                return shares * cur_price / _usd_try_strat
+            else:
+                # TEFAS, TL bazlı diğerleri
+                return shares * cur_price / _usd_try_strat
+
+        # USD bazlı varlıklar (ABD hisse, kripto)
         return shares * cur_price
 
     def _pos_cost_usd(pos):
@@ -5206,9 +5222,48 @@ with tab_strategy:
             return shares * avg_cost / _usd_try_strat
         return shares * avg_cost
 
-    _port_val_now  = sum(_pos_value_usd(p) for p in _port_now)
-    _port_cost_now = sum(_pos_cost_usd(p)  for p in _port_now)
+    # Portföy sekmesinden hesaplanan anlık değerleri kullan
+    # (portföy sekmesi her sınıf için _render_asset_summary çağırır ve sonucu saklar)
+    # Portföy sınıf özetlerini session_state'den oku
+    # (normalize edilmiş key: Türkçe İ → ascii i)
+    import unicodedata as _ud2
+    def _pkey(lbl):
+        n = _ud2.normalize("NFKD", lbl).encode("ascii","ignore").decode().lower()
+        return f"portfoy_ozet_{n.replace(' ','_').replace('/','_')}"
+
+    _ss_us   = st.session_state.get(_pkey("ABD HİSSE"), {})
+    _ss_cry  = st.session_state.get(_pkey("KRİPTO"), {})
+    _ss_com  = st.session_state.get(_pkey("EMTİA"), {})
+    _ss_tef  = st.session_state.get(_pkey("TEFAS"), {})
+
+    _ss_total_val = ((_ss_us.get("val",0) or 0) + (_ss_cry.get("val",0) or 0) +
+                     (_ss_com.get("val",0) or 0) + (_ss_tef.get("val",0) or 0))
+    _ss_total_pnl = ((_ss_us.get("pnl",0) or 0) + (_ss_cry.get("pnl",0) or 0) +
+                     (_ss_com.get("pnl",0) or 0) + (_ss_tef.get("pnl",0) or 0))
+
+    # Sınıf bazında en doğru değeri kullan:
+    # ABD hisse + Kripto + Emtia → anlık fiyat çekildi (_port_now enriched)
+    # TEFAS → session_state varsa (tefas-crawler değeri), yoksa avg_cost fallback
+    _ss_tefas_val = (_ss_tef.get("val", 0) or 0)
+    _ss_tefas_pnl = (_ss_tef.get("pnl", 0) or 0)
+
+    _non_tefas    = [p for p in _port_now if p.get("asset_class") != "tefas"]
+    _tefas_pos    = [p for p in _port_now if p.get("asset_class") == "tefas"]
+
+    _non_tefas_val  = sum(_pos_value_usd(p) for p in _non_tefas)
+    _non_tefas_cost = sum(_pos_cost_usd(p)  for p in _non_tefas)
+
+    if _ss_tefas_val > 0:
+        _tefas_val  = _ss_tefas_val
+        _tefas_cost = _ss_tefas_val - _ss_tefas_pnl
+    else:
+        _tefas_cost = sum(_pos_cost_usd(p) for p in _tefas_pos)
+        _tefas_val  = _tefas_cost  # tefas-crawler olmadan maliyet bazlı
+
+    _port_val_now  = _non_tefas_val + _tefas_val
+    _port_cost_now = _non_tefas_cost + _tefas_cost
     _total_pnl     = _port_val_now - _port_cost_now
+
     _total_pnl_pct = (_total_pnl / _port_cost_now * 100) if _port_cost_now > 0 else 0
     _total_now     = _port_val_now + _cash_now
     _cash_ratio    = (_cash_now / _total_now * 100) if _total_now > 0 else 0
