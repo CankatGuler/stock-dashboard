@@ -147,6 +147,11 @@ def _compute_signals(data: dict[str, MacroIndicator]):
 
         _direction = spread - _prev_spread  # pozitif = steepening, negatif = flattening
 
+        # Varsayılan değerler — tüm if/elif dalları için güvenli fallback
+        _curve_type   = "NORMAL"
+        _curve_note   = f"Normal eğri ({spread:+.2f}%) — ekonomi sağlıklı."
+        _curve_signal = "green"
+
         # Eğri tipi belirleme
         if _prev_spread < 0 and spread > _prev_spread:
             # Ters eğriden normalleşmeye → Bull Steepener veya Bear Steepener
