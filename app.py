@@ -26,6 +26,52 @@ try:
 except Exception:
     pass
 
+# ── Şifre Koruması ────────────────────────────────────────────────────────
+def _check_auth():
+    """
+    Uygulama şifre koruması.
+    Şifre Streamlit Cloud > Secrets bölümünde APP_PASSWORD olarak tanımlanmalı.
+    Yerel geliştirmede .env dosyasına APP_PASSWORD=... ekle.
+    """
+    _pwd = os.getenv("APP_PASSWORD", "")
+    if not _pwd:
+        return True  # Şifre tanımlanmamışsa geçiş izni ver
+
+    # Session'da kimlik doğrulandı mı?
+    if st.session_state.get("_authenticated"):
+        return True
+
+    # Giriş formu göster
+    st.markdown("""
+    <style>
+    .auth-container {
+        max-width: 380px; margin: 8rem auto; padding: 2rem;
+        background: #111927; border-radius: 12px;
+        border: 1px solid #1e2833;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    with st.container():
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.markdown("### 🔐 Giriş")
+            st.markdown("Bu uygulama kişisel kullanım içindir.")
+            _input_pwd = st.text_input(
+                "Şifre", type="password", key="_auth_input",
+                placeholder="Şifrenizi girin"
+            )
+            if st.button("Giriş Yap", use_container_width=True, type="primary"):
+                if _input_pwd == _pwd:
+                    st.session_state["_authenticated"] = True
+                    st.rerun()
+                else:
+                    st.error("❌ Yanlış şifre.")
+    st.stop()
+
+_check_auth()
+# ─────────────────────────────────────────────────────────────────────────────
+
 from utils import (
     SECTOR_TICKERS,
     categorise_stock,
@@ -5009,7 +5055,119 @@ with tab_strategy:
     except Exception as _ke__usd_try_strat:
         st.error(f'❌ USD/TRY kuru alınamadı: {_ke__usd_try_strat}. Sayfayı yenileyin.')
         st.stop()
-        pass
+
+    # ── Anlık fiyat zenginleştirme (5 dk cache) ───────────────────────────
+    _strat_price_cache_key = "strat_price_cache"
+    _strat_price_cache_ts  = "strat_price_cache_ts"
+    import time as _t_strat
+    _strat_cached  = st.session_state.get(_strat_price_cache_key, {})
+    _strat_last_ts = st.session_state.get(_strat_price_cache_ts, 0)
+    _strat_tickers = str(sorted([p["ticker"] for p in _port_now]))
+
+    if (not _strat_cached or
+        (_t_strat.time() - _strat_last_ts) > 300 or
+        _strat_cached.get("_tk") != _strat_tickers):
+        with st.spinner("📊 Anlık fiyatlar çekiliyor..."):
+            import yfinance as _yf_strat_p
+            _price_map = {}
+            _us_tickers  = [p["ticker"] for p in _port_now
+                            if p.get("asset_class","us_equity") == "us_equity"]
+            _cry_tickers = [p["ticker"] for p in _port_now
+                            if p.get("asset_class") == "crypto"]
+            _com_tickers = [p for p in _port_now
+                            if p.get("asset_class") == "commodity"]
+
+            # ABD hisseleri toplu çek
+            if _us_tickers:
+                try:
+                    import pandas as _pd_s
+                    _dl = _yf_strat_p.download(
+                        " ".join(_us_tickers), period="1d",
+                        progress=False, show_errors=False
+                    )
+                    if not _dl.empty:
+                        _cls = _dl["Close"] if "Close" in _dl else _dl
+                        if len(_us_tickers) == 1:
+                            _price_map[_us_tickers[0]] = float(_cls.iloc[-1])
+                        else:
+                            for _tk in _us_tickers:
+                                if _tk in _cls.columns:
+                                    _v = float(_cls[_tk].iloc[-1])
+                                    if _v > 0:
+                                        _price_map[_tk] = _v
+                except Exception:
+                    pass
+                # Eksik olanlar için tek tek fast_info
+                for _tk in _us_tickers:
+                    if _tk not in _price_map:
+                        try:
+                            _p = float(_yf_strat_p.Ticker(_tk).fast_info.last_price or 0)
+                            if _p > 0: _price_map[_tk] = _p
+                        except Exception:
+                            pass
+
+            # Kripto toplu çek
+            if _cry_tickers:
+                try:
+                    _dl2 = _yf_strat_p.download(
+                        " ".join(_cry_tickers), period="1d",
+                        progress=False, show_errors=False
+                    )
+                    if not _dl2.empty:
+                        _cls2 = _dl2["Close"] if "Close" in _dl2 else _dl2
+                        if len(_cry_tickers) == 1:
+                            _price_map[_cry_tickers[0]] = float(_cls2.iloc[-1])
+                        else:
+                            for _tk in _cry_tickers:
+                                if _tk in _cls2.columns:
+                                    _v = float(_cls2[_tk].iloc[-1])
+                                    if _v > 0: _price_map[_tk] = _v
+                except Exception:
+                    pass
+                for _tk in _cry_tickers:
+                    if _tk not in _price_map:
+                        try:
+                            _p = float(_yf_strat_p.Ticker(_tk).fast_info.last_price or 0)
+                            if _p > 0: _price_map[_tk] = _p
+                        except Exception:
+                            pass
+
+            # Emtia (TRY bazlı altın/gümüş)
+            for _cp in _com_tickers:
+                _ctk = _cp["ticker"]
+                if _ctk in ("ALTIN_GRAM_TRY", "XAUTRY=X"):
+                    try:
+                        _oz = float(_yf_strat_p.Ticker("GC=F").fast_info.last_price or 0)
+                        if _oz > 0: _price_map[_ctk] = _oz * _usd_try_strat / 31.1035
+                    except Exception: pass
+                elif _ctk in ("GUMUS_GRAM_TRY", "XAGTRY=X"):
+                    try:
+                        _oz = float(_yf_strat_p.Ticker("SI=F").fast_info.last_price or 0)
+                        if _oz > 0: _price_map[_ctk] = _oz * _usd_try_strat / 31.1035
+                    except Exception: pass
+                else:
+                    try:
+                        _p = float(_yf_strat_p.Ticker(_ctk).fast_info.last_price or 0)
+                        if _p > 0: _price_map[_ctk] = _p
+                    except Exception: pass
+
+            _strat_cached = {"_tk": _strat_tickers, "prices": _price_map}
+            st.session_state[_strat_price_cache_key] = _strat_cached
+            st.session_state[_strat_price_cache_ts]  = _t_strat.time()
+    else:
+        _price_map = _strat_cached.get("prices", {})
+
+    # Portföy pozisyonlarını anlık fiyatlarla güncelle
+    _port_now_enriched = []
+    for _p in _port_now:
+        _ep = dict(_p)
+        _live = _price_map.get(_ep["ticker"])
+        if _live and _live > 0:
+            _ep["current_price"] = _live
+        elif not _ep.get("current_price") or float(_ep.get("current_price", 0)) <= 0:
+            _ep["current_price"] = float(_ep.get("avg_cost", 0))  # fallback maliyet
+        _port_now_enriched.append(_ep)
+    _port_now = _port_now_enriched
 
     # Çok sınıflı nakit — portföy sekmesinden girilen değerler
     _cash_info  = get_total_cash_usd(usd_try=_usd_try_strat)
