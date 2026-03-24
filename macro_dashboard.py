@@ -134,21 +134,64 @@ def _compute_signals(data: dict[str, MacroIndicator]):
         # IRX zaten yüzde olarak geliyor (x10 çarpanlı bazen)
         # 10Y - 3M spread
         label = f"Yield Curve (10Y−3M): {spread:+.2f}%"
-        if spread < -0.5:
-            signal = "red"
-            note   = f"Derin ters curve ({spread:+.2f}%) — resesyon riski yüksek"
+        # Önceki spread değerini hesapla (1 hafta önce) — yön tespiti için
+        _prev_spread = 0.0
+        try:
+            import yfinance as _yf_ys
+            _t10 = _yf_ys.Ticker("^TNX").history(period="5d")["Close"]
+            _t3m = _yf_ys.Ticker("^IRX").history(period="5d")["Close"]
+            if len(_t10) >= 2 and len(_t3m) >= 2:
+                _prev_spread = round(float(_t10.iloc[-5]) - float(_t3m.iloc[-5]), 2) if len(_t10) >= 5 else round(float(_t10.iloc[0]) - float(_t3m.iloc[0]), 2)
+        except Exception:
+            pass
+
+        _direction = spread - _prev_spread  # pozitif = steepening, negatif = flattening
+
+        # Eğri tipi belirleme
+        if _prev_spread < 0 and spread > _prev_spread:
+            # Ters eğriden normalleşmeye → Bull Steepener veya Bear Steepener
+            if data.get("TNX") and data["TNX"].value < (data["TNX"].prev if data["TNX"].prev else data["TNX"].value):
+                _curve_type = "BULL_STEEPENER"  # Uzun vadeli faiz düşüyor, spread normalleşiyor
+                _curve_note = (f"⚠️ BULL STEEPENER TESPİT EDİLDİ ({spread:+.2f}%, önceki {_prev_spread:+.2f}%): "
+                               f"Ters eğri normalleşiyor, uzun vade faiz DÜŞÜYOR. "
+                               f"Tarihsel olarak %100 resesyon tescil sinyali — "
+                               f"Fed 'geç kaldı' demektir (2007/2019 benzeri). "
+                               f"Piyasa genellikle 6-18 ay içinde zirveyi test eder.")
+                _curve_signal = "red"
+            else:
+                _curve_type = "BEAR_STEEPENER"  # Uzun vadeli faiz yükseliyor
+                _curve_note = (f"⚡ BEAR STEEPENER ({spread:+.2f}%, önceki {_prev_spread:+.2f}%): "
+                               f"Uzun vade faiz yükseliyor, eğri normalleşiyor. "
+                               f"Enflasyon beklentisi veya risk primi artışı sinyali.")
+                _curve_signal = "amber"
+        elif spread < -0.5:
+            _curve_type  = "INVERTED_DEEP"
+            _curve_note  = (f"⚠️ DERİN TERS EĞRİ ({spread:+.2f}%) — Resesyon riski yüksek. "
+                            f"Bu eğrinin normalleşmesi (bull steepener) resesyonun başladığını tescil eder.")
+            _curve_signal = "red"
         elif spread < 0:
-            signal = "amber"
-            note   = f"Hafif ters curve ({spread:+.2f}%) — dikkat"
+            _curve_type  = "INVERTED_MILD"
+            _curve_note  = (f"⚡ Hafif ters curve ({spread:+.2f}%) — dikkat. "
+                            f"Normalleşme yönü kritik: bull steepener = resesyon sinyali.")
+            _curve_signal = "amber"
+        elif _direction > 0.1:
+            _curve_type  = "STEEPENING"
+            _curve_note  = (f"Normal eğri ({spread:+.2f}%), steepening ({_direction:+.2f}%). "
+                            f"Büyüme beklentisi pozitif.")
+            _curve_signal = "green"
         else:
-            signal = "green"
-            note   = f"Normal curve ({spread:+.2f}%) — ekonomi sağlıklı"
+            _curve_type  = "NORMAL"
+            _curve_note  = f"Normal eğri ({spread:+.2f}%) — ekonomi sağlıklı."
+            _curve_signal = "green"
+
+        signal = _curve_signal
+        note   = _curve_note
 
         # Sanal gösterge olarak ekle
         from dataclasses import replace
         data["YIELD_CURVE"] = MacroIndicator(
-            key="YIELD_CURVE", label="Yield Curve (10Y−3M)",
-            value=spread, prev=0, change_pct=0,
+            key="YIELD_CURVE", label=f"Yield Curve (10Y−3M) [{_curve_type}]",
+            value=spread, prev=_prev_spread, change_pct=round(_direction, 2),
             unit="%", group="rates",
             signal=signal, note=note,
         )

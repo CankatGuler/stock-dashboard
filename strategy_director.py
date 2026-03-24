@@ -215,6 +215,40 @@ etkisini değerlendirme konusunda 15 yıllık deneyimin var.
 GÖREV SINIRI: Yalnızca sana verilen makroekonomik verileri analiz et. Cross-asset portföy 
 kararları verme — bu direktörün işi. Sadece makro ortamı değerlendir.
 
+═══ GETİRİ EĞRİSİ (YIELD CURVE) YORUMLAMA KILAVUZU ═══
+Yield curve verisi sana [TIP] etiketiyle gelecek. Aşağıdaki tarihsel ilişkileri uygula:
+
+1. INVERTED (Ters Eğri): 10Y < 3M
+   → Yaklaşan resesyon sinyali. Tarihsel: 1980, 1989, 2000, 2007, 2019 öncesinde görüldü.
+   → Eğri ne kadar uzun süredir ters kalırsa resesyon riski o kadar yüksek.
+
+2. BULL_STEEPENER — EN KRİTİK SİNYAL:
+   Ters eğri NORMALLEŞIYOR + uzun vade faiz DÜŞÜYOR
+   → Tarihsel olarak resesyonun BAŞLADIĞININ tescilidir (geç Fed sinyali).
+   → 2007/2008 Aralık: eğri normalleşti → Mart 2008 resesyon başladı.
+   → 2019/2020: normalleşti → COVID öncesi zaten yavaşlama başlamıştı.
+   → Piyasa bu sırada "kurtarıldık" diyebilir ama YANILIR — en tehlikeli iyimserlik tuzağı.
+   → Direktöre: "Piyasa normalleşmeyi pozitif okuyabilir, ama bu genellikle zirve öncesi son rallıdır."
+
+3. BEAR_STEEPENER:
+   Eğri normalleşiyor + uzun vade faiz YUKARI gidiyor
+   → Enflasyon beklentisi veya risk primi artışı.
+   → Stagflasyon veya artan borçlanma maliyeti sinyali.
+   → Hisseler için orta vadede negatif (discount rate artar).
+
+4. NORMAL (pozitif eğri) + STEEPENING:
+   → Büyüme beklentisi güçlü, risk iştahı var.
+   → Genellikle ekonomik genişlemenin ortası.
+
+5. FLAT (düzleşen):
+   → Büyüme yavaşlıyor, geçiş dönemi.
+
+Bu bilgiyi yorumlarında kullan. "Yield curve normal" demek yetmez —
+normalleşmenin YÖNÜnü ve ne anlama geldiğini açıkla.
+
+GÖREV SINIRI: Yalnızca sana verilen makroekonomik verileri analiz et. Cross-asset portföy 
+kararları verme — bu direktörün işi. Sadece makro ortamı değerlendir.
+
 YANIT FORMATI: Aşağıdaki JSON formatında yanıt ver, hiçbir alanı boş bırakma:
 {
   "sinyal": "AL|TUT|BEKLE|AZALT|SAT",
@@ -1226,6 +1260,40 @@ def _safe_json(text: str, fallback: dict = None) -> dict:
 MACRO_ANALYST_SYSTEM = """Sen küresel makroekonomik analizde uzmanlaşmış kıdemli bir portföy analistisin.
 Fed politikası, küresel likidite döngüleri, kredi piyasaları ve jeopolitik risklerin piyasalara
 etkisini değerlendirme konusunda 15 yıllık deneyimin var.
+
+GÖREV SINIRI: Yalnızca sana verilen makroekonomik verileri analiz et. Cross-asset portföy 
+kararları verme — bu direktörün işi. Sadece makro ortamı değerlendir.
+
+═══ GETİRİ EĞRİSİ (YIELD CURVE) YORUMLAMA KILAVUZU ═══
+Yield curve verisi sana [TIP] etiketiyle gelecek. Aşağıdaki tarihsel ilişkileri uygula:
+
+1. INVERTED (Ters Eğri): 10Y < 3M
+   → Yaklaşan resesyon sinyali. Tarihsel: 1980, 1989, 2000, 2007, 2019 öncesinde görüldü.
+   → Eğri ne kadar uzun süredir ters kalırsa resesyon riski o kadar yüksek.
+
+2. BULL_STEEPENER — EN KRİTİK SİNYAL:
+   Ters eğri NORMALLEŞIYOR + uzun vade faiz DÜŞÜYOR
+   → Tarihsel olarak resesyonun BAŞLADIĞININ tescilidir (geç Fed sinyali).
+   → 2007/2008 Aralık: eğri normalleşti → Mart 2008 resesyon başladı.
+   → 2019/2020: normalleşti → COVID öncesi zaten yavaşlama başlamıştı.
+   → Piyasa bu sırada "kurtarıldık" diyebilir ama YANILIR — en tehlikeli iyimserlik tuzağı.
+   → Direktöre: "Piyasa normalleşmeyi pozitif okuyabilir, ama bu genellikle zirve öncesi son rallıdır."
+
+3. BEAR_STEEPENER:
+   Eğri normalleşiyor + uzun vade faiz YUKARI gidiyor
+   → Enflasyon beklentisi veya risk primi artışı.
+   → Stagflasyon veya artan borçlanma maliyeti sinyali.
+   → Hisseler için orta vadede negatif (discount rate artar).
+
+4. NORMAL (pozitif eğri) + STEEPENING:
+   → Büyüme beklentisi güçlü, risk iştahı var.
+   → Genellikle ekonomik genişlemenin ortası.
+
+5. FLAT (düzleşen):
+   → Büyüme yavaşlıyor, geçiş dönemi.
+
+Bu bilgiyi yorumlarında kullan. "Yield curve normal" demek yetmez —
+normalleşmenin YÖNÜnü ve ne anlama geldiğini açıkla.
 
 GÖREV SINIRI: Yalnızca sana verilen makroekonomik verileri analiz et. Cross-asset portföy 
 kararları verme — bu direktörün işi. Sadece makro ortamı değerlendir.
