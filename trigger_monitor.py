@@ -1258,6 +1258,8 @@ def run(layer: int) -> None:
 
     if not triggered_signals:
         logger.info("Tetiklenen sinyal yok — sessiz.")
+        # Katman 1 ve 2'nin çalıştığını teyit etmek için günde 1 kez sessiz bildirim
+        # (her çalışmada değil — sadece debug için log yeterli)
         return
 
     # ── Direktörü Uyandır ────────────────────────────────────────────────────
@@ -1278,5 +1280,18 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Tetikleyici İzleme Motoru")
     parser.add_argument("--layer", type=int, choices=[1, 2, 3], required=True,
                         help="Çalıştırılacak katman: 1, 2 veya 3")
+    parser.add_argument("--test", action="store_true",
+                        help="Test modu: eşik kontrolü yapmadan Telegram'a test mesajı gönder")
     args = parser.parse_args()
+
+    if args.test:
+        from trigger_alerts import _send
+        ok = _send(
+            f"🧪 <b>TEST — Katman {args.layer}</b>\n"
+            f"Sistem çalışıyor. Telegram bağlantısı aktif.\n"
+            f"Katman {args.layer} tetikleyicileri aktif — eşik aşıldığında alarm gönderilecek."
+        )
+        print("✅ Test mesajı gönderildi" if ok else "❌ Test mesajı gönderilemedi")
+        exit(0)
+
     run(args.layer)

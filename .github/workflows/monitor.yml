@@ -1,146 +1,90 @@
 # .github/workflows/monitor.yml
-#
-# Tetikleyici sistemi GitHub Actions ile çalıştırır.
-#
-# Nasıl çalışır?
-#   GitHub'ın ücretsiz runner'ları bu dosyayı schedule'a göre çalıştırır.
-#   Her çalışmada Python ortamı kurulur, trigger_monitor.py ilgili layer ile çalışır.
-#   Gerekli API key'ler GitHub Secrets'tan alınır (Streamlit Secrets ile aynı key'ler).
-#
-# GitHub Secrets'a eklenmesi gerekenler (Settings → Secrets → Actions):
-#   ANTHROPIC_API_KEY  — Claude API
-#   TELEGRAM_BOT_TOKEN — Telegram bot token
-#   TELEGRAM_CHAT_ID   — Telegram chat ID
-#
-# Zaman dilimleri: GitHub Actions UTC kullanır.
-#   TR saati = UTC + 3 saat
-#   Sabah özeti 07:30 TR = 04:30 UTC → cron: "30 4 * * *"
-
 name: Tetikleyici İzleme Sistemi
 
 on:
   schedule:
-    # Katman 1 — Her 15 dakika (7/24, acil alarmlar)
-    - cron: "*/15 * * * *"
-    # Katman 2 — Her saat başı (önemli sinyaller)
-    - cron: "0 * * * *"
-    # Katman 3 — Sabah 07:30 TR (04:30 UTC) günlük özet
-    - cron: "30 4 * * *"
+    - cron: "*/15 * * * *"   # Katman 1 — Her 15 dakika
+    - cron: "0 * * * *"      # Katman 2 — Her saat
+    - cron: "30 4 * * *"     # Katman 3 — 07:30 TR (04:30 UTC)
 
-  # Elle de çalıştırılabilir (test için)
   workflow_dispatch:
     inputs:
       layer:
-        description: "Çalıştırılacak katman (1, 2 veya 3)"
+        description: "Katman (1, 2 veya 3)"
         required: true
-        default: "1"
+        default: "3"
         type: choice
-        options:
-          - "1"
-          - "2"
-          - "3"
+        options: ["1", "2", "3"]
+
+env:
+  ANTHROPIC_API_KEY:  ${{ secrets.ANTHROPIC_API_KEY }}
+  TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+  TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+  GH_PAT:             ${{ secrets.GH_TOKEN }}
 
 jobs:
+  # ── Layer 1: Her 15 dakika (tüm schedule'larda çalışır, layer=1 ile)
   layer1:
-    # Katman 1: Her 15 dakikada bir çalışır
-    # GitHub Actions cron en küçük aralığı 5 dakika — 15dk için bu yeterli
     name: "Katman 1 — Acil Alarmlar"
     runs-on: ubuntu-latest
-    # Sadece schedule tetiklemelerinde VEYA elle layer=1 seçildiğinde çalış
-    if: |
-      github.event_name == 'workflow_dispatch' && github.event.inputs.layer == '1' ||
-      github.event_name == 'schedule' && (
-        contains(github.event.schedule, '*/15') ||
-        contains(github.event.schedule, '0 *')  ||
-        contains(github.event.schedule, '30 4')
-      )
-
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.layer == '1')
     steps:
-      - name: 📥 Kodu indir
-        uses: actions/checkout@v4
-
-      - name: 🐍 Python ortamını kur
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          # Bağımlılıkları cache'le — her seferinde yeniden indirme
           cache: "pip"
-
-      - name: 📦 Bağımlılıkları yükle
-        run: |
-          pip install --upgrade pip
-          pip install yfinance requests anthropic python-dotenv pandas tefas-crawler lxml beautifulsoup4
-
-      - name: 🔍 Katman 1 — Acil Alarm Kontrolü
+      - name: Bagimliliklar
+        run: pip install yfinance requests anthropic python-dotenv pandas tefas-crawler lxml beautifulsoup4
+      - name: Katman 1 Calistir
+        run: python trigger_monitor.py --layer 1
         env:
           ANTHROPIC_API_KEY:  ${{ secrets.ANTHROPIC_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
           GH_PAT:             ${{ secrets.GH_TOKEN }}
-        run: |
-          python trigger_monitor.py --layer 1
-        # Hata olursa işi başarısız say ama bildirimsiz geç
-        # (Her 15 dk'da bir hata bildirimi email spam olur)
         continue-on-error: true
 
+  # ── Layer 2: Elle tetiklenince
   layer2:
-    name: "Katman 2 — Önemli Sinyaller"
+    name: "Katman 2 — Onemli Sinyaller"
     runs-on: ubuntu-latest
-    if: |
-      github.event_name == 'workflow_dispatch' && github.event.inputs.layer == '2'
-
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.layer == '2'
     steps:
-      - name: 📥 Kodu indir
-        uses: actions/checkout@v4
-
-      - name: 🐍 Python ortamını kur
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: "pip"
-
-      - name: 📦 Bağımlılıkları yükle
-        run: |
-          pip install --upgrade pip
-          pip install yfinance requests anthropic python-dotenv pandas tefas-crawler lxml beautifulsoup4
-
-      - name: 📊 Katman 2 — Önemli Sinyal Kontrolü
+      - name: Bagimliliklar
+        run: pip install yfinance requests anthropic python-dotenv pandas tefas-crawler lxml beautifulsoup4
+      - name: Katman 2 Calistir
+        run: python trigger_monitor.py --layer 2
         env:
           ANTHROPIC_API_KEY:  ${{ secrets.ANTHROPIC_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
           GH_PAT:             ${{ secrets.GH_TOKEN }}
-        run: |
-          python trigger_monitor.py --layer 2
         continue-on-error: true
 
+  # ── Layer 3: Elle tetiklenince
   layer3:
-    name: "Katman 3 — Sabah Özeti"
+    name: "Katman 3 — Sabah Ozeti"
     runs-on: ubuntu-latest
-    if: |
-      github.event_name == 'workflow_dispatch' && github.event.inputs.layer == '3'
-
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.layer == '3'
     steps:
-      - name: 📥 Kodu indir
-        uses: actions/checkout@v4
-
-      - name: 🐍 Python ortamını kur
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: "pip"
-
-      - name: 📦 Bağımlılıkları yükle
-        run: |
-          pip install --upgrade pip
-          pip install yfinance requests anthropic python-dotenv pandas tefas-crawler lxml beautifulsoup4
-
-      - name: 🌅 Katman 3 — Günlük Sabah Özeti
+      - name: Bagimliliklar
+        run: pip install yfinance requests anthropic python-dotenv pandas tefas-crawler lxml beautifulsoup4
+      - name: Katman 3 Calistir
+        run: python trigger_monitor.py --layer 3
         env:
           ANTHROPIC_API_KEY:  ${{ secrets.ANTHROPIC_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
           GH_PAT:             ${{ secrets.GH_TOKEN }}
-        run: |
-          python trigger_monitor.py --layer 3
         continue-on-error: true
