@@ -6,6 +6,7 @@ on:
     - cron: "*/15 * * * *"   # Katman 1 — Her 15 dakika
     - cron: "0 * * * *"      # Katman 2 — Her saat
     - cron: "30 4 * * *"     # Katman 3 — 07:30 TR (04:30 UTC)
+    - cron: "0 20 * * 0"     # Performans — Her Pazar 20:00 UTC
 
   workflow_dispatch:
     inputs:
@@ -93,3 +94,31 @@ jobs:
           TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
           GH_PAT:             ${{ secrets.GH_TOKEN }}
         continue-on-error: true
+
+  # ── Haftalık Performans Takibi ───────────────────────────────────────────
+  performance:
+    name: "Haftalık Karar Performansı"
+    runs-on: ubuntu-latest
+    # Her Pazar 20:00 UTC (Pazartesi 23:00 TR) — hafta kapanışında değerlendirme
+    # Manuel de çalıştırılabilir
+    if: |
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.layer == '3')
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Bagimliliklar
+        run: pip install yfinance requests anthropic python-dotenv pandas tefas-crawler lxml beautifulsoup4
+      - name: Performans Guncelle
+        run: python performance_tracker.py
+        env:
+          ANTHROPIC_API_KEY:  ${{ secrets.ANTHROPIC_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          GH_PAT:             ${{ secrets.GH_TOKEN }}
+        continue-on-error: true
+
