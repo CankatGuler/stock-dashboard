@@ -918,9 +918,20 @@ def generate_morning_summary(portfolio: list, usd_try: float) -> str:
         "^NDX":    ("Nasdaq-100",    "💻"),
         "BTC-USD": ("BTC",           "₿"),
         "DX-Y.NYB":("DXY",          "💵"),
-        "XAUUSD=X":("Altın (spot)", "🥇"),
         "^TNX":    ("ABD 10Y",       "📊"),
     }
+
+    # Altın için XAUUSD=X dene, boş dönerse GC=F kullan
+    gold_ticker = "XAUUSD=X"
+    try:
+        _gtest = yf.Ticker("XAUUSD=X").history(period="2d")
+        if _gtest.empty:
+            gold_ticker = "GC=F"
+    except Exception:
+        gold_ticker = "GC=F"
+
+    indicators[gold_ticker] = ("Altın (spot)" if gold_ticker == "XAUUSD=X"
+                                else "Altın (vadeli)", "🥇")
 
     market_lines = []
     vix_value    = 0.0
@@ -945,7 +956,7 @@ def generate_morning_summary(portfolio: list, usd_try: float) -> str:
                 btc_chg   = chg
                 val_str   = f"${price:,.0f}"
                 chg_str   = f"%{chg:+.1f}"
-            elif ticker == "XAUUSD=X":
+            elif ticker in ("XAUUSD=X", "GC=F"):
                 gold_price = price
                 val_str    = f"${price:,.0f}/oz"
                 chg_str    = f"%{chg:+.1f}"
@@ -1020,6 +1031,8 @@ def generate_morning_summary(portfolio: list, usd_try: float) -> str:
             "commodity": "🥇 Emtia",
             "tefas":     "🇹🇷 TEFAS",
             "cash":      "💵 Nakit",
+            "other":     "📦 Diğer",
+            "":          "📦 Diğer",
         }
         for ac, val in sorted(classes.items(), key=lambda x: -x[1]):
             label = class_labels.get(ac, ac)
