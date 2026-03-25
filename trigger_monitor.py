@@ -1013,33 +1013,101 @@ def generate_morning_summary(portfolio: list, usd_try: float) -> str:
         lines.append("")
         lines.append("💼 <b>Portföy Durumu:</b>")
 
-        # Varlık sınıfı bazında grupla
-        classes = {}
-        total_cost = 0.0
-        for p in portfolio:
-            ac  = p.get("asset_class", "other")
-            cur = p.get("currency", "USD")
-            avg = float(p.get("avg_cost", 0))
-            shr = float(p.get("shares", 0))
-            val = shr * avg / usd_try if cur == "TRY" else shr * avg
-            classes[ac] = classes.get(ac, 0) + val
-            total_cost  += val
-
+        # Varlık sınıfı etiketleri
         class_labels = {
             "us_equity": "🇺🇸 ABD Hisse",
             "crypto":    "₿ Kripto",
             "commodity": "🥇 Emtia",
             "tefas":     "🇹🇷 TEFAS",
             "cash":      "💵 Nakit",
-            "other":     "📦 Diğer",
-            "":          "📦 Diğer",
         }
-        for ac, val in sorted(classes.items(), key=lambda x: -x[1]):
-            label = class_labels.get(ac, ac)
-            pct   = val / total_cost * 100 if total_cost > 0 else 0
-            lines.append(f"  {label}: ${val:,.0f} (%{pct:.1f})")
 
-        lines.append(f"  <b>Toplam (maliyet bazlı): ${total_cost:,.0f}</b>")
+        # Anlık fiyatları toplu çek (crypto + us_equity)
+        live_prices = {}
+        try:
+            _cry_tks = [p["ticker"] for p in portfolio
+                        if p.get("asset_class") == "crypto"
+                        and float(p.get("shares", 0)) > 0]
+            _us_tks  = [p["ticker"] for p in portfolio
+                        if p.get("asset_class") == "us_equity"
+                        and float(p.get("shares", 0)) > 0]
+
+            for _tk in _cry_tks + _us_tks:
+                try:
+                    _fi = yf.Ticker(_tk).fast_info
+                    _p  = float(getattr(_fi, "last_price", 0) or 0)
+                    if _p > 0:
+                        live_prices[_tk] = _p
+                except Exception:
+                    pass
+
+            # Emtia: altın ve gümüş TL/gram çevir
+            for _gold_tk in ("XAUUSD=X", "GC=F"):
+                try:
+                    _oz = float(yf.Ticker(_gold_tk).fast_info.last_price or 0)
+                    if _oz > 0:
+                        live_prices["ALTIN_GRAM_TRY"]  = _oz * usd_try / 31.1035
+                        live_prices["GUMUS_GRAM_TRY"]  = 0  # gümüş ayrıca eklenecek
+                        break
+                except Exception:
+                    pass
+        except Exception:
+            pass  # Fiyat çekilemezse maliyet bazlı devam et
+
+        # Varlık sınıfı bazında değer ve K/Z topla
+        class_data = {}  # {ac: {"cur_val": x, "cost_val": y}}
+
+        for p in portfolio:
+            ac  = p.get("asset_class", "").strip()
+            # "other" veya bilinmeyen → us_equity say (kullanıcı portföyünde böyle)
+            if ac not in class_labels:
+                ac = "us_equity"
+
+            cur      = p.get("currency", "USD")
+            avg      = float(p.get("avg_cost", 0))
+            shr      = float(p.get("shares", 0))
+            ticker   = p.get("ticker", "")
+
+            # Maliyet (USD)
+            cost_val = shr * avg / usd_try if cur == "TRY" else shr * avg
+
+            # Anlık değer (USD)
+            live = live_prices.get(ticker)
+            if live and live > 0:
+                cur_val = shr * live / usd_try if cur == "TRY" else shr * live
+            else:
+                # Anlık fiyat yoksa: maliyet ile aynı tut
+                cur_val = cost_val
+
+            if ac not in class_data:
+                class_data[ac] = {"cur_val": 0.0, "cost_val": 0.0}
+            class_data[ac]["cur_val"]  += cur_val
+            class_data[ac]["cost_val"] += cost_val
+
+        total_cur  = sum(d["cur_val"]  for d in class_data.values())
+        total_cost = sum(d["cost_val"] for d in class_data.values())
+        total_pnl  = total_cur - total_cost
+
+        # Her sınıfı satır olarak yaz
+        for ac, d in sorted(class_data.items(), key=lambda x: -x[1]["cur_val"]):
+            label    = class_labels.get(ac, "🇺🇸 ABD Hisse")
+            cur_val  = d["cur_val"]
+            cost_val = d["cost_val"]
+            pnl      = cur_val - cost_val
+            pnl_pct  = pnl / cost_val * 100 if cost_val > 0 else 0
+            pnl_e    = "🟢" if pnl >= 0 else "🔴"
+            lines.append(
+                f"  {label}: ${cur_val:,.0f} | "
+                f"{pnl_e} K/Z: ${pnl:+,.0f} (%{pnl_pct:+.1f})"
+            )
+
+        # Toplam
+        total_pnl_pct = total_pnl / total_cost * 100 if total_cost > 0 else 0
+        tot_e = "🟢" if total_pnl >= 0 else "🔴"
+        lines.append(
+            f"  <b>Toplam: ${total_cur:,.0f} | "
+            f"{tot_e} K/Z: ${total_pnl:+,.0f} (%{total_pnl_pct:+.1f})</b>"
+        )
 
     # ── 4. Kripto Özet ────────────────────────────────────────────────────────
     try:
