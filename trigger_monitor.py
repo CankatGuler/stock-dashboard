@@ -1038,113 +1038,66 @@ def generate_morning_summary(portfolio: list, usd_try: float) -> str:
 
         class_data = {}
 
-        # ── TEFAS: fetch_tefas_fund ile anlık NAV fiyatı ──────────────────
-        tefas_pos = [p for p in portfolio if p.get("asset_class") == "tefas"
-                     and float(p.get("shares", 0)) > 0]
-        if tefas_pos:
+        # Altın ve gümüş fiyatlarını önceden çek
+        gold_usd   = 0.0
+        silver_usd = 0.0
+        try:
+            h = yf.Ticker("GC=F").history(period="2d")
+            if not h.empty:
+                gold_usd = float(h["Close"].iloc[-1])
+        except Exception:
+            pass
+        try:
+            h = yf.Ticker("SI=F").history(period="2d")
+            if not h.empty:
+                silver_usd = float(h["Close"].iloc[-1])
+        except Exception:
+            pass
+
+        # Tek döngü — tüm varlık sınıfları aynı mantıkla
+        for p in portfolio:
+            if float(p.get("shares", 0)) <= 0:
+                continue
+
+            ac  = p.get("asset_class", "us_equity").strip().lower()
+            if ac not in ("us_equity", "crypto", "commodity", "tefas"):
+                ac = "us_equity"
+
+            shr = float(p.get("shares", 0))
+            avg = float(p.get("avg_cost", 0))
+            tk  = p.get("ticker", "")
+            cur = p.get("currency", "USD")
+
+            cost = shr * avg / usd_try if cur == "TRY" else shr * avg
+
+            # Anlık fiyat
+            live = avg
             try:
-                from turkey_fetcher import fetch_tefas_fund
-                t_val = t_cost = 0.0
-                for p in tefas_pos:
-                    shr  = float(p.get("shares", 0))
-                    avg  = float(p.get("avg_cost", 0))
-                    fd   = fetch_tefas_fund(p["ticker"])
-                    cur  = float(fd.get("price", avg)) if fd else avg
-                    t_val  += shr * cur / usd_try
-                    t_cost += shr * avg  / usd_try
-                class_data["tefas"] = {"val": t_val, "cost": t_cost}
-            except Exception as e:
-                logger.warning("TEFAS fiyat hatası: %s", e)
-                t_cost = sum(float(p.get("shares",0)) * float(p.get("avg_cost",0))
-                             / usd_try for p in tefas_pos)
-                class_data["tefas"] = {"val": t_cost, "cost": t_cost}
-
-        # ── ABD Hisse: yfinance history ───────────────────────────────────
-        us_pos = [p for p in portfolio
-                  if p.get("asset_class") in ("us_equity", "other", "")
-                  and float(p.get("shares", 0)) > 0]
-        if us_pos:
-            us_val = us_cost = 0.0
-            for p in us_pos:
-                shr  = float(p.get("shares", 0))
-                avg  = float(p.get("avg_cost", 0))
-                live = avg
-                try:
-                    hist = yf.Ticker(p["ticker"]).history(period="2d")
-                    if not hist.empty:
-                        live = float(hist["Close"].iloc[-1])
-                except Exception:
-                    pass
-                us_val  += shr * live
-                us_cost += shr * avg
-            class_data["us_equity"] = {"val": us_val, "cost": us_cost}
-
-        # ── Kripto: yfinance history ──────────────────────────────────────
-        cry_pos = [p for p in portfolio if p.get("asset_class") == "crypto"
-                   and float(p.get("shares", 0)) > 0]
-        if cry_pos:
-            c_val = c_cost = 0.0
-            for p in cry_pos:
-                shr  = float(p.get("shares", 0))
-                avg  = float(p.get("avg_cost", 0))
-                live = avg
-                try:
-                    hist = yf.Ticker(p["ticker"]).history(period="2d")
-                    if not hist.empty:
-                        live = float(hist["Close"].iloc[-1])
-                except Exception:
-                    pass
-                c_val  += shr * live
-                c_cost += shr * avg
-            class_data["crypto"] = {"val": c_val, "cost": c_cost}
-
-        # ── Emtia: altın/gümüş TL dönüşümü, diğerleri doğrudan ──────────
-        com_pos = [p for p in portfolio if p.get("asset_class") == "commodity"
-                   and float(p.get("shares", 0)) > 0]
-        if com_pos:
-            gold_usd = 0.0
-            try:
-                hist = yf.Ticker("GC=F").history(period="2d")
-                if not hist.empty:
-                    gold_usd = float(hist["Close"].iloc[-1])
-            except Exception:
-                pass
-            silver_usd = 0.0
-            try:
-                hist = yf.Ticker("SI=F").history(period="2d")
-                if not hist.empty:
-                    silver_usd = float(hist["Close"].iloc[-1])
-            except Exception:
-                pass
-
-            m_val = m_cost = 0.0
-            for p in com_pos:
-                shr = float(p.get("shares", 0))
-                avg = float(p.get("avg_cost", 0))
-                tk  = p.get("ticker", "")
-                cur = p.get("currency", "USD")
                 if tk in ("ALTIN_GRAM_TRY", "XAUTRY=X") and gold_usd > 0:
-                    live_tl = gold_usd * usd_try / 31.1035
-                    m_val  += shr * live_tl / usd_try
-                    m_cost += shr * avg / usd_try
+                    live = gold_usd * usd_try / 31.1035
+                    val  = shr * live / usd_try
                 elif tk in ("GUMUS_GRAM_TRY", "XAGTRY=X") and silver_usd > 0:
-                    live_tl = silver_usd * usd_try / 31.1035
-                    m_val  += shr * live_tl / usd_try
-                    m_cost += shr * avg / usd_try
+                    live = silver_usd * usd_try / 31.1035
+                    val  = shr * live / usd_try
                 else:
-                    live = avg
-                    try:
-                        hist = yf.Ticker(tk).history(period="2d")
-                        if not hist.empty:
-                            live = float(hist["Close"].iloc[-1])
-                    except Exception:
-                        pass
-                    div = usd_try if cur == "TRY" else 1.0
-                    m_val  += shr * live / div
-                    m_cost += shr * avg  / div
-            class_data["commodity"] = {"val": m_val, "cost": m_cost}
+                    h = yf.Ticker(tk).history(period="2d")
+                    if not h.empty:
+                        live = float(h["Close"].iloc[-1])
+                    val = shr * live / usd_try if cur == "TRY" else shr * live
+            except Exception:
+                val = cost
 
-        # ── Yazdır ───────────────────────────────────────────────────────
+            if ac not in class_data:
+                class_data[ac] = {"val": 0.0, "cost": 0.0}
+            class_data[ac]["val"]  += val
+            class_data[ac]["cost"] += cost
+
+        class_labels = {
+            "us_equity": "🇺🇸 ABD Hisse",
+            "crypto":    "₿ Kripto",
+            "commodity": "🥇 Emtia",
+            "tefas":     "🇹🇷 TEFAS",
+        }
         total_val  = sum(d["val"]  for d in class_data.values())
         total_cost = sum(d["cost"] for d in class_data.values())
 
@@ -1153,10 +1106,8 @@ def generate_morning_summary(portfolio: list, usd_try: float) -> str:
             pnl   = d["val"] - d["cost"]
             ppct  = pnl / d["cost"] * 100 if d["cost"] > 0 else 0
             sign  = "🟢" if pnl >= 0 else "🔴"
-            lines.append(
-                f"  {label}: ${d['val']:,.0f} | "
-                f"{sign} K/Z: ${pnl:+,.0f} (%{ppct:+.1f})"
-            )
+            lines_out = f"  {label}: ${d['val']:,.0f} | {sign} K/Z: ${pnl:+,.0f} (%{ppct:+.1f})"
+            lines.append(lines_out)
 
         pnl_tot  = total_val - total_cost
         ppct_tot = pnl_tot / total_cost * 100 if total_cost > 0 else 0
