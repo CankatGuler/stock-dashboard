@@ -207,14 +207,14 @@
     },
     {
       "ticker": "ALTIN_GRAM_TRY",
-      "shares": 79.63000000000001,
-      "avg_cost": 6659.940696973502,
-      "sector": "Altın",
-      "notes": "Altın Gram",
+      "shares": 86.31,
+      "avg_cost": 6650.804111922141,
+      "sector": "Emtia",
+      "notes": "",
       "asset_class": "commodity",
       "currency": "TRY",
       "added": "2026-03-18 19:31",
-      "updated": "2026-03-18 19:32"
+      "updated": "2026-03-25 08:17"
     },
     {
       "ticker": "ETH-USD",
