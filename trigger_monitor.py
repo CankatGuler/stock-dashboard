@@ -1021,48 +1021,94 @@ def generate_morning_summary(portfolio: list, usd_try: float) -> str:
             "cash":      "💵 Nakit",
         }
 
-        # Portföy JSON'undaki current_price kullan — uygulama bunu güncel tutar
+        # ── Adım 1: Fiyatları çek ──────────────────────────────────────────
+        price_map = {}  # ticker → USD fiyat
+
+        # US hisse + kripto: yfinance history
+        fetch_tickers = [
+            p["ticker"] for p in portfolio
+            if p.get("asset_class") in ("us_equity", "crypto", "other", "")
+            and float(p.get("shares", 0)) > 0
+        ]
+        for tk in fetch_tickers:
+            try:
+                hist = yf.Ticker(tk).history(period="2d")
+                if not hist.empty:
+                    price_map[tk] = float(hist["Close"].iloc[-1])
+            except Exception:
+                pass
+
+        # Altın gram TL → USD/oz × usd_try / 31.1035
+        gold_usd = 0.0
+        for gold_tk in ("GC=F", "XAUUSD=X"):
+            try:
+                hist = yf.Ticker(gold_tk).history(period="2d")
+                if not hist.empty:
+                    gold_usd = float(hist["Close"].iloc[-1])
+                    break
+            except Exception:
+                pass
+        if gold_usd > 0:
+            price_map["ALTIN_GRAM_TRY"] = gold_usd * usd_try / 31.1035
+
+        # Gümüş gram TL
+        try:
+            hist = yf.Ticker("SI=F").history(period="2d")
+            if not hist.empty:
+                price_map["GUMUS_GRAM_TRY"] = float(hist["Close"].iloc[-1]) * usd_try / 31.1035
+        except Exception:
+            pass
+
+        # ── Adım 2: Sınıf bazında topla ───────────────────────────────────
         class_data = {}
+
         for p in portfolio:
-            ac     = p.get("asset_class", "").strip()
+            ac  = p.get("asset_class", "").strip()
             if ac not in class_labels:
                 ac = "us_equity"
 
-            cur    = p.get("currency", "USD")
-            shr    = float(p.get("shares", 0))
-            avg    = float(p.get("avg_cost", 0))
-            # current_price yoksa avg_cost kullan
-            live   = float(p.get("current_price") or avg)
+            shr = float(p.get("shares", 0))
+            avg = float(p.get("avg_cost", 0))
+            cur = p.get("currency", "USD")
+            tk  = p.get("ticker", "")
 
-            # USD'ye çevir
-            div    = usd_try if cur == "TRY" else 1.0
-            cur_val  = shr * live / div
-            cost_val = shr * avg  / div
+            # Maliyet → USD
+            cost = shr * avg / usd_try if cur == "TRY" else shr * avg
+
+            # Anlık değer → USD
+            live_price = price_map.get(tk)
+            if live_price:
+                val = shr * live_price / usd_try if cur == "TRY" else shr * live_price
+            else:
+                val = cost  # TEFAS ve fiyat alınamayanlar için maliyet bazlı
 
             if ac not in class_data:
-                class_data[ac] = {"cur_val": 0.0, "cost_val": 0.0}
-            class_data[ac]["cur_val"]  += cur_val
-            class_data[ac]["cost_val"] += cost_val
+                class_data[ac] = {"val": 0.0, "cost": 0.0}
+            class_data[ac]["val"]  += val
+            class_data[ac]["cost"] += cost
 
-        total_cur  = sum(d["cur_val"]  for d in class_data.values())
-        total_cost = sum(d["cost_val"] for d in class_data.values())
+        # ── Adım 3: Yaz ───────────────────────────────────────────────────
+        total_val  = sum(d["val"]  for d in class_data.values())
+        total_cost = sum(d["cost"] for d in class_data.values())
 
-        for ac, d in sorted(class_data.items(), key=lambda x: -x[1]["cur_val"]):
+        for ac, d in sorted(class_data.items(), key=lambda x: -x[1]["val"]):
             label = class_labels.get(ac, "🇺🇸 ABD Hisse")
-            pnl   = d["cur_val"] - d["cost_val"]
-            ppct  = pnl / d["cost_val"] * 100 if d["cost_val"] > 0 else 0
+            pnl   = d["val"] - d["cost"]
+            ppct  = pnl / d["cost"] * 100 if d["cost"] > 0 else 0
             sign  = "🟢" if pnl >= 0 else "🔴"
+            # TEFAS için anlık fiyat yok — not ekle
+            note  = " <i>(maliyet bazlı)</i>" if ac == "tefas" and pnl == 0 else ""
             lines.append(
-                f"  {label}: ${d['cur_val']:,.0f} | "
-                f"{sign} K/Z: ${pnl:+,.0f} (%{ppct:+.1f})"
+                f"  {label}: ${d['val']:,.0f} | "
+                f"{sign} K/Z: ${pnl:+,.0f} (%{ppct:+.1f}){note}"
             )
 
-        total_pnl     = total_cur - total_cost
-        total_pnl_pct = total_pnl / total_cost * 100 if total_cost > 0 else 0
-        sign = "🟢" if total_pnl >= 0 else "🔴"
+        pnl_tot  = total_val - total_cost
+        ppct_tot = pnl_tot / total_cost * 100 if total_cost > 0 else 0
+        sign     = "🟢" if pnl_tot >= 0 else "🔴"
         lines.append(
-            f"  <b>Toplam: ${total_cur:,.0f} | "
-            f"{sign} K/Z: ${total_pnl:+,.0f} (%{total_pnl_pct:+.1f})</b>"
+            f"  <b>Toplam: ${total_val:,.0f} | "
+            f"{sign} K/Z: ${pnl_tot:+,.0f} (%{ppct_tot:+.1f})</b>"
         )
 
     # ── 4. Kripto Özet ────────────────────────────────────────────────────────
