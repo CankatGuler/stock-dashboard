@@ -18,7 +18,7 @@ TELEGRAM_API  = "https://api.telegram.org/bot{token}/{method}"
 DASHBOARD_URL = "https://stock-dashboard-xcssaysbnrkdrrswxq2okk.streamlit.app"
 
 SEVERITY_EMOJI = {"CRITICAL":"🚨","HIGH":"⚠️","MEDIUM":"⚡","LOW":"💡"}
-EYLEM_EMOJI    = {"SAT":"🔴","AZALT":"🔻","AL":"🟢","ARTIR":"🔺","BEKLE":"⏸️"}
+EYLEM_EMOJI    = {"SAT":"🔴","AZALT":"🔻","AL":"🟢","ARTIR":"🔺","BEKLE":"⏸️","EMIR_VER":"📝","KORU":"🔵"}
 
 
 def _send(text: str, parse_mode: str = "HTML") -> bool:
