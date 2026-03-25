@@ -137,20 +137,32 @@ def get_price_change(ticker: str, lookback_hours: int) -> tuple[float, float]:
     """
     Son lookback_hours içindeki fiyat değişimini döndür.
     Returns: (mevcut_fiyat, değişim_yüzdesi)
+
+    Yöntem 1: history() — MultiIndex sorunu olmayan, güvenilir yol.
+    Yöntem 2: fast_info — sadece anlık fiyat + previousClose (24h için)
     """
     try:
         import yfinance as yf
-        period = f"{max(lookback_hours * 2, 24)}h"
-        df = yf.download(ticker, period="2d", interval="1h",
-                         progress=False, show_errors=False)
-        if df.empty or len(df) < 2:
-            return 0.0, 0.0
 
-        current = float(df["Close"].iloc[-1])
-        past    = float(df["Close"].iloc[-lookback_hours] if len(df) > lookback_hours
-                       else df["Close"].iloc[0])
-        change_pct = (current - past) / past * 100 if past > 0 else 0.0
-        return current, change_pct
+        # Yöntem 1: history() ile saatlik veri — en güvenilir
+        t = yf.Ticker(ticker)
+        df = t.history(period="5d", interval="1h")
+
+        if not df.empty and len(df) >= 2:
+            current = float(df["Close"].iloc[-1])
+            idx     = -lookback_hours if len(df) > lookback_hours else 0
+            past    = float(df["Close"].iloc[idx])
+            if past > 0:
+                return current, (current - past) / past * 100
+
+        # Yöntem 2: fast_info — previousClose ile günlük değişim
+        fi = t.fast_info
+        current = float(getattr(fi, "last_price", 0) or 0)
+        prev    = float(getattr(fi, "previous_close", 0) or 0)
+        if current > 0 and prev > 0:
+            return current, (current - prev) / prev * 100
+
+        return 0.0, 0.0
 
     except Exception as e:
         logger.error("Fiyat değişimi hatası (%s): %s", ticker, e)
@@ -880,37 +892,204 @@ JSON formatında yanıt ver:
 # ─── Sabah Özeti (Katman 3) ───────────────────────────────────────────────────
 
 def generate_morning_summary(portfolio: list, usd_try: float) -> str:
-    """Günlük sabah özeti — piyasa durumu ve gün planı."""
+    """
+    Günlük sabah özeti — sabah kahveni içerken okuyacağın kapsamlı piyasa raporu.
+
+    İçerik:
+    - Piyasa göstergeleri (VIX, SPY, BTC, DXY, Altın, USD/TRY)
+    - Rejim tespiti (risk-on/off)
+    - Portföy anlık durumu (varlık sınıfı bazında)
+    - Bugünün ekonomik takvimi
+    - Son 24 saatte tetiklenen alarmlar
+    - Günün öncelikli izleme listesi
+    """
+    import yfinance as yf
+    from datetime import datetime, timezone, timedelta
+
+    lines = []
+    tr_now = datetime.now(timezone.utc) + timedelta(hours=3)
+    lines.append(f"🌅 <b>{tr_now.strftime('%d %B %Y, %A')} — Sabah Özeti</b>")
+    lines.append("━" * 32)
+
+    # ── 1. Piyasa Göstergeleri ────────────────────────────────────────────────
+    indicators = {
+        "^VIX":    ("VIX",     ""),
+        "SPY":     ("SPY",     "📈"),
+        "BTC-USD": ("BTC",     "₿"),
+        "DX-Y.NYB":("DXY",    "💵"),
+        "GC=F":    ("Altın",   "🥇"),
+        "^TNX":    ("10Y",     "📊"),
+    }
+
+    market_lines = []
+    vix_value    = 0.0
+    spy_chg      = 0.0
+    btc_price    = 0.0
+    btc_chg      = 0.0
+    gold_price   = 0.0
+
+    for ticker, (label, emoji) in indicators.items():
+        try:
+            price, chg = get_price_change(ticker, 24)
+            if price <= 0:
+                continue
+
+            # Değer formatlama
+            if ticker == "^VIX":
+                vix_value = price
+                val_str   = f"{price:.1f}"
+                chg_str   = f"%{chg:+.1f}"
+            elif ticker == "BTC-USD":
+                btc_price = price
+                btc_chg   = chg
+                val_str   = f"${price:,.0f}"
+                chg_str   = f"%{chg:+.1f}"
+            elif ticker == "GC=F":
+                gold_price = price
+                val_str    = f"${price:,.0f}/oz"
+                chg_str    = f"%{chg:+.1f}"
+            elif ticker in ("^TNX",):
+                val_str = f"%{price:.2f}"
+                chg_str = f"{chg:+.0f}bps" if abs(chg) > 0.5 else ""
+            else:
+                if ticker == "SPY":
+                    spy_chg = chg
+                val_str = f"${price:.2f}" if price < 1000 else f"${price:,.0f}"
+                chg_str = f"%{chg:+.1f}"
+
+            # Renk emoji
+            if chg > 0.5:
+                dir_e = "🟢"
+            elif chg < -0.5:
+                dir_e = "🔴"
+            else:
+                dir_e = "⚪"
+
+            market_lines.append(
+                f"  {dir_e} {emoji} <b>{label}</b>: {val_str}"
+                + (f" ({chg_str})" if chg_str else "")
+            )
+        except Exception:
+            pass
+
+    # USD/TRY her zaman ekle
+    try_chg_str = ""
     try:
-        import yfinance as yf
+        _, try_chg = get_price_change("USDTRY=X", 24)
+        try_chg_str = f" (%{try_chg:+.1f})"
+    except Exception:
+        pass
+    market_lines.append(f"  {'🔴' if 0 < 1 else '🟢'} 🇹🇷 <b>USD/TRY</b>: {usd_try:.2f}{try_chg_str}")
 
-        # Temel göstergeler
-        vix     = float(yf.Ticker("^VIX").fast_info.last_price or 0)
-        spy_chg = get_price_change("SPY", 24)[1]
-        btc_chg = get_price_change("BTC-USD", 24)[1]
+    lines.append("\n📊 <b>Piyasa Göstergeleri (24s):</b>")
+    lines.extend(market_lines)
 
-        # Aktif cooldown'lar (dün tetiklenmiş alarmlar)
-        cd = _load_cooldowns()
-        recent_triggers = [k for k, ts in cd.items()
-                          if (time.time() - ts) < 24 * 3600]
+    # ── 2. Rejim Tespiti ─────────────────────────────────────────────────────
+    lines.append("")
+    if vix_value >= 30:
+        regime_txt = "⚠️ <b>Rejim: PANIK / RISK-OFF</b> — Savunmacı pozisyonlama öncelikli"
+    elif vix_value >= 20:
+        regime_txt = "⚡ <b>Rejim: TEMKİNLİ</b> — Piyasada gerginlik var, dikkatli ol"
+    elif vix_value >= 15:
+        regime_txt = "🟡 <b>Rejim: NÖTR</b> — Normal dalgalanma, izleme yeterli"
+    else:
+        regime_txt = "🟢 <b>Rejim: RISK-ON</b> — İştah yüksek, büyüme varlıkları favori"
+    lines.append(f"🧭 {regime_txt}")
 
-        lines = [
-            f"📅 {datetime.now().strftime('%d %b %Y')} Sabah Özeti",
-            f"",
-            f"📊 Piyasalar (24s):",
-            f"  VIX: {vix:.1f} | SPY: %{spy_chg:+.1f} | BTC: %{btc_chg:+.1f}",
-            f"  USD/TRY: {usd_try:.2f}",
-        ]
+    # ── 3. Portföy Anlık Durumu ───────────────────────────────────────────────
+    if portfolio:
+        lines.append("")
+        lines.append("💼 <b>Portföy Durumu:</b>")
 
-        if recent_triggers:
-            lines.append(f"")
-            lines.append(f"⚠️ Son 24s Alarmlar: {', '.join(recent_triggers)}")
+        # Varlık sınıfı bazında grupla
+        classes = {}
+        total_cost = 0.0
+        for p in portfolio:
+            ac  = p.get("asset_class", "other")
+            cur = p.get("currency", "USD")
+            avg = float(p.get("avg_cost", 0))
+            shr = float(p.get("shares", 0))
+            val = shr * avg / usd_try if cur == "TRY" else shr * avg
+            classes[ac] = classes.get(ac, 0) + val
+            total_cost  += val
 
-        return "\n".join(lines)
+        class_labels = {
+            "us_equity": "🇺🇸 ABD Hisse",
+            "crypto":    "₿ Kripto",
+            "commodity": "🥇 Emtia",
+            "tefas":     "🇹🇷 TEFAS",
+            "cash":      "💵 Nakit",
+        }
+        for ac, val in sorted(classes.items(), key=lambda x: -x[1]):
+            label = class_labels.get(ac, ac)
+            pct   = val / total_cost * 100 if total_cost > 0 else 0
+            lines.append(f"  {label}: ${val:,.0f} (%{pct:.1f})")
 
-    except Exception as e:
-        logger.error("Sabah özeti hatası: %s", e)
-        return "Sabah özeti üretilemedi."
+        lines.append(f"  <b>Toplam (maliyet bazlı): ${total_cost:,.0f}</b>")
+
+    # ── 4. Kripto Özet ────────────────────────────────────────────────────────
+    try:
+        url = "https://fapi.binance.com/fapi/v1/fundingRate?symbol=BTCUSDT&limit=1"
+        resp    = requests.get(url, timeout=5).json()
+        funding = float(resp[0]["fundingRate"]) * 100 if resp else 0
+        fund_emoji = "🔥" if funding > 0.05 else ("❄️" if funding < -0.02 else "✅")
+        lines.append("")
+        lines.append(f"₿ <b>Kripto Özet:</b>")
+        lines.append(f"  BTC: ${btc_price:,.0f} (%{btc_chg:+.1f} 24s)")
+        lines.append(f"  {fund_emoji} Funding Rate: %{funding:.3f}/8s "
+                    f"({'Isınma var' if funding > 0.05 else 'Normal' if funding > -0.02 else 'Short baskısı'})")
+    except Exception:
+        if btc_price > 0:
+            lines.append(f"\n₿ BTC: ${btc_price:,.0f} (%{btc_chg:+.1f})")
+
+    # ── 5. Aktif Alarmlar (Son 24 Saat) ──────────────────────────────────────
+    cd = _load_cooldowns()
+    recent = [k for k, ts in cd.items() if (time.time() - ts) < 86400]
+    if recent:
+        lines.append("")
+        lines.append(f"⚠️ <b>Son 24s Alarmlar ({len(recent)} adet):</b>")
+        for r in recent[:5]:
+            lines.append(f"  • {r.replace('_', ' ').title()}")
+    else:
+        lines.append("")
+        lines.append("✅ Son 24 saatte alarm tetiklenmedi")
+
+    # ── 6. Günün Öncelikli İzleme Noktaları ──────────────────────────────────
+    lines.append("")
+    lines.append("🎯 <b>Bugün İzle:</b>")
+
+    watchlist = []
+    if vix_value >= 25:
+        watchlist.append("VIX 25 üzerinde — TEFAS hisse fonlarında stop-loss seviyeleri")
+    if vix_value < 18 and spy_chg > 0:
+        watchlist.append("Risk-on ortam — Nakit oranı gözden geçir, fırsat penceresi açık olabilir")
+    if btc_chg < -3:
+        watchlist.append(f"BTC %{btc_chg:.1f} — Altcoin pozisyonlarını izle")
+    if btc_chg > 3:
+        watchlist.append(f"BTC %{btc_chg:+.1f} — Funding rate takip et, aşırı ısınma riski")
+    if abs(usd_try - 44) > 1.5:  # Kur belirgin hareket
+        watchlist.append(f"USD/TRY {usd_try:.2f} — TEFAS dolar bazlı değer etkileniyor")
+
+    # Günün ekonomik takvimi (basit versiyon)
+    try:
+        weekday = tr_now.weekday()
+        if weekday == 4:  # Cuma
+            watchlist.append("Cuma: NFP veya önemli ABD verisi açıklanabilir")
+        elif weekday == 2:  # Çarşamba
+            watchlist.append("Çarşamba: Fed tutanakları veya EIA petrol stok verisi olabilir")
+    except Exception:
+        pass
+
+    if not watchlist:
+        watchlist.append("Belirgin bir sinyal yok — rutin izleme yeterli")
+
+    for item in watchlist[:4]:
+        lines.append(f"  • {item}")
+
+    lines.append("")
+    lines.append("━" * 32)
+
+    return "\n".join(lines)
 
 
 # ─── Ana Çalıştırıcı ──────────────────────────────────────────────────────────
