@@ -507,6 +507,7 @@
   "cash_accounts": {
     "usd": 2060.57,
     "commodity_usd": 0.0,
-    "crypto_usd": 1000.0
+    "crypto_usd": 1000.0,
+    "tefas_try": 0.0
   }
 }
