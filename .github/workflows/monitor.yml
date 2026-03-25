@@ -37,7 +37,12 @@ jobs:
       - name: Bagimliliklar
         run: pip install yfinance requests anthropic python-dotenv pandas tefas-crawler lxml beautifulsoup4
       - name: Katman 1 Calistir
-        run: python trigger_monitor.py --layer 1
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            python trigger_monitor.py --layer 1 --manual
+          else
+            python trigger_monitor.py --layer 1
+          fi
         env:
           ANTHROPIC_API_KEY:  ${{ secrets.ANTHROPIC_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -59,7 +64,7 @@ jobs:
       - name: Bagimliliklar
         run: pip install yfinance requests anthropic python-dotenv pandas tefas-crawler lxml beautifulsoup4
       - name: Katman 2 Calistir
-        run: python trigger_monitor.py --layer 2
+        run: python trigger_monitor.py --layer 2 --manual
         env:
           ANTHROPIC_API_KEY:  ${{ secrets.ANTHROPIC_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}

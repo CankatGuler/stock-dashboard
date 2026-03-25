@@ -1186,12 +1186,12 @@ def generate_morning_summary(portfolio: list, usd_try: float) -> str:
 
 # ─── Ana Çalıştırıcı ──────────────────────────────────────────────────────────
 
-def run(layer: int) -> None:
+def run(layer: int, manual: bool = False) -> None:
     """
     Belirtilen katmanın tetikleyicilerini çalıştır.
-    GitHub Actions bu fonksiyonu layer argümanıyla çağırır.
+    manual=True → elle çalıştırıldı, eşik aşılmasa bile durum mesajı gönder.
     """
-    logger.info("Tetikleyici motor başlatılıyor — Katman %d", layer)
+    logger.info("Tetikleyici motor başlatılıyor — Katman %d (manual=%s)", layer, manual)
 
     # USD/TRY kuru
     try:
@@ -1200,7 +1200,10 @@ def run(layer: int) -> None:
         logger.info("USD/TRY: %.4f", usd_try)
     except Exception as e:
         logger.error("USD/TRY alınamadı: %s", e)
-        return  # Kur olmadan devam etme
+        if manual:
+            from trigger_alerts import _send
+            _send(f"❌ Katman {layer} — USD/TRY kuru alınamadı: {e}")
+        return
 
     # Portföy yükle
     try:
@@ -1229,7 +1232,7 @@ def run(layer: int) -> None:
 
     # ── Katman 2 Kontrolleri ─────────────────────────────────────────────────
     elif layer == 2:
-        if _is_quiet_hours():
+        if _is_quiet_hours() and not manual:
             logger.info("Sessiz saatler — Katman 2 atlanıyor.")
             return
 
@@ -1258,8 +1261,30 @@ def run(layer: int) -> None:
 
     if not triggered_signals:
         logger.info("Tetiklenen sinyal yok — sessiz.")
-        # Katman 1 ve 2'nin çalıştığını teyit etmek için günde 1 kez sessiz bildirim
-        # (her çalışmada değil — sadece debug için log yeterli)
+        if manual:
+            # Elle çalıştırıldığında mevcut değerleri göster
+            import yfinance as _yf
+            try:
+                vix = float(_yf.Ticker("^VIX").fast_info.last_price or 0)
+                btc = float(_yf.Ticker("BTC-USD").fast_info.last_price or 0)
+            except Exception:
+                vix, btc = 0, 0
+
+            from trigger_alerts import _send
+            layer_checks = {
+                1: "VIX spike, BTC crash, USD/TRY spike, Stablecoin de-peg",
+                2: "Yield curve, Altcoin/BTC ayrışma, Funding rate, OI, VIX norm, BTC dom, Türkiye CDS",
+            }
+            _send(
+                f"✅ <b>Katman {layer} Çalıştı — Alarm Yok</b>\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"Kontrol edilen: {layer_checks.get(layer, '?')}\n\n"
+                f"📊 Mevcut değerler:\n"
+                f"  VIX: {vix:.1f} (eşik: 32)\n"
+                f"  BTC: ${btc:,.0f}\n"
+                f"  USD/TRY: {usd_try:.2f}\n\n"
+                f"ℹ️ Eşikler aşılmadı — sistem normal çalışıyor."
+            )
         return
 
     # ── Direktörü Uyandır ────────────────────────────────────────────────────
@@ -1280,18 +1305,19 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Tetikleyici İzleme Motoru")
     parser.add_argument("--layer", type=int, choices=[1, 2, 3], required=True,
                         help="Çalıştırılacak katman: 1, 2 veya 3")
+    parser.add_argument("--manual", action="store_true",
+                        help="Elle tetiklendi — eşik aşılmasa bile durum mesajı gönder")
     parser.add_argument("--test", action="store_true",
-                        help="Test modu: eşik kontrolü yapmadan Telegram'a test mesajı gönder")
+                        help="Sadece Telegram bağlantısını test et")
     args = parser.parse_args()
 
     if args.test:
         from trigger_alerts import _send
         ok = _send(
             f"🧪 <b>TEST — Katman {args.layer}</b>\n"
-            f"Sistem çalışıyor. Telegram bağlantısı aktif.\n"
-            f"Katman {args.layer} tetikleyicileri aktif — eşik aşıldığında alarm gönderilecek."
+            f"Telegram bağlantısı aktif."
         )
-        print("✅ Test mesajı gönderildi" if ok else "❌ Test mesajı gönderilemedi")
+        print("✅ Test mesajı gönderildi" if ok else "❌ Gönderilemedi")
         exit(0)
 
-    run(args.layer)
+    run(args.layer, manual=args.manual)
