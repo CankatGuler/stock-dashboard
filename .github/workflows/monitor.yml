@@ -69,13 +69,14 @@ jobs:
       - name: 📦 Bağımlılıkları yükle
         run: |
           pip install --upgrade pip
-          pip install yfinance requests anthropic python-dotenv
+          pip install yfinance requests anthropic python-dotenv pandas tefas-crawler lxml beautifulsoup4
 
       - name: 🔍 Katman 1 — Acil Alarm Kontrolü
         env:
           ANTHROPIC_API_KEY:  ${{ secrets.ANTHROPIC_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          GH_PAT:             ${{ secrets.GH_TOKEN }}
         run: |
           python trigger_monitor.py --layer 1
         # Hata olursa işi başarısız say ama bildirimsiz geç
@@ -101,13 +102,14 @@ jobs:
       - name: 📦 Bağımlılıkları yükle
         run: |
           pip install --upgrade pip
-          pip install yfinance requests anthropic python-dotenv
+          pip install yfinance requests anthropic python-dotenv pandas tefas-crawler lxml beautifulsoup4
 
       - name: 📊 Katman 2 — Önemli Sinyal Kontrolü
         env:
           ANTHROPIC_API_KEY:  ${{ secrets.ANTHROPIC_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          GH_PAT:             ${{ secrets.GH_TOKEN }}
         run: |
           python trigger_monitor.py --layer 2
         continue-on-error: true
@@ -131,13 +133,14 @@ jobs:
       - name: 📦 Bağımlılıkları yükle
         run: |
           pip install --upgrade pip
-          pip install yfinance requests anthropic python-dotenv
+          pip install yfinance requests anthropic python-dotenv pandas tefas-crawler lxml beautifulsoup4
 
       - name: 🌅 Katman 3 — Günlük Sabah Özeti
         env:
           ANTHROPIC_API_KEY:  ${{ secrets.ANTHROPIC_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+          GH_PAT:             ${{ secrets.GH_TOKEN }}
         run: |
           python trigger_monitor.py --layer 3
         continue-on-error: true

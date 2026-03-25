@@ -930,22 +930,6 @@ def generate_morning_summary(portfolio: list, usd_try: float) -> str:
         except Exception:
             pass
 
-    # USD/TRY — ayrı hesapla (fast_info daha güvenilir)
-    try:
-        _try_hist = yf.Ticker("USDTRY=X").history(period="5d")
-        if not _try_hist.empty and len(_try_hist) >= 2:
-            _try_now  = float(_try_hist["Close"].iloc[-1])
-            _try_prev = float(_try_hist["Close"].iloc[-2])
-            _try_chg  = (_try_now - _try_prev) / _try_prev * 100
-            _try_e    = "🔴" if _try_chg > 0.1 else ("🟢" if _try_chg < -0.1 else "⚪")
-            market_lines.append(
-                f"  {_try_e} 🇹🇷 <b>USD/TRY</b>: {_try_now:.2f} (%{_try_chg:+.2f})"
-            )
-        else:
-            market_lines.append(f"  ⚪ 🇹🇷 <b>USD/TRY</b>: {usd_try:.2f}")
-    except Exception:
-        market_lines.append(f"  ⚪ 🇹🇷 <b>USD/TRY</b>: {usd_try:.2f}")
-
     # Altın için XAUUSD=X dene, boş dönerse GC=F kullan
     gold_ticker = "XAUUSD=X"
     try:
@@ -954,7 +938,6 @@ def generate_morning_summary(portfolio: list, usd_try: float) -> str:
             gold_ticker = "GC=F"
     except Exception:
         gold_ticker = "GC=F"
-
     indicators[gold_ticker] = ("Altın (spot)" if gold_ticker == "XAUUSD=X"
                                 else "Altın (vadeli)", "🥇")
 
@@ -1009,7 +992,21 @@ def generate_morning_summary(portfolio: list, usd_try: float) -> str:
         except Exception:
             pass
 
-    # USD/TRY zaten yukarıda market_lines'a eklendi
+    # USD/TRY — history ile değişim hesapla
+    try:
+        _try_hist = yf.Ticker("USDTRY=X").history(period="5d")
+        if not _try_hist.empty and len(_try_hist) >= 2:
+            _try_now  = float(_try_hist["Close"].iloc[-1])
+            _try_prev = float(_try_hist["Close"].iloc[-2])
+            _try_chg  = (_try_now - _try_prev) / _try_prev * 100
+            _try_e    = "🔴" if _try_chg > 0.1 else ("🟢" if _try_chg < -0.1 else "⚪")
+            market_lines.append(
+                f"  {_try_e} 🇹🇷 <b>USD/TRY</b>: {_try_now:.2f} (%{_try_chg:+.2f})"
+            )
+        else:
+            market_lines.append(f"  ⚪ 🇹🇷 <b>USD/TRY</b>: {usd_try:.2f}")
+    except Exception:
+        market_lines.append(f"  ⚪ 🇹🇷 <b>USD/TRY</b>: {usd_try:.2f}")
 
     lines.append("\n📊 <b>Piyasa Göstergeleri (24s):</b>")
     lines.extend(market_lines)
