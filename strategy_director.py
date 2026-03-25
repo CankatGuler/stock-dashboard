@@ -1004,17 +1004,25 @@ def analyze_turkey_with_claude(turkey_data: dict, portfolio_positions: list,
 # AŞAMA B — STRATEJİ DİREKTÖRÜ
 # ═══════════════════════════════════════════════════════════════════════════
 
-def _build_director_system(user_profile: dict, year_target_pct: float) -> str:
+def _build_director_system(user_profile: dict, year_target_pct: float,
+                           memory_context: str = "") -> str:
     """
     Direktörün sistem promptunu kullanıcı profiline göre oluştur.
     Kimlik + karar çerçevesi + kişisel parametreler + zorunlu çıktılar.
+    memory_context: MemoryManager'dan gelen hafıza bağlamı (prompt'un başına eklenir).
     """
     time_horizon  = user_profile.get("time_horizon",  "1-3 yıl (Uzun Vade)")
     risk_tol      = user_profile.get("risk_tol",      "Orta-Yüksek")
     cash_cycle    = user_profile.get("cash_cycle",    "3 ayda bir")
     goal          = user_profile.get("goal",          "Uzun vadeli büyüme")
 
-    return f"""Sen çok varlıklı portföy yönetiminde uzmanlaşmış kıdemli bir strateji direktörüsün.
+    # Hafıza bağlamını promptun en başına enjekte et
+    memory_block = (
+        f"{memory_context}\n\n"
+        if memory_context.strip() else ""
+    )
+
+    return f"""{memory_block}Sen çok varlıklı portföy yönetiminde uzmanlaşmış kıdemli bir strateji direktörüsün.
 ABD hisse senetleri, kripto varlıklar, emtialar (özellikle altın) ve Türkiye borsası olmak üzere
 dört farklı piyasayı eş zamanlı yönetme deneyimine sahipsin.
 
@@ -2053,17 +2061,25 @@ def analyze_turkey_with_claude(turkey_data: dict, portfolio_positions: list,
 # AŞAMA B — STRATEJİ DİREKTÖRÜ
 # ═══════════════════════════════════════════════════════════════════════════
 
-def _build_director_system(user_profile: dict, year_target_pct: float) -> str:
+def _build_director_system(user_profile: dict, year_target_pct: float,
+                           memory_context: str = "") -> str:
     """
     Direktörün sistem promptunu kullanıcı profiline göre oluştur.
     Kimlik + karar çerçevesi + kişisel parametreler + zorunlu çıktılar.
+    memory_context: MemoryManager'dan gelen hafıza bağlamı (prompt'un başına eklenir).
     """
     time_horizon  = user_profile.get("time_horizon",  "1-3 yıl (Uzun Vade)")
     risk_tol      = user_profile.get("risk_tol",      "Orta-Yüksek")
     cash_cycle    = user_profile.get("cash_cycle",    "3 ayda bir")
     goal          = user_profile.get("goal",          "Uzun vadeli büyüme")
 
-    return f"""Sen çok varlıklı portföy yönetiminde uzmanlaşmış kıdemli bir strateji direktörüsün.
+    # Hafıza bağlamını promptun en başına enjekte et
+    memory_block = (
+        f"{memory_context}\n\n"
+        if memory_context.strip() else ""
+    )
+
+    return f"""{memory_block}Sen çok varlıklı portföy yönetiminde uzmanlaşmış kıdemli bir strateji direktörüsün.
 ABD hisse senetleri, kripto varlıklar, emtialar (özellikle altın) ve Türkiye borsası olmak üzere
 dört farklı piyasayı eş zamanlı yönetme deneyimine sahipsin.
 
@@ -2543,8 +2559,35 @@ def run_director(
 ) -> dict:
     """
     Strateji direktörü — 5 analist raporunu alıp sentezler.
+    Hafıza sistemi entegrasyonu: analiz öncesi bağlam enjekte eder,
+    analiz sonrası kararı kaydeder.
     """
-    system  = _build_director_system(user_profile, year_target_pct)
+    # ── Hafıza Bağlamını Oluştur (Prompt Enjeksiyonu) ──────────────────────
+    memory_context = ""
+    try:
+        from director_memory import memory as _memory
+        # Mevcut piyasa verilerini al (hafıza karşılaştırması için)
+        _macro = all_data.get("macro", {}) if all_data else {}
+        _inds  = _macro.get("indicators", {})
+        _vix   = _inds.get("VIX", {})
+        _btc_d = (all_data.get("crypto", {}).get("prices", {}).get("BTC", {})
+                  if all_data else {})
+        _cur_vix = float(_vix.get("value", 0) if isinstance(_vix, dict) else 0)
+        _cur_btc = float(_btc_d.get("price", 0) if isinstance(_btc_d, dict) else 0)
+        _cur_try = float(portfolio_state.get("usd_try", 0))
+
+        memory_context = _memory.build_context(
+            mevcut_vix=_cur_vix,
+            mevcut_btc=_cur_btc,
+            mevcut_try=_cur_try,
+        )
+        if memory_context:
+            logger.info("Hafıza bağlamı enjekte edildi (%d karakter)", len(memory_context))
+    except Exception as e:
+        logger.warning("Hafıza bağlamı üretilemedi (devam ediliyor): %s", e)
+
+    # ── Direktör Analizini Çalıştır ────────────────────────────────────────
+    system  = _build_director_system(user_profile, year_target_pct, memory_context)
     message = _build_director_message(
         macro_report, us_report, crypto_report,
         commodity_report, turkey_report,
@@ -2597,6 +2640,58 @@ def run_director(
     }
 
     logger.info("Direktör analizi tamamlandı.")
+
+    # ── Kararı Hafızaya Kaydet ─────────────────────────────────────────────
+    try:
+        from director_memory import memory as _memory
+
+        # Rejim tespiti
+        _rejim = parsed.get("piyasa_ozeti", "")[:50] or "Belirsiz"
+        # Analiz sinyalinden rejimi çıkar
+        _sentez = parsed.get("analist_sentezi", {})
+        _makro_sig = _sentez.get("makro", {}).get("sinyal", "")
+        if _makro_sig in ("SAT", "AZALT"):
+            _rejim_etiket = "Savunma"
+        elif _makro_sig in ("AL", "ARTIR"):
+            _rejim_etiket = "Risk-On"
+        else:
+            _rejim_etiket = "Nötr/Bekle"
+
+        # Aksiyonları hafıza formatına dönüştür
+        _pa       = parsed.get("portfoy_aksiyonlari", {})
+        _aksiyonlar = []
+        for _item in (_pa.get("hemen_yap", []) + _pa.get("kosullu_yap", [])):
+            _tk = _item.get("ticker") or _item.get("varlik", "")
+            _ey = _item.get("eylem", "")
+            _mp = _item.get("miktar_pct") or _item.get("miktar", 0)
+            if _tk and _ey:
+                _aksiyonlar.append({
+                    "varlik":     _tk,
+                    "eylem":      _ey,
+                    "miktar_pct": _mp,
+                    "fiyat":      0,  # Anlık fiyat burada yok — trigger_monitor tarafından doldurulabilir
+                })
+
+        # Mevcut piyasa değerleri
+        _macro_raw = all_data.get("macro", {}) if all_data else {}
+        _inds_raw  = _macro_raw.get("indicators", {})
+        _vix_val   = float(_inds_raw.get("VIX", {}).get("value", 0) if isinstance(_inds_raw.get("VIX"), dict) else 0)
+        _btc_val   = float((all_data.get("crypto", {}).get("prices", {}).get("BTC", {}).get("price", 0)) if all_data else 0)
+        _try_val   = float(portfolio_state.get("usd_try", 0))
+
+        _memory.save_decision(
+            vix             = _vix_val,
+            btc_fiyat       = _btc_val,
+            usdtry          = _try_val,
+            rejim           = _rejim_etiket,
+            ana_aksiyonlar  = _aksiyonlar[:10],
+            ozet            = parsed.get("piyasa_ozeti", "")[:200],
+            trigger_kaynagi = "strateji_analizi",
+        )
+        logger.info("Direktör kararı hafızaya kaydedildi: %s", _rejim_etiket)
+    except Exception as e:
+        logger.warning("Hafıza kayıt hatası (analiz etkilenmedi): %s", e)
+
     return parsed
 
 
