@@ -174,14 +174,14 @@
     },
     {
       "ticker": "TI1",
-      "shares": 96.0,
-      "avg_cost": 1364.348646,
+      "shares": 126.0,
+      "avg_cost": 1378.4568874285715,
       "sector": "TEFAS",
-      "notes": "IS Portföy Para Piyasası Fonu",
+      "notes": "",
       "asset_class": "tefas",
       "currency": "TRY",
       "added": "2026-03-18 18:36",
-      "updated": "2026-03-18 18:36"
+      "updated": "2026-03-25 11:45"
     },
     {
       "ticker": "TSI",
