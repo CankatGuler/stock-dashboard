@@ -913,12 +913,13 @@ def generate_morning_summary(portfolio: list, usd_try: float) -> str:
 
     # ── 1. Piyasa Göstergeleri ────────────────────────────────────────────────
     indicators = {
-        "^VIX":    ("VIX",     ""),
-        "SPY":     ("SPY",     "📈"),
-        "BTC-USD": ("BTC",     "₿"),
-        "DX-Y.NYB":("DXY",    "💵"),
-        "GC=F":    ("Altın",   "🥇"),
-        "^TNX":    ("10Y",     "📊"),
+        "^VIX":    ("VIX",          ""),
+        "SPY":     ("S&P 500",       "📈"),
+        "^NDX":    ("Nasdaq-100",    "💻"),
+        "BTC-USD": ("BTC",           "₿"),
+        "DX-Y.NYB":("DXY",          "💵"),
+        "XAUUSD=X":("Altın (spot)", "🥇"),
+        "^TNX":    ("ABD 10Y",       "📊"),
     }
 
     market_lines = []
@@ -944,7 +945,7 @@ def generate_morning_summary(portfolio: list, usd_try: float) -> str:
                 btc_chg   = chg
                 val_str   = f"${price:,.0f}"
                 chg_str   = f"%{chg:+.1f}"
-            elif ticker == "GC=F":
+            elif ticker == "XAUUSD=X":
                 gold_price = price
                 val_str    = f"${price:,.0f}/oz"
                 chg_str    = f"%{chg:+.1f}"
