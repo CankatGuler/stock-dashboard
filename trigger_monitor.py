@@ -1013,7 +1013,6 @@ def generate_morning_summary(portfolio: list, usd_try: float) -> str:
         lines.append("")
         lines.append("💼 <b>Portföy Durumu:</b>")
 
-        # Varlık sınıfı etiketleri
         class_labels = {
             "us_equity": "🇺🇸 ABD Hisse",
             "crypto":    "₿ Kripto",
@@ -1022,87 +1021,23 @@ def generate_morning_summary(portfolio: list, usd_try: float) -> str:
             "cash":      "💵 Nakit",
         }
 
-        # Anlık fiyatları toplu çek (crypto + us_equity)
-        live_prices = {}
-        try:
-            _cry_tks = [p["ticker"] for p in portfolio
-                        if p.get("asset_class") == "crypto"
-                        and float(p.get("shares", 0)) > 0]
-            _us_tks  = [p["ticker"] for p in portfolio
-                        if p.get("asset_class") in ("us_equity", "other", "")
-                        and float(p.get("shares", 0)) > 0]
-
-            # Tüm tickerları tek seferde çek (daha hızlı)
-            all_tks = list(set(_cry_tks + _us_tks))
-            if all_tks:
-                for _tk in all_tks:
-                    try:
-                        _hist = yf.Ticker(_tk).history(period="2d")
-                        if not _hist.empty:
-                            _p = float(_hist["Close"].iloc[-1])
-                            if _p > 0:
-                                live_prices[_tk] = _p
-                    except Exception:
-                        pass
-
-            # Emtia: altın TL/gram çevir
-            for _gold_tk in ("XAUUSD=X", "GC=F"):
-                try:
-                    _hist_g = yf.Ticker(_gold_tk).history(period="2d")
-                    if not _hist_g.empty:
-                        _oz = float(_hist_g["Close"].iloc[-1])
-                        if _oz > 0:
-                            live_prices["ALTIN_GRAM_TRY"] = _oz * usd_try / 31.1035
-                            live_prices["GUMUS_GRAM_TRY"] = 0
-                            break
-                except Exception:
-                    pass
-
-            # Gümüş
-            try:
-                _hist_s = yf.Ticker("SI=F").history(period="2d")
-                if not _hist_s.empty:
-                    _oz_s = float(_hist_s["Close"].iloc[-1])
-                    if _oz_s > 0:
-                        live_prices["GUMUS_GRAM_TRY"] = _oz_s * usd_try / 31.1035
-            except Exception:
-                pass
-
-        except Exception:
-            pass
-
-        # Varlık sınıfı bazında değer ve K/Z topla
-        class_data = {}  # {ac: {"cur_val": x, "cost_val": y}}
-
+        # Portföy JSON'undaki current_price kullan — uygulama bunu güncel tutar
+        class_data = {}
         for p in portfolio:
-            ac  = p.get("asset_class", "").strip()
-            # "other" veya bilinmeyen → us_equity say
+            ac     = p.get("asset_class", "").strip()
             if ac not in class_labels:
                 ac = "us_equity"
 
             cur    = p.get("currency", "USD")
-            avg    = float(p.get("avg_cost", 0))
             shr    = float(p.get("shares", 0))
-            ticker = p.get("ticker", "")
+            avg    = float(p.get("avg_cost", 0))
+            # current_price yoksa avg_cost kullan
+            live   = float(p.get("current_price") or avg)
 
-            # Maliyet (USD)
-            cost_val = shr * avg / usd_try if cur == "TRY" else shr * avg
-
-            # Anlık fiyat — 3 kaynaktan en iyi değeri al:
-            # 1. Portföy JSON'undaki current_price (Streamlit app tarafından güncellenir)
-            # 2. yfinance live_prices dict (kripto + ABD hisse için çekildi)
-            # 3. avg_cost fallback
-            port_cur_price = float(p.get("current_price", 0) or 0)
-            yf_price       = live_prices.get(ticker, 0)
-
-            if yf_price > 0:
-                live_price = yf_price
-            elif port_cur_price > 0:
-                live_price = port_cur_price
-            else:
-                live_price = avg  # fallback: maliyet = mevcut değer, K/Z = 0
-
-            cur_val = shr * live_price / usd_try if cur == "TRY" else shr * live_price
+            # USD'ye çevir
+            div    = usd_try if cur == "TRY" else 1.0
+            cur_val  = shr * live / div
+            cost_val = shr * avg  / div
 
             if ac not in class_data:
                 class_data[ac] = {"cur_val": 0.0, "cost_val": 0.0}
@@ -1111,27 +1046,23 @@ def generate_morning_summary(portfolio: list, usd_try: float) -> str:
 
         total_cur  = sum(d["cur_val"]  for d in class_data.values())
         total_cost = sum(d["cost_val"] for d in class_data.values())
-        total_pnl  = total_cur - total_cost
 
-        # Her sınıfı satır olarak yaz
         for ac, d in sorted(class_data.items(), key=lambda x: -x[1]["cur_val"]):
-            label    = class_labels.get(ac, "🇺🇸 ABD Hisse")
-            cur_val  = d["cur_val"]
-            cost_val = d["cost_val"]
-            pnl      = cur_val - cost_val
-            pnl_pct  = pnl / cost_val * 100 if cost_val > 0 else 0
-            pnl_e    = "🟢" if pnl >= 0 else "🔴"
+            label = class_labels.get(ac, "🇺🇸 ABD Hisse")
+            pnl   = d["cur_val"] - d["cost_val"]
+            ppct  = pnl / d["cost_val"] * 100 if d["cost_val"] > 0 else 0
+            sign  = "🟢" if pnl >= 0 else "🔴"
             lines.append(
-                f"  {label}: ${cur_val:,.0f} | "
-                f"{pnl_e} K/Z: ${pnl:+,.0f} (%{pnl_pct:+.1f})"
+                f"  {label}: ${d['cur_val']:,.0f} | "
+                f"{sign} K/Z: ${pnl:+,.0f} (%{ppct:+.1f})"
             )
 
-        # Toplam
+        total_pnl     = total_cur - total_cost
         total_pnl_pct = total_pnl / total_cost * 100 if total_cost > 0 else 0
-        tot_e = "🟢" if total_pnl >= 0 else "🔴"
+        sign = "🟢" if total_pnl >= 0 else "🔴"
         lines.append(
             f"  <b>Toplam: ${total_cur:,.0f} | "
-            f"{tot_e} K/Z: ${total_pnl:+,.0f} (%{total_pnl_pct:+.1f})</b>"
+            f"{sign} K/Z: ${total_pnl:+,.0f} (%{total_pnl_pct:+.1f})</b>"
         )
 
     # ── 4. Kripto Özet ────────────────────────────────────────────────────────
