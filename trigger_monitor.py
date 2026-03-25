@@ -1054,7 +1054,7 @@ def generate_morning_summary(portfolio: list, usd_try: float) -> str:
         except Exception:
             pass
 
-        # Tek döngü — tüm varlık sınıfları aynı mantıkla
+        # Tek döngü — tüm varlık sınıfları
         for p in portfolio:
             if float(p.get("shares", 0)) <= 0:
                 continue
@@ -1069,21 +1069,23 @@ def generate_morning_summary(portfolio: list, usd_try: float) -> str:
             cur = p.get("currency", "USD")
 
             cost = shr * avg / usd_try if cur == "TRY" else shr * avg
+            val  = cost  # fallback
 
-            # Anlık fiyat
-            live = avg
             try:
-                if tk in ("ALTIN_GRAM_TRY", "XAUTRY=X") and gold_usd > 0:
-                    live = gold_usd * usd_try / 31.1035
-                    val  = shr * live / usd_try
+                if ac == "tefas":
+                    from turkey_fetcher import fetch_tefas_fund
+                    fd = fetch_tefas_fund(tk)
+                    if fd and fd.get("price", 0) > 0:
+                        val = shr * float(fd["price"]) / usd_try
+                elif tk in ("ALTIN_GRAM_TRY", "XAUTRY=X") and gold_usd > 0:
+                    val = shr * (gold_usd * usd_try / 31.1035) / usd_try
                 elif tk in ("GUMUS_GRAM_TRY", "XAGTRY=X") and silver_usd > 0:
-                    live = silver_usd * usd_try / 31.1035
-                    val  = shr * live / usd_try
+                    val = shr * (silver_usd * usd_try / 31.1035) / usd_try
                 else:
                     h = yf.Ticker(tk).history(period="2d")
                     if not h.empty:
                         live = float(h["Close"].iloc[-1])
-                    val = shr * live / usd_try if cur == "TRY" else shr * live
+                        val  = shr * live / usd_try if cur == "TRY" else shr * live
             except Exception:
                 val = cost
 
