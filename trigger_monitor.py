@@ -1296,7 +1296,8 @@ def run(layer: int, manual: bool = False) -> None:
 
     # ── Telegram'a Gönder ────────────────────────────────────────────────────
     from trigger_alerts import format_and_send_alert
-    format_and_send_alert(triggered_signals, director_response, ammo, usd_try)
+    format_and_send_alert(triggered_signals, director_response, ammo, usd_try,
+                          portfolio=portfolio)
 
 
 # ─── Giriş Noktası ───────────────────────────────────────────────────────────
