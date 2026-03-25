@@ -3006,13 +3006,19 @@ with tab_radar:
             with col_tg:
                 if st.button("📱 Telegram'a Gönder", use_container_width=True, key="tg_radar"):
                     try:
-                        from telegram_notifier import send_message, format_radar_summary
-                        msg = format_radar_summary(radar_results, title="🔭 Manuel Radar Özeti")
-                        ok  = send_message(msg)
+                        from telegram_notifier import send_message
+                        # Radar sonuçlarını basit formatta gönder
+                        lines = ["🔭 <b>Manuel Radar Özeti</b>", ""]
+                        for r in radar_results[:8]:
+                            lines.append(
+                                f"• <b>{r.get('ticker','?')}</b> — {r.get('neden','')[:80]}"
+                            )
+                        lines.append(f"\n📊 <a href='{DASHBOARD_URL}'>Dashboard</a>")
+                        ok = send_message("\n".join(lines))
                         if ok:
                             st.success("✅ Telegram'a gönderildi!")
                         else:
-                            st.error("❌ Gönderilemedi. TELEGRAM_BOT_TOKEN ve TELEGRAM_CHAT_ID secret'larını kontrol et.")
+                            st.error("❌ Gönderilemedi. Secrets'ları kontrol et.")
                     except Exception as e:
                         st.error(f"Hata: {e}")
 

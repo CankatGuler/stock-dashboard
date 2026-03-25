@@ -222,7 +222,7 @@ def main():
 
     from weekly_scanner    import run_surprise_scan, run_portfolio_scan
     from portfolio_manager import load_portfolio
-    from telegram_notifier import send_message
+    from telegram_notifier import send_message  # Temel gönderim — format güncellemesi lazım
 
     date_str = datetime.now(timezone.utc).strftime("%d.%m.%Y")
 
