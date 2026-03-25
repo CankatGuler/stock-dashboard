@@ -1029,55 +1029,80 @@ def generate_morning_summary(portfolio: list, usd_try: float) -> str:
                         if p.get("asset_class") == "crypto"
                         and float(p.get("shares", 0)) > 0]
             _us_tks  = [p["ticker"] for p in portfolio
-                        if p.get("asset_class") == "us_equity"
+                        if p.get("asset_class") in ("us_equity", "other", "")
                         and float(p.get("shares", 0)) > 0]
 
-            for _tk in _cry_tks + _us_tks:
+            # Tüm tickerları tek seferde çek (daha hızlı)
+            all_tks = list(set(_cry_tks + _us_tks))
+            if all_tks:
+                for _tk in all_tks:
+                    try:
+                        _hist = yf.Ticker(_tk).history(period="2d")
+                        if not _hist.empty:
+                            _p = float(_hist["Close"].iloc[-1])
+                            if _p > 0:
+                                live_prices[_tk] = _p
+                    except Exception:
+                        pass
+
+            # Emtia: altın TL/gram çevir
+            for _gold_tk in ("XAUUSD=X", "GC=F"):
                 try:
-                    _fi = yf.Ticker(_tk).fast_info
-                    _p  = float(getattr(_fi, "last_price", 0) or 0)
-                    if _p > 0:
-                        live_prices[_tk] = _p
+                    _hist_g = yf.Ticker(_gold_tk).history(period="2d")
+                    if not _hist_g.empty:
+                        _oz = float(_hist_g["Close"].iloc[-1])
+                        if _oz > 0:
+                            live_prices["ALTIN_GRAM_TRY"] = _oz * usd_try / 31.1035
+                            live_prices["GUMUS_GRAM_TRY"] = 0
+                            break
                 except Exception:
                     pass
 
-            # Emtia: altın ve gümüş TL/gram çevir
-            for _gold_tk in ("XAUUSD=X", "GC=F"):
-                try:
-                    _oz = float(yf.Ticker(_gold_tk).fast_info.last_price or 0)
-                    if _oz > 0:
-                        live_prices["ALTIN_GRAM_TRY"]  = _oz * usd_try / 31.1035
-                        live_prices["GUMUS_GRAM_TRY"]  = 0  # gümüş ayrıca eklenecek
-                        break
-                except Exception:
-                    pass
+            # Gümüş
+            try:
+                _hist_s = yf.Ticker("SI=F").history(period="2d")
+                if not _hist_s.empty:
+                    _oz_s = float(_hist_s["Close"].iloc[-1])
+                    if _oz_s > 0:
+                        live_prices["GUMUS_GRAM_TRY"] = _oz_s * usd_try / 31.1035
+            except Exception:
+                pass
+
         except Exception:
-            pass  # Fiyat çekilemezse maliyet bazlı devam et
+            pass
 
         # Varlık sınıfı bazında değer ve K/Z topla
         class_data = {}  # {ac: {"cur_val": x, "cost_val": y}}
 
         for p in portfolio:
             ac  = p.get("asset_class", "").strip()
-            # "other" veya bilinmeyen → us_equity say (kullanıcı portföyünde böyle)
+            # "other" veya bilinmeyen → us_equity say
             if ac not in class_labels:
                 ac = "us_equity"
 
-            cur      = p.get("currency", "USD")
-            avg      = float(p.get("avg_cost", 0))
-            shr      = float(p.get("shares", 0))
-            ticker   = p.get("ticker", "")
+            cur    = p.get("currency", "USD")
+            avg    = float(p.get("avg_cost", 0))
+            shr    = float(p.get("shares", 0))
+            ticker = p.get("ticker", "")
 
             # Maliyet (USD)
             cost_val = shr * avg / usd_try if cur == "TRY" else shr * avg
 
-            # Anlık değer (USD)
-            live = live_prices.get(ticker)
-            if live and live > 0:
-                cur_val = shr * live / usd_try if cur == "TRY" else shr * live
+            # Anlık fiyat — 3 kaynaktan en iyi değeri al:
+            # 1. Portföy JSON'undaki current_price (Streamlit app tarafından güncellenir)
+            # 2. yfinance live_prices dict (kripto + ABD hisse için çekildi)
+            # 3. avg_cost fallback
+            port_cur_price = float(p.get("current_price", 0) or 0)
+            yf_price       = live_prices.get(ticker, 0)
+
+            if yf_price > 0:
+                live_price = yf_price
+            elif port_cur_price > 0:
+                live_price = port_cur_price
             else:
-                # Anlık fiyat yoksa: maliyet ile aynı tut
-                cur_val = cost_val
+                live_price = avg  # fallback: maliyet = mevcut değer, K/Z = 0
+
+            cur_val = shr * live_price / usd_try if cur == "TRY" else shr * live_price
 
             if ac not in class_data:
                 class_data[ac] = {"cur_val": 0.0, "cost_val": 0.0}
