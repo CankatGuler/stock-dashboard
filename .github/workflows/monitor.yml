@@ -28,7 +28,9 @@ jobs:
   layer1:
     name: "Katman 1 — Acil Alarmlar"
     runs-on: ubuntu-latest
-    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.layer == '1')
+    if: |
+      (github.event_name == 'schedule' && github.event.schedule == '*/15 * * * *') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.layer == '1')
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -55,7 +57,9 @@ jobs:
   layer2:
     name: "Katman 2 — Onemli Sinyaller"
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.layer == '2'
+    if: |
+      (github.event_name == 'schedule' && github.event.schedule == '0 * * * *') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.layer == '2')
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
