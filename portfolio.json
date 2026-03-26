@@ -501,9 +501,20 @@
       "currency": "USD",
       "added": "2026-03-18 21:32",
       "updated": "2026-03-18 21:32"
+    },
+    {
+      "ticker": "NVDA",
+      "shares": 2.863725,
+      "avg_cost": 174.59,
+      "sector": "Diğer",
+      "notes": "",
+      "asset_class": "us_equity",
+      "currency": "USD",
+      "added": "2026-03-26 16:02",
+      "updated": "2026-03-26 16:02"
     }
   ],
-  "cash": 2060.57,
+  "cash": 1560.59,
   "cash_accounts": {
     "usd": 2060.57,
     "commodity_usd": 0.0,
