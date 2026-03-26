@@ -77,7 +77,9 @@ jobs:
   layer3:
     name: "Katman 3 — Sabah Ozeti"
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.layer == '3'
+    if: |
+      (github.event_name == 'schedule' && github.event.schedule == '30 4 * * *') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.layer == '3')
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -102,7 +104,7 @@ jobs:
     # Her Pazar 20:00 UTC (Pazartesi 23:00 TR) — hafta kapanışında değerlendirme
     # Manuel de çalıştırılabilir
     if: |
-      github.event_name == 'schedule' ||
+      (github.event_name == 'schedule' && github.event.schedule == '0 20 * * 0') ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.layer == '3')
 
     steps:
