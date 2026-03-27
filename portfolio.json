@@ -536,9 +536,9 @@
       "updated": "2026-03-27 16:01"
     }
   ],
-  "cash": 0.0,
+  "cash": 457.39,
   "cash_accounts": {
-    "usd": 0.0,
+    "usd": 457.39,
     "commodity_usd": 0.0,
     "crypto_usd": 1000.0,
     "tefas_try": 0.0
