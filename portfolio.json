@@ -523,9 +523,20 @@
       "currency": "USD",
       "added": "2026-03-27 16:00",
       "updated": "2026-03-27 16:00"
+    },
+    {
+      "ticker": "MU",
+      "shares": 1.363445481,
+      "avg_cost": 366.71,
+      "sector": "Diğer",
+      "notes": "",
+      "asset_class": "us_equity",
+      "currency": "USD",
+      "added": "2026-03-27 16:01",
+      "updated": "2026-03-27 16:01"
     }
   ],
-  "cash": 964.5,
+  "cash": 464.51,
   "cash_accounts": {
     "usd": 2060.57,
     "commodity_usd": 0.0,
