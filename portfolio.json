@@ -512,9 +512,20 @@
       "currency": "USD",
       "added": "2026-03-26 16:02",
       "updated": "2026-03-26 16:02"
+    },
+    {
+      "ticker": "LLY",
+      "shares": 0.67,
+      "avg_cost": 889.68,
+      "sector": "Healthcare",
+      "notes": "",
+      "asset_class": "us_equity",
+      "currency": "USD",
+      "added": "2026-03-27 16:00",
+      "updated": "2026-03-27 16:00"
     }
   ],
-  "cash": 1560.59,
+  "cash": 964.5,
   "cash_accounts": {
     "usd": 2060.57,
     "commodity_usd": 0.0,
