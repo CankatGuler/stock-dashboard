@@ -1,12 +1,24 @@
-streamlit>=1.35.0
+# ── Web Framework ──────────────────────────────────────────────────────────────
+fastapi>=0.111.0
+uvicorn[standard]>=0.30.0
+python-multipart>=0.0.9
+
+# ── Telegram Bot ───────────────────────────────────────────────────────────────
+python-telegram-bot>=21.0
+
+# ── AI ─────────────────────────────────────────────────────────────────────────
 anthropic>=0.28.0
+
+# ── Veri ───────────────────────────────────────────────────────────────────────
 requests>=2.32.3
 python-dotenv>=1.0.1
 pandas>=2.0.0
-plotly>=5.22.0
+yfinance>=0.2.50
+tefas-crawler>=0.5.0
 feedparser>=6.0.11
 beautifulsoup4>=4.12.3
 lxml>=6.0.0
-yfinance>=0.2.50
 html5lib>=1.1
-tefas-crawler>=0.5.0
+
+# ── Zamanlama (arka plan görevleri) ────────────────────────────────────────────
+apscheduler>=3.10.0
