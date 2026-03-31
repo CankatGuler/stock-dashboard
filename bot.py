@@ -405,23 +405,24 @@ async def cmd_portfoy_guncelle(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def cmd_portfoy_detay(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """
-    Portföyü varlık bazında detaylı göster.
+    Portföyü anlık değerlerle detaylı göster.
     Kullanım: /detay [sinif]
     Örnek: /detay crypto
     """
     args      = ctx.args
     filtre_ac = args[0].lower() if args else None
 
-    await update.message.reply_text("⏳ Yükleniyor...")
+    await update.message.reply_text("⏳ Anlık fiyatlar çekiliyor...")
 
     try:
         from portfolio_manager import load_portfolio
         from strategy_data import fetch_usd_try_rate
+        import yfinance as yf
 
         portfolio = [p for p in load_portfolio() if float(p.get("shares", 0)) > 0]
         usd_try   = fetch_usd_try_rate()
 
-        # Filtre: us_equity için "other" ve boş asset_class da dahil et
+        # Filtre
         if filtre_ac:
             if filtre_ac == "us_equity":
                 portfolio = [p for p in portfolio
@@ -435,12 +436,20 @@ async def cmd_portfoy_detay(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Portföy boş veya filtre eşleşmedi.")
             return
 
+        # Altın fiyatını önceden çek
+        gold_usd = 0.0
+        try:
+            h = yf.Ticker("GC=F").history(period="2d")
+            if not h.empty:
+                gold_usd = float(h["Close"].iloc[-1])
+        except Exception:
+            pass
+
         labels = {
             "us_equity": "🇺🇸 ABD Hisse",
             "crypto":    "₿ Kripto",
             "commodity": "🥇 Emtia",
             "tefas":     "🇹🇷 TEFAS",
-            "cash":      "💵 Nakit",
             "other":     "🇺🇸 ABD Hisse",
             "":          "🇺🇸 ABD Hisse",
         }
@@ -449,32 +458,87 @@ async def cmd_portfoy_detay(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         groups: dict[str, list] = {}
         for p in portfolio:
             ac = p.get("asset_class", "us_equity") or "us_equity"
-            # us_equity grubuna normalize et
             if ac in ("other", ""):
                 ac = "us_equity"
             groups.setdefault(ac, []).append(p)
 
         lines = ["💼 <b>Portföy Detayı</b>", ""]
 
-        for ac, positions in groups.items():
-            ac_total = sum(
-                float(p.get("shares",0)) * float(p.get("avg_cost",0)) /
-                (usd_try if p.get("currency") == "TRY" else 1)
-                for p in positions
-            )
-            lines.append(f"<b>{labels.get(ac, ac)}</b> — ${ac_total:,.0f}")
-            for p in sorted(positions,
-                            key=lambda x: -float(x.get("shares",0))*float(x.get("avg_cost",0))):
+        ac_order = ["tefas", "us_equity", "crypto", "commodity", "cash"]
+        sorted_groups = sorted(groups.items(),
+                               key=lambda x: ac_order.index(x[0])
+                               if x[0] in ac_order else 99)
+
+        for ac, positions in sorted_groups:
+            ac_cur_total  = 0.0
+            ac_cost_total = 0.0
+            pos_lines     = []
+
+            for p in positions:
                 tk   = p.get("ticker", "?")
                 shr  = float(p.get("shares", 0))
                 avg  = float(p.get("avg_cost", 0))
                 cur  = p.get("currency", "USD")
-                cost = shr * avg / usd_try if cur == "TRY" else shr * avg
-                cur_symbol = "₺" if cur == "TRY" else "$"
-                lines.append(
-                    f"  • <b>{tk}</b>: {shr:,g} adet @ "
-                    f"{cur_symbol}{avg:,.2f} = ${cost:,.0f}"
+
+                # Maliyet (USD)
+                cost_usd = shr * avg / usd_try if cur == "TRY" else shr * avg
+
+                # Anlık fiyat çek
+                live_price = 0.0
+                try:
+                    if tk in ("ALTIN_GRAM_TRY", "XAUTRY=X") and gold_usd > 0:
+                        live_price = gold_usd * usd_try / 31.1035  # TL/gram
+                        cur_val_usd = shr * live_price / usd_try
+                    elif ac == "tefas":
+                        # TEFAS için fetch_tefas_fund kullan
+                        from turkey_fetcher import fetch_tefas_fund
+                        fd = fetch_tefas_fund(tk)
+                        if fd and fd.get("price", 0) > 0:
+                            live_price  = float(fd["price"])
+                            cur_val_usd = shr * live_price / usd_try
+                        else:
+                            cur_val_usd = cost_usd
+                    else:
+                        h = yf.Ticker(tk).history(period="2d")
+                        if not h.empty:
+                            live_price  = float(h["Close"].iloc[-1])
+                            cur_val_usd = shr * live_price / usd_try if cur == "TRY" else shr * live_price
+                        else:
+                            cur_val_usd = cost_usd
+                except Exception:
+                    cur_val_usd = cost_usd
+
+                pnl     = cur_val_usd - cost_usd
+                pnl_pct = pnl / cost_usd * 100 if cost_usd > 0 else 0
+                pnl_e   = "🟢" if pnl >= 0 else "🔴"
+
+                ac_cur_total  += cur_val_usd
+                ac_cost_total += cost_usd
+
+                # Fiyat formatı
+                if cur == "TRY" and live_price > 0:
+                    price_str = f"₺{live_price:,.4f}"
+                elif live_price > 0:
+                    price_str = f"${live_price:,.2f}"
+                else:
+                    price_str = "—"
+
+                pos_lines.append(
+                    f"  • <b>{tk}</b>: {shr:,g} × {price_str} = "
+                    f"${cur_val_usd:,.0f} "
+                    f"{pnl_e} ({pnl_pct:+.1f}%)"
                 )
+
+            # Sınıf başlığı — toplam + K/Z
+            ac_pnl     = ac_cur_total - ac_cost_total
+            ac_pnl_pct = ac_pnl / ac_cost_total * 100 if ac_cost_total > 0 else 0
+            ac_e       = "🟢" if ac_pnl >= 0 else "🔴"
+            lines.append(
+                f"<b>{labels.get(ac, ac)}</b> — "
+                f"${ac_cur_total:,.0f} "
+                f"{ac_e} ({ac_pnl_pct:+.1f}%)"
+            )
+            lines.extend(pos_lines)
             lines.append("")
 
         await update.message.reply_text(
