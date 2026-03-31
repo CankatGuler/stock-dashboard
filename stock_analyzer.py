@@ -147,6 +147,16 @@ def get_fundamentals(ticker: str) -> dict:
         except Exception:
             pass
 
+        # Temettü — yfinance bazen yanlış döndürüyor, doğrula
+        raw_div = info.get("dividendYield")
+        div_yield = None
+        if raw_div is not None:
+            if 0 < raw_div <= 0.20:
+                div_yield = raw_div        # Zaten oran (örn: 0.02 = %2)
+            elif 0.20 < raw_div <= 20:
+                div_yield = raw_div / 100  # Yüzde gelmiş (örn: 2.0 = %2)
+            # 20 üzeriyse anlamsız veri, None bırak
+
         return {
             # Kimlik
             "ticker":       ticker.upper(),
@@ -209,7 +219,7 @@ def get_fundamentals(ticker: str) -> dict:
             "market_cap":   mc_str,
 
             # Temettü
-            "div_yield":    info.get("dividendYield"),
+            "div_yield":    div_yield,
         }
 
     except Exception as e:
@@ -311,43 +321,48 @@ def format_fundamentals(data: dict) -> str:
 def search_market_news(query: str, context: str = "") -> str:
     """
     Claude'un web_search tool'u ile piyasa haberi ara.
-    Perplexity yerine — ücretsiz, Claude API'ye dahil.
-
-    query   : Aranacak konu (örn: "VIX spike sebebi bugün")
-    context : Ek bağlam (örn: portföy özeti)
-    Döndürür: 3-5 cümlelik haber özeti
+    529 overloaded hatası için 2 kez retry yapar.
     """
-    try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY", ""))
+    import anthropic
+    import time
 
-        prompt = f"""Şu piyasa sorusunu araştır ve 3-4 cümleyle özetle:
+    client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY", ""))
+
+    prompt = f"""Şu piyasa sorusunu araştır ve 3-4 cümleyle özetle:
 
 SORU: {query}
 {f'BAĞLAM: {context}' if context else ''}
 
-Sadece son 24 saatteki gelişmelere odaklan.
+Sadece son 24-48 saatteki gelişmelere odaklan.
 Türkçe yanıt ver.
 Kaynak link verme, sadece özet bilgi yaz."""
 
-        response = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=400,
-            tools=[{"type": "web_search_20250305", "name": "web_search"}],
-            messages=[{"role": "user", "content": prompt}],
-        )
+    for attempt in range(3):  # Max 3 deneme
+        try:
+            response = client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=400,
+                tools=[{"type": "web_search_20250305", "name": "web_search"}],
+                messages=[{"role": "user", "content": prompt}],
+            )
+            result = ""
+            for block in response.content:
+                if hasattr(block, "text"):
+                    result += block.text
+            return result.strip() if result else "Güncel haber bulunamadı."
 
-        # Yanıttan text bloklarını topla
-        result = ""
-        for block in response.content:
-            if hasattr(block, "text"):
-                result += block.text
+        except anthropic.APIStatusError as e:
+            if e.status_code == 529 and attempt < 2:
+                # Overloaded — kısa bekle ve tekrar dene
+                time.sleep(3 * (attempt + 1))
+                continue
+            logger.warning("Haber araması başarısız (attempt %d): %s", attempt+1, e)
+            return ""  # Hata mesajı gösterme, sessizce atla
+        except Exception as e:
+            logger.error("Haber araması hatası: %s", e)
+            return ""
 
-        return result.strip() if result else "Haber bulunamadı."
-
-    except Exception as e:
-        logger.error("Haber araması hatası: %s", e)
-        return f"Haber aranamadı: {e}"
+    return ""
 
 
 # ─── 3. Tam Hisse Analizi ────────────────────────────────────────────────────
