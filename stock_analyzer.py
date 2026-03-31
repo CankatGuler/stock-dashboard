@@ -60,6 +60,10 @@ def get_fundamentals(ticker: str) -> dict:
         else:
             mc_str = "—"
 
+        # FCF ve FCF Yield
+        fcf       = info.get("freeCashflow")
+        fcf_yield = (fcf / mc * 100) if fcf and mc else None
+
         # Net Debt / EBITDA hesapla
         net_debt_ebitda = None
         try:
