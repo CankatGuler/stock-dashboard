@@ -74,39 +74,100 @@ def clear_history() -> None:
 
 def _build_portfolio_context(usd_try: float) -> str:
     """
-    Mevcut portföy durumunu kısa ve okunabilir formatta hazırla.
-    Bu bağlam her mesajda sistem promptuna eklenir — direktör
-    "hangi varlıklar var?" diye düşünmek zorunda kalmaz.
+    Mevcut portföy durumunu anlık fiyatlar ve K/Z ile hazırla.
+    Direktör bu bağlamla "hangi varlık ne durumda?" sorusunu yanıtlayabilir.
     """
     try:
+        import yfinance as yf
         from portfolio_manager import load_portfolio
+
         portfolio = [p for p in load_portfolio() if float(p.get("shares", 0)) > 0]
         if not portfolio:
             return "Portföy boş veya yüklenemedi."
 
-        lines = ["MEVCUT PORTFÖY:"]
+        # Altın fiyatını önceden çek
+        gold_usd = 0.0
+        try:
+            h = yf.Ticker("GC=F").history(period="2d")
+            if not h.empty:
+                gold_usd = float(h["Close"].iloc[-1])
+        except Exception:
+            pass
+
+        lines = [f"MEVCUT PORTFÖY (USD/TRY: {usd_try:.2f}):"]
+
         class_groups: dict[str, list] = {}
         for p in portfolio:
-            ac = p.get("asset_class", "us_equity")
+            ac = p.get("asset_class", "us_equity") or "us_equity"
+            if ac in ("other", ""):
+                ac = "us_equity"
             class_groups.setdefault(ac, []).append(p)
 
+        ac_labels = {
+            "us_equity": "ABD Hisse",
+            "crypto":    "Kripto",
+            "commodity": "Emtia",
+            "tefas":     "TEFAS",
+            "cash":      "Nakit",
+        }
+
+        total_cur  = 0.0
+        total_cost = 0.0
+
         for ac, positions in class_groups.items():
-            ac_label = {
-                "us_equity": "ABD Hisse",
-                "crypto":    "Kripto",
-                "commodity": "Emtia",
-                "tefas":     "TEFAS",
-                "cash":      "Nakit",
-            }.get(ac, ac)
-            tickers = [p.get("ticker", "?") for p in positions]
-            total_cost = sum(
-                float(p.get("shares", 0)) * float(p.get("avg_cost", 0)) /
-                (usd_try if p.get("currency") == "TRY" else 1)
-                for p in positions
-            )
-            lines.append(f"  {ac_label}: {', '.join(tickers)} — ${total_cost:,.0f}")
+            lines.append(f"\n{ac_labels.get(ac, ac)}:")
+            for p in positions:
+                tk  = p.get("ticker", "?")
+                shr = float(p.get("shares", 0))
+                avg = float(p.get("avg_cost", 0))
+                cur = p.get("currency", "USD")
+
+                cost_usd = shr * avg / usd_try if cur == "TRY" else shr * avg
+
+                # Anlık fiyat
+                live_usd = cost_usd  # fallback
+                try:
+                    if tk in ("ALTIN_GRAM_TRY", "XAUTRY=X") and gold_usd > 0:
+                        live_tl  = gold_usd * usd_try / 31.1035
+                        live_usd = shr * live_tl / usd_try
+                    elif ac == "tefas":
+                        from turkey_fetcher import fetch_tefas_fund
+                        fd = fetch_tefas_fund(tk)
+                        if fd and fd.get("price", 0) > 0:
+                            live_usd = shr * float(fd["price"]) / usd_try
+                    else:
+                        h = yf.Ticker(tk).history(period="2d")
+                        if not h.empty:
+                            lp = float(h["Close"].iloc[-1])
+                            live_usd = shr * lp / usd_try if cur == "TRY" else shr * lp
+                except Exception:
+                    pass
+
+                pnl     = live_usd - cost_usd
+                pnl_pct = pnl / cost_usd * 100 if cost_usd > 0 else 0
+                sign    = "+" if pnl >= 0 else ""
+
+                total_cur  += live_usd
+                total_cost += cost_usd
+
+                lines.append(
+                    f"  {tk}: {shr:,g} adet | "
+                    f"maliyet ${cost_usd:,.0f} | "
+                    f"güncel ${live_usd:,.0f} | "
+                    f"K/Z {sign}${pnl:,.0f} ({sign}{pnl_pct:.1f}%)"
+                )
+
+        # Genel toplam
+        total_pnl     = total_cur - total_cost
+        total_pnl_pct = total_pnl / total_cost * 100 if total_cost > 0 else 0
+        lines.append(
+            f"\nTOPLAM: güncel ${total_cur:,.0f} | "
+            f"maliyet ${total_cost:,.0f} | "
+            f"K/Z ${total_pnl:+,.0f} ({total_pnl_pct:+.1f}%)"
+        )
 
         return "\n".join(lines)
+
     except Exception as e:
         return f"Portföy alınamadı: {e}"
 
@@ -116,12 +177,27 @@ def _build_memory_context() -> str:
     try:
         from director_memory import memory
         regime, days = memory.get_current_regime()
-        locks = memory.get_active_locks()
+        locks        = memory.get_active_locks()
+        kalibrasyon  = memory._hesapla_kalibrasyon()
+        recent       = memory.get_recent_decisions(n=3)
 
-        lines = [f"MEVCUT REJİM: {regime} ({days} gündür)"]
+        lines = []
+        if regime and regime != "Bilinmiyor":
+            lines.append(f"MEVCUT REJİM: {regime} ({days} gündür)")
+
         if locks:
             lines.append(f"KİLİTLİ VARLIKLAR: {', '.join(locks.keys())}")
-        return "\n".join(lines)
+
+        if recent:
+            son = recent[-1]
+            lines.append(
+                f"SON KARAR ({son.get('tarih','?')}): {son.get('ozet','')[:100]}"
+            )
+
+        if kalibrasyon:
+            lines.append(f"KALİBRASYON: {kalibrasyon}")
+
+        return "\n".join(lines) if lines else ""
     except Exception:
         return ""
 
