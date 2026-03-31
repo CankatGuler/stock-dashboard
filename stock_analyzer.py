@@ -60,21 +60,82 @@ def get_fundamentals(ticker: str) -> dict:
         else:
             mc_str = "—"
 
-        # FCF Yield hesapla
-        fcf        = info.get("freeCashflow")
-        market_cap = info.get("marketCap")
-        fcf_yield  = (fcf / market_cap * 100) if fcf and market_cap else None
+        # Net Debt / EBITDA hesapla
+        net_debt_ebitda = None
+        try:
+            bs  = t.balance_sheet
+            is_ = t.income_stmt
+            cf  = t.cashflow
+            if (bs is not None and not bs.empty and
+                is_ is not None and not is_.empty):
+
+                # Total Debt
+                total_debt = 0.0
+                for debt_key in ["Total Debt", "Long Term Debt", "Short Long Term Debt"]:
+                    if debt_key in bs.index:
+                        total_debt = float(bs.loc[debt_key].iloc[0] or 0)
+                        break
+
+                # Cash
+                cash_val = 0.0
+                for cash_key in ["Cash And Cash Equivalents", "Cash"]:
+                    if cash_key in bs.index:
+                        cash_val = float(bs.loc[cash_key].iloc[0] or 0)
+                        break
+
+                net_debt = total_debt - cash_val
+
+                # EBITDA = Operating Income + D&A
+                ebitda = info.get("ebitda")
+                if not ebitda and "EBIT" in is_.index:
+                    ebit = float(is_.loc["EBIT"].iloc[0] or 0)
+                    da   = 0.0
+                    if cf is not None and not cf.empty:
+                        for da_key in ["Depreciation And Amortization", "Depreciation"]:
+                            if da_key in cf.index:
+                                da = float(cf.loc[da_key].iloc[0] or 0)
+                                break
+                    ebitda = ebit + abs(da)
+
+                if ebitda and ebitda > 0:
+                    net_debt_ebitda = net_debt / ebitda
+        except Exception:
+            pass
+
+        # EV/Sales
+        ev_sales = None
+        ev = info.get("enterpriseValue")
+        rev = info.get("totalRevenue")
+        if ev and rev and rev > 0:
+            ev_sales = ev / rev
+
+        # Short Interest
+        short_ratio   = info.get("shortRatio")
+        short_pct_float = info.get("shortPercentOfFloat")
+
+        # Insider Ownership
+        insider_pct   = info.get("heldPercentInsiders")
+        inst_pct      = info.get("heldPercentInstitutions")
+
+        # Analist hedef fiyat
+        target_price  = info.get("targetMeanPrice")
+        analyst_count = info.get("numberOfAnalystOpinions")
+        recom         = info.get("recommendationKey", "")
+
+        # Upside/Downside
+        upside = None
+        if target_price and price > 0:
+            upside = (target_price - price) / price * 100
 
         # ROIC yaklaşımı (yfinance'te direkt yok, hesapla)
-        # ROIC = Net Income / (Total Assets - Current Liabilities)
         roic = None
         try:
-            bs   = t.balance_sheet
-            is_  = t.income_stmt
-            if bs is not None and not bs.empty and is_ is not None and not is_.empty:
-                total_assets = float(bs.loc["Total Assets"].iloc[0]) if "Total Assets" in bs.index else None
-                curr_liab    = float(bs.loc["Current Liabilities"].iloc[0]) if "Current Liabilities" in bs.index else None
-                net_income   = float(is_.loc["Net Income"].iloc[0]) if "Net Income" in is_.index else None
+            bs2  = t.balance_sheet
+            is2_ = t.income_stmt
+            if bs2 is not None and not bs2.empty and is2_ is not None and not is2_.empty:
+                total_assets = float(bs2.loc["Total Assets"].iloc[0]) if "Total Assets" in bs2.index else None
+                curr_liab    = float(bs2.loc["Current Liabilities"].iloc[0]) if "Current Liabilities" in bs2.index else None
+                net_income   = float(is2_.loc["Net Income"].iloc[0]) if "Net Income" in is2_.index else None
                 if total_assets and curr_liab and net_income:
                     invested_cap = total_assets - curr_liab
                     if invested_cap > 0:
@@ -103,6 +164,7 @@ def get_fundamentals(ticker: str) -> dict:
             "peg":          info.get("pegRatio"),
             "pb":           info.get("priceToBook"),
             "ev_ebitda":    info.get("enterpriseToEbitda"),
+            "ev_sales":     ev_sales,
 
             # Karlılık
             "roe":          info.get("returnOnEquity"),
@@ -118,13 +180,26 @@ def get_fundamentals(ticker: str) -> dict:
             "op_cashflow":  info.get("operatingCashflow"),
 
             # Bilanço
-            "debt_equity":  info.get("debtToEquity"),
-            "current_ratio":info.get("currentRatio"),
-            "quick_ratio":  info.get("quickRatio"),
+            "debt_equity":      info.get("debtToEquity"),
+            "net_debt_ebitda":  net_debt_ebitda,
+            "current_ratio":    info.get("currentRatio"),
+            "quick_ratio":      info.get("quickRatio"),
 
             # Büyüme
             "revenue_growth":   info.get("revenueGrowth"),
             "earnings_growth":  info.get("earningsGrowth"),
+
+            # Sahiplik & Kısa Pozisyon
+            "short_ratio":        short_ratio,
+            "short_pct_float":    short_pct_float,
+            "insider_pct":        insider_pct,
+            "inst_pct":           inst_pct,
+
+            # Analist
+            "target_price":   target_price,
+            "analyst_count":  analyst_count,
+            "recommendation": recom,
+            "upside":         upside,
 
             # Büyüklük
             "market_cap":   mc_str,
@@ -180,14 +255,13 @@ def format_fundamentals(data: dict) -> str:
 
         f"\n💰 <b>Fiyat</b>",
         f"  Anlık: <b>${price:,.2f}</b> {chg_e} ({price_chg:+.2f}%)",
-        f"  52h Aralık: ${l52:,.2f} — ${h52:,.2f}" if l52 and h52 else "  52h: —",
-        f"  Pozisyon: {pos_str}",
+        f"  52h: ${l52:,.2f} — ${h52:,.2f}  |  Pozisyon: {pos_str}" if l52 and h52 else "  52h: —",
         f"  Beta: {f(data.get('beta'), dec=2)}  |  Piyasa Değeri: {data.get('market_cap','—')}",
 
         f"\n📈 <b>Değerleme</b>",
-        f"  P/E (TTM): {f(data.get('pe_trailing'), dec=1)}  |  Forward P/E: {f(data.get('pe_forward'), dec=1)}",
+        f"  P/E (TTM): {f(data.get('pe_trailing'))}  |  Forward P/E: {f(data.get('pe_forward'))}",
         f"  PEG: {f(data.get('peg'), dec=2)}  |  P/B: {f(data.get('pb'), dec=2)}",
-        f"  EV/EBITDA: {f(data.get('ev_ebitda'), dec=1)}",
+        f"  EV/EBITDA: {f(data.get('ev_ebitda'))}  |  EV/Sales: {f(data.get('ev_sales'), dec=2)}",
 
         f"\n💵 <b>Karlılık</b>",
         f"  ROE: {f(data.get('roe'), pct=True)}  |  ROA: {f(data.get('roa'), pct=True)}",
@@ -195,16 +269,35 @@ def format_fundamentals(data: dict) -> str:
         f"  Brüt Marj: {f(data.get('gross_margin'), pct=True)}  |  Net Marj: {f(data.get('net_margin'), pct=True)}",
 
         f"\n🏦 <b>Nakit Akışı & Bilanço</b>",
-        f"  FCF: {fmoney(data.get('fcf'))}  |  FCF Yield: {f(data.get('fcf_yield'), suffix='%', dec=1) if data.get('fcf_yield') else '—'}",
-        f"  Borç/ÖK: {f(data.get('debt_equity'), dec=2)}  |  Current Ratio: {f(data.get('current_ratio'), dec=2)}",
+        f"  FCF: {fmoney(data.get('fcf'))}  |  FCF Yield: {'%{:.1f}'.format(data['fcf_yield']) if data.get('fcf_yield') else '—'}",
+        f"  Borç/ÖK: {f(data.get('debt_equity'), dec=2)}  |  Net Borç/EBITDA: {f(data.get('net_debt_ebitda'), dec=2)}",
+        f"  Current Ratio: {f(data.get('current_ratio'), dec=2)}  |  Quick Ratio: {f(data.get('quick_ratio'), dec=2)}",
 
         f"\n📊 <b>Büyüme</b>",
         f"  Gelir: {f(data.get('revenue_growth'), pct=True)}  |  Kazanç: {f(data.get('earnings_growth'), pct=True)}",
+
+        f"\n👥 <b>Sahiplik & Short</b>",
+        f"  Insider: {f(data.get('insider_pct'), pct=True)}  |  Kurumsal: {f(data.get('inst_pct'), pct=True)}",
+        f"  Short/Float: {f(data.get('short_pct_float'), pct=True)}  |  Short Ratio: {f(data.get('short_ratio'), dec=1)} gün",
     ]
 
+    # Analist görüşü
+    target = data.get("target_price")
+    upside = data.get("upside")
+    recom  = data.get("recommendation", "").replace("_", " ").upper()
+    n      = data.get("analyst_count")
+    if target:
+        upside_str = f" ({upside:+.1f}%)" if upside else ""
+        lines.append(
+            f"\n🎯 <b>Analist Görüşü</b> ({n} analist)"
+            if n else f"\n🎯 <b>Analist Görüşü</b>"
+        )
+        lines.append(f"  Hedef: ${target:,.2f}{upside_str}  |  Tavsiye: {recom or '—'}")
+
+    # Temettü
     div = data.get("div_yield")
     if div:
-        lines.append(f"  Temettü: %{div*100:.2f}")
+        lines.append(f"\n💸 <b>Temettü</b>: %{div*100:.2f}")
 
     return "\n".join(lines)
 

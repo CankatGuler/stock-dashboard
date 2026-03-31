@@ -119,6 +119,17 @@ def _schedule_jobs():
         name="Haftalık Performans Takibi",
     )
 
+    # Hisse sağlık taraması: Her Pazartesi 09:00 TR (hafta açılışında)
+    scheduler.add_job(
+        _run_portfolio_scanner,
+        trigger="cron",
+        day_of_week="mon",
+        hour=9,
+        minute=0,
+        id="scanner",
+        name="Haftalık Hisse Taraması",
+    )
+
 
 async def _run_sync(fn, *args):
     """
@@ -135,6 +146,11 @@ async def _run_sync(fn, *args):
 async def _run_performance_tracker():
     from performance_tracker import run as run_perf
     await _run_sync(run_perf)
+
+
+async def _run_portfolio_scanner():
+    from portfolio_scanner import run as run_scanner
+    await _run_sync(run_scanner)
 
 
 # ─── API Endpoint'leri ────────────────────────────────────────────────────────

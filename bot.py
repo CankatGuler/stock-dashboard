@@ -60,6 +60,7 @@ async def start_bot():
     _application.add_handler(CommandHandler("azalt",    cmd_portfoy_azalt))
     _application.add_handler(CommandHandler("guncelle", cmd_portfoy_guncelle))
     _application.add_handler(CommandHandler("hisse",    cmd_hisse))
+    _application.add_handler(CommandHandler("tarama",   cmd_tarama))
     _application.add_handler(CommandHandler("durum",    cmd_durum))
     _application.add_handler(CommandHandler("onayla",   cmd_onayla))
     _application.add_handler(CommandHandler("reddet",   cmd_reddet))
@@ -165,7 +166,8 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "senaryo analizleri, varlık kararları. Makale veya haber paylaşırsan "
         "birlikte değerlendiririz.\n\n"
         "<b>🔍 Analiz Komutları:</b>\n"
-        "/hisse AMZN — Temel analiz + haberler + direktör yorumu\n\n"
+        "/hisse AMZN — Temel analiz + haberler + direktör yorumu\n"
+        "/tarama — Portföy sağlık taraması (zombi, likidite, short)\n\n"
         "<b>📊 Portföy Komutları:</b>\n"
         "/portfoy — Anlık portföy özeti\n"
         "/detay — Tüm pozisyonlar detaylı\n"
@@ -612,6 +614,25 @@ async def cmd_portfoy_azalt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Adet formatı hatalı. Örnek: /azalt AVGO 5")
     except Exception as e:
         await update.message.reply_text(f"❌ Hata: {e}")
+
+
+async def cmd_tarama(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """
+    Haftalık hisse taramasını şimdi çalıştır.
+    Kullanım: /tarama
+    """
+    await update.message.reply_text("⏳ Hisse taraması yapılıyor...")
+    try:
+        from portfolio_scanner import scan_portfolio
+        loop   = asyncio.get_event_loop()
+        result = await loop.run_in_executor(None, scan_portfolio)
+        if result:
+            for chunk in [result[i:i+4000] for i in range(0, len(result), 4000)]:
+                await update.message.reply_text(chunk, parse_mode=ParseMode.HTML)
+        else:
+            await update.message.reply_text("Portföyde US hisse bulunamadı.")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Tarama hatası: {e}")
 
 
 async def cmd_hisse(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
