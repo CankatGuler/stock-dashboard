@@ -76,18 +76,20 @@ def _schedule_jobs():
     from trigger_monitor import run as run_trigger
 
     # Katman 1: Her 15 dakikada VIX, BTC, USD/TRY, stablecoin kontrolü
+    # manual=False — sadece eşik aşılınca alarm gönderir
     scheduler.add_job(
-        lambda: asyncio.create_task(_run_sync(run_trigger, 1)),
+        lambda: asyncio.create_task(_run_sync(run_trigger, 1, False)),
         trigger="interval",
         minutes=15,
         id="layer1",
         name="Katman 1 — Acil Alarmlar",
-        misfire_grace_time=120,  # 2 dakika gecikmeye tolerans
+        misfire_grace_time=120,
     )
 
     # Katman 2: Her saat başı yield curve, funding rate vs.
+    # manual=False — sadece eşik aşılınca alarm gönderir
     scheduler.add_job(
-        lambda: asyncio.create_task(_run_sync(run_trigger, 2)),
+        lambda: asyncio.create_task(_run_sync(run_trigger, 2, False)),
         trigger="interval",
         hours=1,
         id="layer2",
@@ -95,9 +97,10 @@ def _schedule_jobs():
         misfire_grace_time=300,
     )
 
-    # Katman 3: Her sabah 07:30 TR saatiyle sabah özeti
+    # Katman 3: Her sabah 07:30 TR — HER ZAMAN sabah özeti gönderir
+    # manual=True — eşikten bağımsız, sabah özeti garantili gider
     scheduler.add_job(
-        lambda: asyncio.create_task(_run_sync(run_trigger, 3)),
+        lambda: asyncio.create_task(_run_sync(run_trigger, 3, True)),
         trigger="cron",
         hour=7,
         minute=30,
@@ -123,7 +126,10 @@ async def _run_sync(fn, *args):
     trigger_monitor.run() gibi eski senkron fonksiyonlarla uyumluluk için.
     """
     loop = asyncio.get_event_loop()
-    await loop.run_in_executor(None, fn, *args)
+    try:
+        await loop.run_in_executor(None, fn, *args)
+    except Exception as e:
+        logger.error("Arka plan görevi hatası: %s", e)
 
 
 async def _run_performance_tracker():

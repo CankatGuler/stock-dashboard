@@ -624,7 +624,7 @@ async def cmd_tetikle(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     try:
         from trigger_monitor import run as run_trigger
         loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, run_trigger, layer)
+        await loop.run_in_executor(None, run_trigger, layer, True)  # manual=True
     except Exception as e:
         await update.message.reply_text(f"❌ Hata: {e}")
 
