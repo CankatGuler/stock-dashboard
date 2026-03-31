@@ -57,6 +57,7 @@ async def start_bot():
     _application.add_handler(CommandHandler("detay",    cmd_portfoy_detay))
     _application.add_handler(CommandHandler("ekle",     cmd_portfoy_ekle))
     _application.add_handler(CommandHandler("sil",      cmd_portfoy_sil))
+    _application.add_handler(CommandHandler("azalt",    cmd_portfoy_azalt))
     _application.add_handler(CommandHandler("guncelle", cmd_portfoy_guncelle))
     _application.add_handler(CommandHandler("durum",    cmd_durum))
     _application.add_handler(CommandHandler("onayla",   cmd_onayla))
@@ -164,11 +165,12 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "birlikte değerlendiririz.\n\n"
         "<b>📊 Portföy Komutları:</b>\n"
         "/portfoy — Anlık portföy özeti\n"
-        "/detay — Varlık bazında detaylı liste\n"
-        "/detay crypto — Sadece kripto pozisyonları\n"
-        "/ekle AVGO 5 1200 us_equity — Pozisyon ekle\n"
-        "/sil AVGO — Pozisyon sil\n"
-        "/guncelle AVGO 3 1350 — Pozisyon güncelle\n\n"
+        "/detay — Tüm pozisyonlar detaylı\n"
+        "/detay crypto — Sadece kripto\n"
+        "/ekle AVGO 5 1200 us_equity — Yeni pozisyon ekle\n"
+        "/azalt AVGO 5 — 5 hisse sat (kısmi)\n"
+        "/sil AVGO — Tüm pozisyonu sil\n"
+        "/guncelle AVGO 3 1350 — Adet/maliyet düzelt\n\n"
         "<b>⚙️ Sistem Komutları:</b>\n"
         "/durum — Zamanlayıcı ve sistem durumu\n"
         "/tetikle 3 — Sabah özetini şimdi gönder\n"
@@ -419,8 +421,15 @@ async def cmd_portfoy_detay(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         portfolio = [p for p in load_portfolio() if float(p.get("shares", 0)) > 0]
         usd_try   = fetch_usd_try_rate()
 
+        # Filtre: us_equity için "other" ve boş asset_class da dahil et
         if filtre_ac:
-            portfolio = [p for p in portfolio if p.get("asset_class") == filtre_ac]
+            if filtre_ac == "us_equity":
+                portfolio = [p for p in portfolio
+                             if p.get("asset_class", "us_equity") in
+                             ("us_equity", "other", "", None)]
+            else:
+                portfolio = [p for p in portfolio
+                             if p.get("asset_class") == filtre_ac]
 
         if not portfolio:
             await update.message.reply_text("Portföy boş veya filtre eşleşmedi.")
@@ -432,19 +441,30 @@ async def cmd_portfoy_detay(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             "commodity": "🥇 Emtia",
             "tefas":     "🇹🇷 TEFAS",
             "cash":      "💵 Nakit",
+            "other":     "🇺🇸 ABD Hisse",
+            "":          "🇺🇸 ABD Hisse",
         }
 
         # Sınıfa göre grupla
         groups: dict[str, list] = {}
         for p in portfolio:
-            ac = p.get("asset_class", "us_equity")
+            ac = p.get("asset_class", "us_equity") or "us_equity"
+            # us_equity grubuna normalize et
+            if ac in ("other", ""):
+                ac = "us_equity"
             groups.setdefault(ac, []).append(p)
 
-        lines = [f"💼 <b>Portföy Detayı</b>", ""]
+        lines = ["💼 <b>Portföy Detayı</b>", ""]
 
         for ac, positions in groups.items():
-            lines.append(f"<b>{labels.get(ac, ac)}</b>")
-            for p in sorted(positions, key=lambda x: -float(x.get("shares",0))*float(x.get("avg_cost",0))):
+            ac_total = sum(
+                float(p.get("shares",0)) * float(p.get("avg_cost",0)) /
+                (usd_try if p.get("currency") == "TRY" else 1)
+                for p in positions
+            )
+            lines.append(f"<b>{labels.get(ac, ac)}</b> — ${ac_total:,.0f}")
+            for p in sorted(positions,
+                            key=lambda x: -float(x.get("shares",0))*float(x.get("avg_cost",0))):
                 tk   = p.get("ticker", "?")
                 shr  = float(p.get("shares", 0))
                 avg  = float(p.get("avg_cost", 0))
@@ -452,8 +472,8 @@ async def cmd_portfoy_detay(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 cost = shr * avg / usd_try if cur == "TRY" else shr * avg
                 cur_symbol = "₺" if cur == "TRY" else "$"
                 lines.append(
-                    f"  • {tk}: {shr:,g} adet @ "
-                    f"{cur_symbol}{avg:,.4f} = ${cost:,.0f}"
+                    f"  • <b>{tk}</b>: {shr:,g} adet @ "
+                    f"{cur_symbol}{avg:,.2f} = ${cost:,.0f}"
                 )
             lines.append("")
 
@@ -461,6 +481,68 @@ async def cmd_portfoy_detay(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             "\n".join(lines),
             parse_mode=ParseMode.HTML,
         )
+    except Exception as e:
+        await update.message.reply_text(f"❌ Hata: {e}")
+
+
+async def cmd_portfoy_azalt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """
+    Pozisyonu kısmen azalt (kısmi satış).
+    Kullanım: /azalt <TICKER> <SATILAN_ADET>
+    Örnek: /azalt AVGO 5
+    """
+    args = ctx.args
+    if not args or len(args) < 2:
+        await update.message.reply_text(
+            "📝 <b>Kullanım:</b>\n"
+            "/azalt TICKER SATILAN_ADET\n\n"
+            "<b>Örnekler:</b>\n"
+            "/azalt AVGO 5 — AVGO'dan 5 hisse sat\n"
+            "/azalt BTC-USD 0.05 — 0.05 BTC sat\n\n"
+            "Tüm pozisyonu silmek için: /sil TICKER",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    try:
+        ticker       = args[0].upper()
+        satilan_adet = float(args[1])
+
+        from portfolio_manager import load_portfolio, update_position, remove_position
+        portfolio = load_portfolio()
+
+        # Mevcut pozisyonu bul
+        mevcut = next((p for p in portfolio if p.get("ticker") == ticker), None)
+        if not mevcut:
+            await update.message.reply_text(f"❌ <b>{ticker}</b> portföyde bulunamadı.", parse_mode=ParseMode.HTML)
+            return
+
+        mevcut_adet = float(mevcut.get("shares", 0))
+        if satilan_adet >= mevcut_adet:
+            await update.message.reply_text(
+                f"⚠️ Satmak istediğin adet ({satilan_adet:,g}) mevcut adetten "
+                f"({mevcut_adet:,g}) fazla veya eşit.\n"
+                f"Tüm pozisyonu silmek için: /sil {ticker}",
+                parse_mode=ParseMode.HTML,
+            )
+            return
+
+        yeni_adet = mevcut_adet - satilan_adet
+        avg_cost  = float(mevcut.get("avg_cost", 0))
+
+        await update.message.reply_text(f"⏳ {ticker} azaltılıyor...")
+
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, update_position, ticker, yeni_adet, avg_cost)
+
+        await update.message.reply_text(
+            f"✅ <b>{ticker}</b> azaltıldı\n"
+            f"  Satılan: {satilan_adet:,g} adet\n"
+            f"  Kalan: {yeni_adet:,g} adet @ ${avg_cost:,.2f}",
+            parse_mode=ParseMode.HTML,
+        )
+    except ValueError:
+        await update.message.reply_text("❌ Adet formatı hatalı. Örnek: /azalt AVGO 5")
     except Exception as e:
         await update.message.reply_text(f"❌ Hata: {e}")
 
