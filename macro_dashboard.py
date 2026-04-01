@@ -32,6 +32,28 @@ MACRO_TICKERS = {
     "SPX":    {"ticker": "^GSPC",    "label": "S&P 500",                 "unit": "",    "group": "market"},
     "NDX":    {"ticker": "^IXIC",    "label": "Nasdaq Composite",        "unit": "",    "group": "market"},
     "TLT":    {"ticker": "TLT",      "label": "Tahvil ETF (TLT)",        "unit": "$",   "group": "rates"},
+
+    # Sektör ETF'leri
+    "XLF":    {"ticker": "XLF",      "label": "XLF — Finans",            "unit": "$",   "group": "sector"},
+    "XLE":    {"ticker": "XLE",      "label": "XLE — Enerji",            "unit": "$",   "group": "sector"},
+    "XLK":    {"ticker": "XLK",      "label": "XLK — Teknoloji",         "unit": "$",   "group": "sector"},
+    "XLV":    {"ticker": "XLV",      "label": "XLV — Sağlık",            "unit": "$",   "group": "sector"},
+    "XLI":    {"ticker": "XLI",      "label": "XLI — Sanayi",            "unit": "$",   "group": "sector"},
+    "XLP":    {"ticker": "XLP",      "label": "XLP — Savunmacı Tük.",    "unit": "$",   "group": "sector"},
+    "XLRE":   {"ticker": "XLRE",     "label": "XLRE — Gayrimenkul",      "unit": "$",   "group": "sector"},
+
+    # Türkiye
+    "USDTRY": {"ticker": "USDTRY=X", "label": "USD/TRY",                 "unit": "₺",   "group": "turkey"},
+    "TUR":    {"ticker": "TUR",      "label": "TUR ETF (BIST proxy)",    "unit": "$",   "group": "turkey"},
+    "BIST":   {"ticker": "XU100.IS", "label": "BIST 100",                "unit": "",    "group": "turkey"},
+
+    # Döviz
+    "USDJPY": {"ticker": "JPY=X",    "label": "USD/JPY — Carry Trade",   "unit": "",    "group": "fx"},
+    "EURUSD": {"ticker": "EURUSD=X", "label": "EUR/USD",                 "unit": "",    "group": "fx"},
+
+    # Kredi
+    "HYG":    {"ticker": "HYG",      "label": "HYG — Yüksek Getiri",    "unit": "$",   "group": "credit"},
+    "LQD":    {"ticker": "LQD",      "label": "LQD — Yat. Grade Tahvil","unit": "$",   "group": "credit"},
 }
 
 

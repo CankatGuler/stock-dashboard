@@ -59,6 +59,7 @@ async def start_bot():
     _application.add_handler(CommandHandler("sil",      cmd_portfoy_sil))
     _application.add_handler(CommandHandler("azalt",    cmd_portfoy_azalt))
     _application.add_handler(CommandHandler("guncelle", cmd_portfoy_guncelle))
+    _application.add_handler(CommandHandler("makro",    cmd_makro))
     _application.add_handler(CommandHandler("hisse",    cmd_hisse))
     _application.add_handler(CommandHandler("tarama",   cmd_tarama))
     _application.add_handler(CommandHandler("durum",    cmd_durum))
@@ -166,8 +167,12 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "senaryo analizleri, varlık kararları. Makale veya haber paylaşırsan "
         "birlikte değerlendiririz.\n\n"
         "<b>🔍 Analiz Komutları:</b>\n"
+        "/makro — Tüm makro göstergeler (VIX, faiz, emtia, endeksler)\n"
+        "/makro faiz — Faiz & yield curve & kredi\n"
+        "/makro sektor — XLF, XLE, XLK, XLV sektör ETF'leri\n"
+        "/makro turkiye — USD/TRY, BIST, TUR ETF\n"
         "/hisse AMZN — Temel analiz + haberler + direktör yorumu\n"
-        "/tarama — Portföy sağlık taraması (zombi, likidite, short)\n\n"
+        "/tarama — Portföy sağlık taraması\n\n"
         "<b>📊 Portföy Komutları:</b>\n"
         "/portfoy — Anlık portföy özeti\n"
         "/detay — Tüm pozisyonlar detaylı\n"
@@ -614,6 +619,134 @@ async def cmd_portfoy_azalt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Adet formatı hatalı. Örnek: /azalt AVGO 5")
     except Exception as e:
         await update.message.reply_text(f"❌ Hata: {e}")
+
+
+async def cmd_makro(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """
+    Makro göstergeleri — VIX, yield curve, DXY, altın, petrol, bakır, endeksler.
+    Kullanım: /makro
+    Opsiyonel filtre: /makro faiz | /makro emtia | /makro piyasa
+    """
+    args    = ctx.args
+    filtre  = args[0].lower() if args else None
+
+    await update.message.reply_text("⏳ Makro veriler çekiliyor...")
+
+    try:
+        from macro_dashboard import fetch_macro_data
+
+        loop = asyncio.get_event_loop()
+        data = await loop.run_in_executor(None, fetch_macro_data)
+
+        if not data:
+            await update.message.reply_text("❌ Makro veri alınamadı.")
+            return
+
+        # Sinyal → emoji
+        sig_emoji = {"green": "🟢", "amber": "🟡", "red": "🔴", "neutral": "⚪"}
+
+        # Grup etiketleri
+        grup_labels = {
+            "fear":      "😨 Volatilite & Korku",
+            "rates":     "📊 Faiz & Tahvil",
+            "credit":    "💳 Kredi Piyasası",
+            "fx":        "💵 Döviz",
+            "commodity": "🥇 Emtia",
+            "market":    "📈 Endeksler",
+            "sector":    "🏭 Sektör ETF'leri",
+            "turkey":    "🇹🇷 Türkiye",
+        }
+
+        # Filtre → grup eşlemesi
+        filtre_map = {
+            "faiz":    ["rates", "credit"],
+            "emtia":   ["commodity"],
+            "piyasa":  ["market"],
+            "sektor":  ["sector"],
+            "doviz":   ["fx"],
+            "turkiye": ["turkey"],
+            "korku":   ["fear"],
+            "kredi":   ["credit"],
+        }
+
+        aktif_gruplar = filtre_map.get(filtre) if filtre else None
+
+        # Gruplara ayır
+        gruplar: dict[str, list] = {}
+        for key, ind in data.items():
+            grp = ind.group
+            if aktif_gruplar and grp not in aktif_gruplar:
+                continue
+            gruplar.setdefault(grp, []).append(ind)
+
+        if not gruplar:
+            await update.message.reply_text(
+                f"❌ '{filtre}' filtresi için veri bulunamadı.\n"
+                "Geçerli filtreler: faiz | emtia | piyasa | doviz | turkiye | korku"
+            )
+            return
+
+        # Yield curve özel hesap
+        yc_text = ""
+        if "TNX" in data and "IRX" in data:
+            spread = round(data["TNX"].value - data["IRX"].value, 2)
+            if spread < 0:
+                yc_emoji = "🔴"
+                yc_yorum = "İnvert (resesyon sinyali)"
+            elif spread < 0.5:
+                yc_emoji = "🟡"
+                yc_yorum = "Düz eğri (dikkatli)"
+            else:
+                yc_emoji = "🟢"
+                yc_yorum = "Normal (sağlıklı)"
+            yc_text = (
+                f"\n📐 <b>Yield Curve</b>\n"
+                f"  10Y - 3M: <b>{spread:+.2f}%</b>  {yc_emoji} {yc_yorum}\n"
+            )
+
+        from datetime import datetime, timezone, timedelta
+        tr_now = (datetime.now(timezone.utc) +
+                  timedelta(hours=3)).strftime("%d %b %Y, %H:%M")
+
+        lines = [
+            f"🌍 <b>Makro Göstergeler</b>",
+            f"{'━' * 28}",
+            f"📅 {tr_now}",
+        ]
+
+        grup_sirasi = ["fear", "rates", "credit", "fx", "commodity", "market", "sector", "turkey"]
+        for grp in grup_sirasi:
+            if grp not in gruplar:
+                continue
+            lines.append(f"\n<b>{grup_labels.get(grp, grp)}</b>")
+            for ind in gruplar[grp]:
+                emoji   = sig_emoji.get(ind.signal, "⚪")
+                chg_str = f"({ind.change_pct:+.2f}%)" if ind.change_pct else ""
+                val_str = (
+                    f"%{ind.value:.2f}" if ind.unit == "%" else
+                    f"${ind.value:,.2f}" if ind.unit == "$" else
+                    f"{ind.value:,.2f}"
+                )
+                note = f"\n    <i>{ind.note}</i>" if ind.note else ""
+                lines.append(
+                    f"  {emoji} <b>{ind.label}</b>: {val_str} {chg_str}{note}"
+                )
+
+        if yc_text and (not aktif_gruplar or "rates" in aktif_gruplar):
+            lines.append(yc_text)
+
+        lines += [
+            f"\n{'━' * 28}",
+            "Filtreler: /makro faiz | emtia | piyasa | sektor | doviz | turkiye | korku | kredi",
+        ]
+
+        await update.message.reply_text(
+            "\n".join(lines),
+            parse_mode=ParseMode.HTML,
+        )
+
+    except Exception as e:
+        await update.message.reply_text(f"❌ Makro veri hatası: {e}")
 
 
 async def cmd_tarama(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
