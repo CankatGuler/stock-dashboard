@@ -71,14 +71,11 @@ app = FastAPI(
 def _schedule_jobs():
     """
     Tüm otomatik görevleri zamanlayıcıya kaydet.
-    GitHub Actions cron'larının yerini alıyor — artık her şey tek serviste.
+    APScheduler AsyncIOScheduler async fonksiyon bekler — lambda değil.
     """
-    from trigger_monitor import run as run_trigger
-
-    # Katman 1: Her 15 dakikada VIX, BTC, USD/TRY, stablecoin kontrolü
-    # manual=False — sadece eşik aşılınca alarm gönderir
+    # Katman 1: Her 15 dakikada VIX, BTC, USD/TRY, stablecoin
     scheduler.add_job(
-        lambda: asyncio.create_task(_run_sync(run_trigger, 1, False)),
+        _run_layer1,
         trigger="interval",
         minutes=15,
         id="layer1",
@@ -86,10 +83,9 @@ def _schedule_jobs():
         misfire_grace_time=120,
     )
 
-    # Katman 2: Her saat başı yield curve, funding rate vs.
-    # manual=False — sadece eşik aşılınca alarm gönderir
+    # Katman 2: Her saat başı
     scheduler.add_job(
-        lambda: asyncio.create_task(_run_sync(run_trigger, 2, False)),
+        _run_layer2,
         trigger="interval",
         hours=1,
         id="layer2",
@@ -97,10 +93,9 @@ def _schedule_jobs():
         misfire_grace_time=300,
     )
 
-    # Katman 3: Her sabah 07:30 TR — HER ZAMAN sabah özeti gönderir
-    # manual=True — eşikten bağımsız, sabah özeti garantili gider
+    # Katman 3: Her sabah 07:30 TR — her zaman sabah özeti gönderir
     scheduler.add_job(
-        lambda: asyncio.create_task(_run_sync(run_trigger, 3, True)),
+        _run_layer3,
         trigger="cron",
         hour=7,
         minute=30,
@@ -119,7 +114,7 @@ def _schedule_jobs():
         name="Haftalık Performans Takibi",
     )
 
-    # Hisse sağlık taraması: Her Pazartesi 09:00 TR (hafta açılışında)
+    # Hisse sağlık taraması: Her Pazartesi 09:00 TR
     scheduler.add_job(
         _run_portfolio_scanner,
         trigger="cron",
@@ -131,26 +126,53 @@ def _schedule_jobs():
     )
 
 
-async def _run_sync(fn, *args):
+async def _run_in_executor(fn, *args):
     """
-    Senkron bir fonksiyonu async event loop'u bloke etmeden çalıştırır.
-    trigger_monitor.run() gibi eski senkron fonksiyonlarla uyumluluk için.
+    Senkron (blocking) fonksiyonu thread pool'da çalıştırır.
+    Event loop'u bloke etmez.
     """
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     try:
         await loop.run_in_executor(None, fn, *args)
     except Exception as e:
-        logger.error("Arka plan görevi hatası: %s", e)
+        logger.error("Arka plan görevi hatası [%s]: %s", fn.__name__, e)
+
+
+# APScheduler'a geçirilen async fonksiyonlar — her katman için ayrı
+
+async def _run_layer1():
+    from trigger_monitor import run as run_trigger
+    logger.info("Katman 1 başlatılıyor...")
+    await _run_in_executor(run_trigger, 1, False)
+
+
+async def _run_layer2():
+    from trigger_monitor import run as run_trigger
+    logger.info("Katman 2 başlatılıyor...")
+    await _run_in_executor(run_trigger, 2, False)
+
+
+async def _run_layer3():
+    from trigger_monitor import run as run_trigger
+    logger.info("Katman 3 başlatılıyor...")
+    await _run_in_executor(run_trigger, 3, True)
 
 
 async def _run_performance_tracker():
     from performance_tracker import run as run_perf
-    await _run_sync(run_perf)
+    logger.info("Performans takibi başlatılıyor...")
+    await _run_in_executor(run_perf)
 
 
 async def _run_portfolio_scanner():
     from portfolio_scanner import run as run_scanner
-    await _run_sync(run_scanner)
+    logger.info("Hisse taraması başlatılıyor...")
+    await _run_in_executor(run_scanner)
+
+
+# Eski _run_sync — bot.py'deki cmd_tetikle hâlâ kullanıyor, koru
+async def _run_sync(fn, *args):
+    await _run_in_executor(fn, *args)
 
 
 # ─── API Endpoint'leri ────────────────────────────────────────────────────────
