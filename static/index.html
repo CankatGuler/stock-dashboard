@@ -283,6 +283,11 @@
         <div class="pc-value neutral">—</div>
         <div class="pc-chg neutral">—</div>
       </div>
+      <div class="pulse-card" id="pc-ETH">
+        <div class="pc-label">ETH</div>
+        <div class="pc-value neutral">—</div>
+        <div class="pc-chg neutral">—</div>
+      </div>
       <div class="pulse-card" id="pc-GOLD">
         <div class="pc-label">ALTIN</div>
         <div class="pc-value neutral">—</div>
@@ -467,6 +472,8 @@ async function loadPulse() {
   const data = d.data;
 
   const pulseMap = {
+    'BTC':    'pc-BTC',
+    'ETH':    'pc-ETH',
     'VIX':    'pc-VIX',
     'SPX':    'pc-SPX',
     'NDX':    'pc-NDX',
@@ -737,7 +744,66 @@ async function loadArchive() {
 
 // ══ Kütüphane ════════════════════════════════════════════════════════════════
 
-function renderLibrary() {
+async function renderLibrary() {
+  const el = document.getElementById('library-content');
+  el.innerHTML = '<div class="loading-msg"><span class="spinner"></span> Kütüphane yükleniyor...</div>';
+  
+  const d = await apiFetch('/api/library');
+  if (d.status !== 'ok') {
+    el.innerHTML = '<span style="color:var(--text2)">Kütüphane yüklenemedi.</span>';
+    return;
+  }
+
+  const levelBadge = {
+    'başlangıç': '<span style="color:var(--green);font-size:10px;">● Başlangıç</span>',
+    'orta':      '<span style="color:var(--yellow);font-size:10px;">● Orta</span>',
+    'ileri':     '<span style="color:var(--red);font-size:10px;">● İleri</span>',
+  };
+
+  const catOrder = ['temel','degerlem','makro','portfoy','teknik','piyasa'];
+  const grouped = {};
+  for (const t of d.terms) {
+    const c = t.category || 'temel';
+    if (!grouped[c]) grouped[c] = [];
+    grouped[c].push(t);
+  }
+
+  let html2 = '';
+  for (const cat of catOrder) {
+    if (!grouped[cat]) continue;
+    const catInfo = d.categories[cat] || {label: cat, emoji: '📌'};
+    html2 += `<div style="margin-bottom:24px;">
+      <div style="font-size:12px;font-weight:600;color:var(--accent);letter-spacing:1px;
+                  text-transform:uppercase;margin-bottom:8px;padding-bottom:6px;
+                  border-bottom:1px solid var(--border);">
+        ${catInfo.emoji} ${catInfo.label}
+      </div>`;
+    for (const t of grouped[cat]) {
+      html2 += `
+        <div class="lib-item">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+            <span style="font-size:16px;">${t.emoji || '📌'}</span>
+            <span class="lib-term">${t.term}</span>
+            <span style="color:var(--text2);font-size:11px;">${t.eng || ''}</span>
+            <span style="margin-left:auto;">${levelBadge[t.level] || ''}</span>
+          </div>
+          <div class="lib-def">${t.definition || ''}</div>
+          ${t.formula ? `<div style="font-family:var(--mono);font-size:11px;color:var(--accent);
+                          margin-top:4px;padding:4px 8px;background:var(--bg3);border-radius:4px;">
+                          📐 ${t.formula}</div>` : ''}
+          ${t.how_to_read ? `<div style="font-size:11px;color:var(--text2);margin-top:6px;
+                              line-height:1.6;white-space:pre-line;">
+                              <b style="color:var(--text)">Nasıl Okunur:</b><br>${t.how_to_read}</div>` : ''}
+          ${t.example ? `<div class="lib-example">💡 ${t.example}</div>` : ''}
+        </div>`;
+    }
+    html2 += '</div>';
+  }
+  el.innerHTML = html2;
+}
+
+// ESKI renderLibrary - artık kullanılmıyor, sadece placeholder
+function _renderLibraryOLD() {
   const terms = [
     { term:'VIX — Korku Endeksi',
       def:'S&P 500 opsiyonlarından hesaplanan 30 günlük implied volatilite ölçütü. 20 altı sakin piyasa, 30+ panik/kriz sinyali. "Piyasanın nabzı" olarak bilinir.',

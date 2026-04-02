@@ -46,6 +46,10 @@ MACRO_TICKERS = {
     "TUR":    {"ticker": "TUR",      "label": "TUR ETF (BIST proxy)",    "unit": "$",   "group": "turkey"},
     "BIST":   {"ticker": "XU100.IS", "label": "BIST 100",                "unit": "",    "group": "turkey"},
 
+    # Kripto
+    "BTC":    {"ticker": "BTC-USD",  "label": "Bitcoin (BTC)",          "unit": "$",   "group": "crypto"},
+    "ETH":    {"ticker": "ETH-USD",  "label": "Ethereum (ETH)",         "unit": "$",   "group": "crypto"},
+
     # Döviz
     "USDJPY": {"ticker": "JPY=X",    "label": "USD/JPY — Carry Trade",   "unit": "",    "group": "fx"},
     "EURUSD": {"ticker": "EURUSD=X", "label": "EUR/USD",                 "unit": "",    "group": "fx"},
@@ -287,6 +291,33 @@ def _compute_signals(data: dict[str, MacroIndicator]):
         else:
             data["SPX"].signal = "neutral"
             data["SPX"].note   = "Yatay piyasa — yön bekleniyor"
+
+    # Bitcoin
+    if "BTC" in data:
+        chg = data["BTC"].change_pct
+        v   = data["BTC"].value
+        if chg <= -5:
+            data["BTC"].signal = "red"
+            data["BTC"].note   = f"BTC sert düşüyor (%{chg:.1f}) — kripto risk-off"
+        elif chg <= -3:
+            data["BTC"].signal = "amber"
+            data["BTC"].note   = f"BTC zayıflıyor (%{chg:.1f}) — dikkat"
+        elif chg >= 3:
+            data["BTC"].signal = "green"
+            data["BTC"].note   = f"BTC güçlü (%{chg:+.1f}) — risk iştahı var"
+        else:
+            data["BTC"].signal = "neutral"
+            data["BTC"].note   = f"BTC yatay — ${v:,.0f}"
+
+    # Ethereum
+    if "ETH" in data:
+        chg = data["ETH"].change_pct
+        if chg <= -5:
+            data["ETH"].signal = "red"
+        elif chg >= 3:
+            data["ETH"].signal = "green"
+        else:
+            data["ETH"].signal = "neutral"
 
 
 def compute_market_regime(data: dict[str, MacroIndicator]) -> dict:

@@ -442,8 +442,14 @@ async def chat_with_director(request: Request):
         return {"status": "error", "message": str(e)}
 
 
-@app.get("/api/archive")
-async def get_archive():
+@app.get("/api/library")
+async def get_library():
+    """Finansal terimler kütüphanesi — knowledge_library.py'den."""
+    try:
+        from knowledge_library import TERMS, CATEGORIES
+        return {"status": "ok", "terms": TERMS, "categories": CATEGORIES}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
     """Direktör karar arşivi."""
     try:
         from director_memory import memory
