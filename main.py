@@ -342,24 +342,28 @@ async def get_briefing():
             pass
 
     try:
-        import anthropic
         import yfinance as yf
         from strategy_data import fetch_usd_try_rate
 
-        # Anlık veriler
-        vix = 0.0
-        spy_chg = 0.0
-        btc = 0.0
-        try:
-            vix     = float(yf.Ticker("^VIX").fast_info.last_price or 0)
-            spy_h   = yf.Ticker("SPY").history(period="5d")
-            if len(spy_h) >= 2:
-                spy_chg = (float(spy_h["Close"].iloc[-1]) -
-                           float(spy_h["Close"].iloc[-5])) / float(spy_h["Close"].iloc[-5]) * 100
-            btc     = float(yf.Ticker("BTC-USD").fast_info.last_price or 0)
-        except Exception:
-            pass
-        usd_try = fetch_usd_try_rate()
+        # Anlık veriler — executor'da çalıştır
+        def _fetch_market_data():
+            _vix = 0.0
+            _spy_chg = 0.0
+            _btc = 0.0
+            try:
+                _vix = float(yf.Ticker("^VIX").fast_info.last_price or 0)
+                spy_h = yf.Ticker("SPY").history(period="5d")
+                if len(spy_h) >= 2:
+                    _spy_chg = (float(spy_h["Close"].iloc[-1]) -
+                               float(spy_h["Close"].iloc[-5])) / float(spy_h["Close"].iloc[-5]) * 100
+                _btc = float(yf.Ticker("BTC-USD").fast_info.last_price or 0)
+            except Exception:
+                pass
+            return _vix, _spy_chg, _btc
+
+        loop = asyncio.get_event_loop()
+        vix, spy_chg, btc = await loop.run_in_executor(None, _fetch_market_data)
+        usd_try = await loop.run_in_executor(None, fetch_usd_try_rate)
 
         # Portföy durumu özeti
         port_resp = await get_portfolio_detail()
@@ -368,23 +372,27 @@ async def get_briefing():
             pnl_pct = port_resp.get("total_pnl_pct", 0)
             port_summary = f"Portföy toplam K/Z: %{pnl_pct:+.1f}"
 
-        client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY", ""))
-        response = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=300,
-            system=(
-                "Sen bir portföy strateji direktörüsün. "
-                "Sabah brifingini yaz — 4-5 cümle, somut, eyleme dönüştürülebilir. "
-                "Türkçe. HTML tagı kullanma."
-            ),
-            messages=[{"role": "user", "content":
-                f"VIX: {vix:.1f} | S&P 5g: {spy_chg:+.1f}% | BTC: ${btc:,.0f} | "
-                f"USD/TRY: {usd_try:.2f} | {port_summary}\n\n"
-                "Bu verilere bakarak bugün için kısa bir sabah brifing yaz. "
-                "Piyasa tonu nedir, neye dikkat etmeli, portföy için önerisi nedir?"
-            }],
-        )
-        text = response.content[0].text.strip()
+        def _generate_briefing():
+            import anthropic as _anthropic
+            _client = _anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY", ""))
+            _resp = _client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=300,
+                system=(
+                    "Sen bir portföy strateji direktörüsün. "
+                    "Sabah brifingini yaz — 4-5 cümle, somut, eyleme dönüştürülebilir. "
+                    "Türkçe. HTML tagı kullanma."
+                ),
+                messages=[{"role": "user", "content":
+                    f"VIX: {vix:.1f} | S&P 5g: {spy_chg:+.1f}% | BTC: ${btc:,.0f} | "
+                    f"USD/TRY: {usd_try:.2f} | {port_summary}\n\n"
+                    "Bu verilere bakarak bugün için kısa bir sabah brifing yaz. "
+                    "Piyasa tonu nedir, neye dikkat etmeli, portföy için önerisi nedir?"
+                }],
+            )
+            return _resp.content[0].text.strip()
+
+        text = await loop.run_in_executor(None, _generate_briefing)
         cache_file.write_text(json.dumps({"text": text, "ts": time.time()}))
         return {"status": "ok", "briefing": text, "cached": False}
 
@@ -394,35 +402,85 @@ async def get_briefing():
 
 @app.get("/api/news")
 async def get_news():
-    """Piyasayı etkileyen önemli haberler — portföy bazlı filtrelenmiş."""
-    try:
-        import anthropic
+    """Piyasayı etkileyen önemli haberler — 1 saatlik önbellek."""
+    import time, json as _json
+    from pathlib import Path
+
+    cache_file = Path(__file__).parent / "news_cache.json"
+
+    # 1 saatlik önbellek
+    if cache_file.exists():
+        try:
+            cached = _json.loads(cache_file.read_text())
+            if time.time() - cached.get("ts", 0) < 3600:
+                return {"status": "ok", "news": cached["news"], "cached": True}
+        except Exception:
+            pass
+
+    def _fetch_news():
+        import anthropic, json, re
         client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY", ""))
-        response = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=500,
-            tools=[{"type": "web_search_20250305", "name": "web_search"}],
-            messages=[{"role": "user", "content":
-                "Bugün global finansal piyasaları etkileyen en önemli 3-4 haberi bul. "
-                "Kriter: Fed/merkez bankası kararları, jeopolitik şoklar, "
-                "kripto/BTC gelişmeleri, Türkiye/TL haberleri veya büyük şirket haberleri. "
-                "Her haber için: başlık (max 10 kelime), tek cümle özet, etki yönü "
-                "(pozitif/negatif/nötr) ve etkilenen varlık sınıfı. "
-                "JSON formatında döndür: [{title, summary, impact, asset_class}]"
-            }],
-        )
-        import json, re
-        text = ""
-        for block in response.content:
-            if hasattr(block, "text"):
-                text += block.text
-        # JSON çıkar
-        match = re.search(r'\[.*\]', text, re.DOTALL)
-        if match:
-            news = json.loads(match.group())
-            return {"status": "ok", "news": news[:4]}
-        return {"status": "ok", "news": []}
+
+        messages = [{"role": "user", "content":
+            "Bugün global finansal piyasaları etkileyen en önemli 3-4 haberi ara ve bul. "
+            "Kriter: Fed/merkez bankası kararları, jeopolitik gelişmeler, "
+            "kripto/BTC haberleri, Türkiye/TL gelişmeleri, büyük şirket haberleri. "
+            "Bulduğun haberleri şu JSON formatında döndür (başka hiçbir şey yazma): "
+            '[{"title":"max 10 kelime başlık","summary":"tek cümle özet",'
+            '"impact":"pozitif veya negatif veya nötr","asset_class":"etkilenen varlık"}]'
+        }]
+
+        # web_search tool döngüsü — Claude arama yapıp sonuç döndürene kadar
+        for _ in range(5):  # max 5 tur
+            resp = client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=1000,
+                tools=[{"type": "web_search_20250305", "name": "web_search"}],
+                messages=messages,
+            )
+
+            # Tool kullanıldı mı?
+            tool_uses = [b for b in resp.content if b.type == "tool_use"]
+            text_blocks = [b for b in resp.content if hasattr(b, "text")]
+
+            if resp.stop_reason == "end_turn" or not tool_uses:
+                # Son yanıt — JSON'u çıkar
+                text = " ".join(b.text for b in text_blocks)
+                match = re.search(r'\[.*?\]', text, re.DOTALL)
+                if match:
+                    try:
+                        return json.loads(match.group())
+                    except Exception:
+                        pass
+                return []
+
+            # Tool sonuçlarını conversation'a ekle
+            messages.append({"role": "assistant", "content": resp.content})
+            tool_results = []
+            for tu in tool_uses:
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": tu.id,
+                    "content": getattr(tu, "output", "") or "",
+                })
+            messages.append({"role": "user", "content": tool_results})
+
+        return []
+
+    try:
+        loop = asyncio.get_event_loop()
+        news = await loop.run_in_executor(None, _fetch_news)
+        news = news[:4] if news else []
+
+        # Önbelleğe yaz
+        try:
+            cache_file.write_text(_json.dumps({"news": news, "ts": time.time()}))
+        except Exception:
+            pass
+
+        return {"status": "ok", "news": news}
     except Exception as e:
+        logger.error("Haber çekme hatası: %s", e)
         return {"status": "error", "message": str(e), "news": []}
 
 
