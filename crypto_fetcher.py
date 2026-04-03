@@ -104,49 +104,106 @@ def fetch_crypto_fear_greed() -> dict:
 
 def fetch_bitcoin_dominance() -> dict:
     """
-    CoinGecko'dan Bitcoin dominance ve top coin verileri.
-    Bitcoin dominance > %60 = altcoin sezonu değil
-    Bitcoin dominance < %40 = altcoin sezonu
+    BTC, ETH dominansı ve TOTAL2/TOTAL3 piyasa yapısı.
+    CoinGecko yerine yfinance kullanıyor (daha stabil).
+    TOTAL  = Tüm kripto piyasa değeri
+    TOTAL2 = BTC hariç tüm kripto
+    TOTAL3 = BTC + ETH hariç altcoinler
     """
     try:
-        import requests
-        resp = requests.get(
-            "https://api.coingecko.com/api/v3/global",
-            headers={"User-Agent": "Mozilla/5.0"},
-            timeout=15,
-        )
-        resp.raise_for_status()
-        gdata = resp.json().get("data", {})
+        import yfinance as yf
 
-        btc_dom  = round(gdata.get("market_cap_percentage", {}).get("bitcoin", 0), 1)
-        eth_dom  = round(gdata.get("market_cap_percentage", {}).get("ethereum", 0), 1)
-        total_mc = gdata.get("total_market_cap", {}).get("usd", 0)
-        total_chg= round(gdata.get("market_cap_change_percentage_24h_usd", 0), 2)
+        # Piyasa değerleri
+        tickers = {
+            "TOTAL":  "TOTAL",      # Toplam kripto market cap
+            "TOTAL2": "TOTAL2",     # BTC hariç (ETH + altcoinler)
+            "TOTAL3": "TOTAL3",     # BTC + ETH hariç (altcoinler)
+            "BTC":    "BTC-USD",
+            "ETH":    "ETH-USD",
+        }
 
-        # Dominance yorumu
+        prices = {}
+        for key, ticker in tickers.items():
+            try:
+                h = yf.Ticker(ticker).history(period="3d")
+                if not h.empty:
+                    prices[key] = {
+                        "value": float(h["Close"].iloc[-1]),
+                        "prev":  float(h["Close"].iloc[-2]) if len(h) >= 2 else float(h["Close"].iloc[-1]),
+                    }
+            except Exception:
+                pass
+
+        if "TOTAL" not in prices or prices["TOTAL"]["value"] == 0:
+            raise Exception("TOTAL market cap alınamadı")
+
+        total    = prices["TOTAL"]["value"]
+        total2   = prices.get("TOTAL2", {}).get("value", 0)
+        total3   = prices.get("TOTAL3", {}).get("value", 0)
+        btc_price = prices.get("BTC",  {}).get("value", 0)
+        eth_price = prices.get("ETH",  {}).get("value", 0)
+
+        # BTC piyasa değeri tahmini (21M supply * fiyat)
+        btc_supply  = 19_700_000  # yaklaşık mevcut arz
+        eth_supply  = 120_000_000
+        btc_mc  = btc_price  * btc_supply  if btc_price  else 0
+        eth_mc  = eth_price  * eth_supply  if eth_price  else 0
+
+        # Dominans hesapla
+        btc_dom  = round(btc_mc  / total * 100, 1) if total > 0 else 0
+        eth_dom  = round(eth_mc  / total * 100, 1) if total > 0 else 0
+
+        # TOTAL2/TOTAL oranı = BTC haricinin ağırlığı
+        total2_pct = round(total2 / total * 100, 1) if total > 0 and total2 > 0 else 0
+        total3_pct = round(total3 / total * 100, 1) if total > 0 and total3 > 0 else 0
+
+        # 24s değişim
+        total_prev = prices["TOTAL"].get("prev", total)
+        total_chg  = round((total - total_prev) / total_prev * 100, 2) if total_prev > 0 else 0
+        total2_prev = prices.get("TOTAL2", {}).get("prev", total2)
+        total2_chg  = round((total2 - total2_prev) / total2_prev * 100, 2) if total2_prev and total2 else 0
+        total3_prev = prices.get("TOTAL3", {}).get("prev", total3)
+        total3_chg  = round((total3 - total3_prev) / total3_prev * 100, 2) if total3_prev and total3 else 0
+
+        # BTC dominans yorumu
         if btc_dom >= 60:
             dom_signal = "amber"
-            dom_note   = (f"BTC dominance %{btc_dom:.0f} — YÜKSEK. "
-                         f"Altcoinler zayıf, BTC liderliği var. "
-                         f"Altcoin pozisyonlarını küçük tut.")
-        elif btc_dom >= 50:
+            dom_note = (f"BTC dominance %{btc_dom:.1f} — YÜKSEK. "
+                        f"Para altcoinlerden kaçıyor. Altcoin portföyün baskı altında.")
+        elif btc_dom >= 52:
             dom_signal = "neutral"
-            dom_note   = (f"BTC dominance %{btc_dom:.0f} — Normal aralık. "
-                         f"Karma portföy mantıklı.")
+            dom_note = (f"BTC dominance %{btc_dom:.1f} — Normal aralık. "
+                        f"Karma portföy mantıklı.")
         else:
             dom_signal = "green"
-            dom_note   = (f"BTC dominance %{btc_dom:.0f} — DÜŞÜK. "
-                         f"Altcoin sezonu sinyali! "
-                         f"ETH ve quality altcoinler BTC'yi outperform edebilir.")
+            dom_note = (f"BTC dominance %{btc_dom:.1f} — DÜŞÜK. "
+                        f"Altcoin sezonu sinyali — ETH ve quality altcoinler öne çıkabilir.")
+
+        # TOTAL3 yorumu — saf altcoin talebi
+        total3_note = ""
+        if total3 > 0 and total3_chg:
+            if total3_chg > 3:
+                total3_note = f"Altcoinler güçlü (%{total3_chg:+.1f}) — risk iştahı açık"
+            elif total3_chg < -3:
+                total3_note = f"Altcoinler zayıf (%{total3_chg:+.1f}) — BTC dominansı artıyor"
+            else:
+                total3_note = f"Altcoinler yatay (%{total3_chg:+.1f})"
 
         return {
-            "btc_dominance":   btc_dom,
-            "eth_dominance":   eth_dom,
-            "total_market_cap": total_mc,
+            "btc_dominance":    btc_dom,
+            "eth_dominance":    eth_dom,
+            "total2_pct":       total2_pct,
+            "total3_pct":       total3_pct,
+            "total_market_cap": total,
             "total_change_24h": total_chg,
-            "dom_signal":      dom_signal,
-            "dom_note":        dom_note,
+            "total2_change_24h": total2_chg,
+            "total3_change_24h": total3_chg,
+            "total3_note":      total3_note,
+            "dom_signal":       dom_signal,
+            "dom_note":         dom_note,
+            "note":             dom_note,
         }
+
     except Exception as e:
         logger.warning("Bitcoin dominance failed: %s", e)
         return {}
@@ -669,25 +726,24 @@ def fetch_long_short_ratio() -> dict:
                     "note":      note,
                 }
 
-        # Fallback: alternatif yöntem - BTC perpetual funding rate proxy
-        raise Exception("Coinglass API yanıt vermedi, fallback kullanılıyor")
+        # Fallback: yfinance'ten BTC fiyat hareketinden L/S tahmini
+        raise Exception("Coinglass API key gerekiyor, fallback kullanılıyor")
 
     except Exception:
-        # Funding Rate proxy: yfinance'ten BTC volatilitesinden L/S tahmini
         try:
             import yfinance as yf
             btc_hist = yf.Ticker("BTC-USD").history(period="3d", interval="1h")["Close"]
             if len(btc_hist) >= 6:
                 recent_chg = (btc_hist.iloc[-1] - btc_hist.iloc[-6]) / btc_hist.iloc[-6] * 100
                 if recent_chg > 3:
-                    return {"long_pct": 65, "short_pct": 35, "signal": "red",
-                            "note": "Fiyat hızlı yükseldi — muhtemelen yüksek long oranı, squeeze riski var"}
+                    return {"long_pct": 62, "short_pct": 38, "signal": "red",
+                            "note": f"BTC son 6 saatte %{recent_chg:.1f} yükseldi — long ağırlıklı tahmin, squeeze riski (proxy veri)"}
                 elif recent_chg < -3:
-                    return {"long_pct": 35, "short_pct": 65, "signal": "green",
-                            "note": "Fiyat hızlı düştü — short ağırlıklı olabilir, short squeeze fırsatı"}
+                    return {"long_pct": 38, "short_pct": 62, "signal": "green",
+                            "note": f"BTC son 6 saatte %{recent_chg:.1f} düştü — short ağırlıklı tahmin, bounce fırsatı (proxy veri)"}
                 else:
                     return {"long_pct": 50, "short_pct": 50, "signal": "neutral",
-                            "note": "Long/Short oranı: Dengeli görünüm (API verisi mevcut değil)"}
+                            "note": f"BTC yatay (%{recent_chg:+.1f}) — dengeli pozisyon tahmini (proxy veri, Coinglass API key gerekli)"}
         except Exception as e:
             logger.debug("Long/Short fallback failed: %s", e)
 

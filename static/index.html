@@ -229,7 +229,30 @@ async function loadCrypto(){
   const fg=dt.fear_greed||{};
   if(fg.index!==undefined){const s=fg.index<=25?'red':fg.index<=45?'amber':fg.index>=75?'green':'neutral';h+=mrow2('Fear & Greed',`${fg.index}/100 — ${fg.label||''}`,fg.note||'',s);}
   const dom=dt.dominance||{};
-  if(dom.btc_dominance!==undefined){const s=dom.btc_dominance>58?'amber':dom.btc_dominance<42?'green':'neutral';h+=mrow2('BTC Dominansı',`%${dom.btc_dominance.toFixed(1)}`,dom.note||'',s);if(dom.eth_dominance)h+=mrow2('ETH Dominansı',`%${dom.eth_dominance.toFixed(1)}`,'','neutral');}
+  if(dom.btc_dominance!==undefined){
+    const s=dom.btc_dominance>58?'amber':dom.btc_dominance<42?'green':'neutral';
+    h+=mrow2('BTC Dominansı',`%${dom.btc_dominance.toFixed(1)}`,dom.note||'',s);
+    if(dom.eth_dominance) h+=mrow2('ETH Dominansı',`%${dom.eth_dominance.toFixed(1)}`,'','neutral');
+    if(dom.total2_pct) {
+      const t2c=dom.total2_change_24h>2?'green':dom.total2_change_24h<-2?'red':'neutral';
+      h+=mrow2('TOTAL2 (BTC Hariç)',
+        `%${dom.total2_pct.toFixed(1)} (${dom.total2_change_24h>0?'+':''}${(dom.total2_change_24h||0).toFixed(1)}%)`,
+        'BTC hariç tüm kripto — ETH + altcoinler',t2c);
+    }
+    if(dom.total3_pct) {
+      const t3c=dom.total3_change_24h>2?'green':dom.total3_change_24h<-2?'red':'neutral';
+      h+=mrow2('TOTAL3 (Altcoinler)',
+        `%${dom.total3_pct.toFixed(1)} (${dom.total3_change_24h>0?'+':''}${(dom.total3_change_24h||0).toFixed(1)}%)`,
+        dom.total3_note||'BTC + ETH hariç saf altcoin piyasası',t3c);
+    }
+    if(dom.total_market_cap) {
+      const tmc=dom.total_market_cap;
+      const tmcStr=tmc>=1e12?`$${(tmc/1e12).toFixed(2)}T`:tmc>=1e9?`$${(tmc/1e9).toFixed(0)}B`:'—';
+      h+=mrow2('Toplam Kripto Piyasa',
+        `${tmcStr} (${dom.total_change_24h>0?'+':''}${(dom.total_change_24h||0).toFixed(1)}%)`,
+        '','neutral');
+    }
+  }
   const sc=dt.stablecoin||{};const scv=sc.total_dominance||sc.dominance||0;
   if(scv>0)h+=mrow2('Stablecoin Dom.',`%${scv.toFixed(1)}`,sc.note||'',scv>12?'amber':scv<6?'green':'neutral');
   const ls=dt.long_short||{};if(ls.long_pct!==undefined)h+=mrow2('Long/Short',`${ls.long_pct}% / ${ls.short_pct}%`,ls.note||'',ls.signal||'neutral');
