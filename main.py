@@ -336,7 +336,7 @@ async def get_briefing():
     if cache_file.exists():
         try:
             cached = json.loads(cache_file.read_text())
-            if time.time() - cached.get("ts", 0) < 1800:
+            if time.time() - cached.get("ts", 0) < 900:
                 return {"status": "ok", "briefing": cached["text"], "cached": True}
         except Exception:
             pass
@@ -377,17 +377,19 @@ async def get_briefing():
             _client = _anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY", ""))
             _resp = _client.messages.create(
                 model="claude-sonnet-4-6",
-                max_tokens=300,
+                max_tokens=600,
                 system=(
                     "Sen bir portföy strateji direktörüsün. "
-                    "Sabah brifingini yaz — 4-5 cümle, somut, eyleme dönüştürülebilir. "
-                    "Türkçe. HTML tagı kullanma."
+                    "Sabah brifingini yaz — 4-5 tam ve eksiksiz cümle, somut, eyleme donusturulebilir. "
+                    "ONEMLI: Her cumleyi mutlaka nokta ile bitir, yarida kesme. "
+                    "Turkce yaz. HTML tagi kullanma."
                 ),
                 messages=[{"role": "user", "content":
                     f"VIX: {vix:.1f} | S&P 5g: {spy_chg:+.1f}% | BTC: ${btc:,.0f} | "
                     f"USD/TRY: {usd_try:.2f} | {port_summary}\n\n"
                     "Bu verilere bakarak bugün için kısa bir sabah brifing yaz. "
-                    "Piyasa tonu nedir, neye dikkat etmeli, portföy için önerisi nedir?"
+                    "Piyasa tonu nedir, neye dikkat etmeli, portföy için önerisi nedir? "
+                    "Son cumleyi mutlaka tamamla ve nokta ile bitir."
                 }],
             )
             return _resp.content[0].text.strip()
