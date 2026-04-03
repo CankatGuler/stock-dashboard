@@ -1,4 +1,3 @@
-import streamlit as st
 # crypto_fetcher.py — Kripto Varlık Sınıfı Veri Modülü
 #
 # Katman 3 metrikleri:
@@ -35,7 +34,6 @@ HALVING_DATES = [
 
 # ─── 1. Kripto Fear & Greed ──────────────────────────────────────────────────
 
-@st.cache_data(ttl=3600, show_spinner=False)
 def fetch_crypto_fear_greed() -> dict:
     """
     alternative.me'den kripto spesifik Fear & Greed endeksi.
@@ -104,7 +102,6 @@ def fetch_crypto_fear_greed() -> dict:
 
 # ─── 2. Bitcoin Dominance & Market Data ─────────────────────────────────────
 
-@st.cache_data(ttl=3600, show_spinner=False)
 def fetch_bitcoin_dominance() -> dict:
     """
     CoinGecko'dan Bitcoin dominance ve top coin verileri.
@@ -157,7 +154,6 @@ def fetch_bitcoin_dominance() -> dict:
 
 # ─── 3. Fiyat Verileri (yfinance) ───────────────────────────────────────────
 
-@st.cache_data(ttl=600, show_spinner=False)
 def fetch_crypto_prices() -> dict:
     """
     BTC, ETH ve diğer major kripto fiyatları yfinance'ten.
@@ -479,7 +475,6 @@ def fetch_crypto_portfolio_data(crypto_positions: list) -> dict:
 
 # ─── Ana Toplayıcı ───────────────────────────────────────────────────────────
 
-@st.cache_data(ttl=600, show_spinner=False)
 def fetch_all_crypto_data(crypto_positions: tuple = None) -> dict:
     """
     Tüm Katman 3 verilerini tek seferde topla.
