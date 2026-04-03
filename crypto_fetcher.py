@@ -104,112 +104,80 @@ def fetch_crypto_fear_greed() -> dict:
 
 def fetch_bitcoin_dominance() -> dict:
     """
-    BTC, ETH dominansı ve TOTAL2/TOTAL3 piyasa yapısı.
-    CoinGecko yerine yfinance kullanıyor (daha stabil).
-    TOTAL  = Tüm kripto piyasa değeri
-    TOTAL2 = BTC hariç tüm kripto
-    TOTAL3 = BTC + ETH hariç altcoinler
+    BTC/ETH dominans + TOTAL2/TOTAL3.
+    Kaynak sırası: CoinGecko → alternative.me → yfinance proxy
     """
+    import requests
+
+    def _build(btc_dom, eth_dom, total2_pct, total3_pct, total_mc, total_chg, proxy=False):
+        tag = " (tahmini)" if proxy else ""
+        if btc_dom >= 60:
+            sig, note = "amber", f"BTC dominance %{btc_dom:.1f}{tag} — YÜKSEK. Para altcoinlerden kaçıyor."
+        elif btc_dom >= 52:
+            sig, note = "neutral", f"BTC dominance %{btc_dom:.1f}{tag} — Normal aralık."
+        else:
+            sig, note = "green", f"BTC dominance %{btc_dom:.1f}{tag} — DÜŞÜK. Altcoin sezonu sinyali."
+        t3_note = "BTC + ETH hariç saf altcoin piyasası" if total3_pct > 0 else ""
+        return {
+            "btc_dominance": btc_dom, "eth_dominance": eth_dom,
+            "total2_pct": total2_pct, "total3_pct": total3_pct,
+            "total_market_cap": total_mc, "total_change_24h": total_chg,
+            "total2_change_24h": 0, "total3_change_24h": 0,
+            "total3_note": t3_note, "dom_signal": sig, "dom_note": note, "note": note,
+        }
+
+    # Kaynak 1: CoinGecko
+    try:
+        r = requests.get("https://api.coingecko.com/api/v3/global",
+                         headers={"User-Agent": "Mozilla/5.0"}, timeout=8)
+        if r.status_code == 200:
+            g = r.json().get("data", {})
+            mc = g.get("market_cap_percentage", {})
+            btc = round(mc.get("bitcoin",  0), 1)
+            eth = round(mc.get("ethereum", 0), 1)
+            total_mc  = g.get("total_market_cap", {}).get("usd", 0)
+            total_chg = round(g.get("market_cap_change_percentage_24h_usd", 0), 2)
+            if btc > 0:
+                t2 = round(100 - btc, 1)
+                t3 = round(100 - btc - eth, 1)
+                return _build(btc, eth, t2, t3, total_mc, total_chg)
+    except Exception as e:
+        logger.debug("CoinGecko: %s", e)
+
+    # Kaynak 2: alternative.me
+    try:
+        r = requests.get("https://api.alternative.me/v1/global/",
+                         headers={"User-Agent": "Mozilla/5.0"}, timeout=8)
+        if r.status_code == 200:
+            g = r.json()
+            btc = round(float(g.get("bitcoin_percentage_of_market_cap", 0)), 1)
+            total_mc = float(g.get("total_market_cap_usd", 0))
+            if btc > 0:
+                return _build(btc, 0, round(100-btc,1), 0, total_mc, 0)
+    except Exception as e:
+        logger.debug("alternative.me: %s", e)
+
+    # Kaynak 3: yfinance BTC market cap proxy
     try:
         import yfinance as yf
-
-        # Piyasa değerleri
-        tickers = {
-            "TOTAL":  "TOTAL",      # Toplam kripto market cap
-            "TOTAL2": "TOTAL2",     # BTC hariç (ETH + altcoinler)
-            "TOTAL3": "TOTAL3",     # BTC + ETH hariç (altcoinler)
-            "BTC":    "BTC-USD",
-            "ETH":    "ETH-USD",
-        }
-
-        prices = {}
-        for key, ticker in tickers.items():
-            try:
-                h = yf.Ticker(ticker).history(period="3d")
-                if not h.empty:
-                    prices[key] = {
-                        "value": float(h["Close"].iloc[-1]),
-                        "prev":  float(h["Close"].iloc[-2]) if len(h) >= 2 else float(h["Close"].iloc[-1]),
-                    }
-            except Exception:
-                pass
-
-        if "TOTAL" not in prices or prices["TOTAL"]["value"] == 0:
-            raise Exception("TOTAL market cap alınamadı")
-
-        total    = prices["TOTAL"]["value"]
-        total2   = prices.get("TOTAL2", {}).get("value", 0)
-        total3   = prices.get("TOTAL3", {}).get("value", 0)
-        btc_price = prices.get("BTC",  {}).get("value", 0)
-        eth_price = prices.get("ETH",  {}).get("value", 0)
-
-        # BTC piyasa değeri tahmini (21M supply * fiyat)
-        btc_supply  = 19_700_000  # yaklaşık mevcut arz
-        eth_supply  = 120_000_000
-        btc_mc  = btc_price  * btc_supply  if btc_price  else 0
-        eth_mc  = eth_price  * eth_supply  if eth_price  else 0
-
-        # Dominans hesapla
-        btc_dom  = round(btc_mc  / total * 100, 1) if total > 0 else 0
-        eth_dom  = round(eth_mc  / total * 100, 1) if total > 0 else 0
-
-        # TOTAL2/TOTAL oranı = BTC haricinin ağırlığı
-        total2_pct = round(total2 / total * 100, 1) if total > 0 and total2 > 0 else 0
-        total3_pct = round(total3 / total * 100, 1) if total > 0 and total3 > 0 else 0
-
-        # 24s değişim
-        total_prev = prices["TOTAL"].get("prev", total)
-        total_chg  = round((total - total_prev) / total_prev * 100, 2) if total_prev > 0 else 0
-        total2_prev = prices.get("TOTAL2", {}).get("prev", total2)
-        total2_chg  = round((total2 - total2_prev) / total2_prev * 100, 2) if total2_prev and total2 else 0
-        total3_prev = prices.get("TOTAL3", {}).get("prev", total3)
-        total3_chg  = round((total3 - total3_prev) / total3_prev * 100, 2) if total3_prev and total3 else 0
-
-        # BTC dominans yorumu
-        if btc_dom >= 60:
-            dom_signal = "amber"
-            dom_note = (f"BTC dominance %{btc_dom:.1f} — YÜKSEK. "
-                        f"Para altcoinlerden kaçıyor. Altcoin portföyün baskı altında.")
-        elif btc_dom >= 52:
-            dom_signal = "neutral"
-            dom_note = (f"BTC dominance %{btc_dom:.1f} — Normal aralık. "
-                        f"Karma portföy mantıklı.")
-        else:
-            dom_signal = "green"
-            dom_note = (f"BTC dominance %{btc_dom:.1f} — DÜŞÜK. "
-                        f"Altcoin sezonu sinyali — ETH ve quality altcoinler öne çıkabilir.")
-
-        # TOTAL3 yorumu — saf altcoin talebi
-        total3_note = ""
-        if total3 > 0 and total3_chg:
-            if total3_chg > 3:
-                total3_note = f"Altcoinler güçlü (%{total3_chg:+.1f}) — risk iştahı açık"
-            elif total3_chg < -3:
-                total3_note = f"Altcoinler zayıf (%{total3_chg:+.1f}) — BTC dominansı artıyor"
-            else:
-                total3_note = f"Altcoinler yatay (%{total3_chg:+.1f})"
-
-        return {
-            "btc_dominance":    btc_dom,
-            "eth_dominance":    eth_dom,
-            "total2_pct":       total2_pct,
-            "total3_pct":       total3_pct,
-            "total_market_cap": total,
-            "total_change_24h": total_chg,
-            "total2_change_24h": total2_chg,
-            "total3_change_24h": total3_chg,
-            "total3_note":      total3_note,
-            "dom_signal":       dom_signal,
-            "dom_note":         dom_note,
-            "note":             dom_note,
-        }
-
+        btc_h = yf.Ticker("BTC-USD").history(period="2d")
+        eth_h = yf.Ticker("ETH-USD").history(period="2d")
+        if not btc_h.empty:
+            btc_p = float(btc_h["Close"].iloc[-1])
+            eth_p = float(eth_h["Close"].iloc[-1]) if not eth_h.empty else 0
+            btc_mc  = btc_p * 19_700_000
+            eth_mc  = eth_p * 120_000_000
+            total_mc = btc_mc * 2.2
+            btc_dom  = round(btc_mc  / total_mc * 100, 1)
+            eth_dom  = round(eth_mc  / total_mc * 100, 1)
+            t2 = round(100 - btc_dom, 1)
+            t3 = round(100 - btc_dom - eth_dom, 1)
+            return _build(btc_dom, eth_dom, t2, t3, total_mc, 0, proxy=True)
     except Exception as e:
-        logger.warning("Bitcoin dominance failed: %s", e)
-        return {}
+        logger.debug("yfinance proxy: %s", e)
 
-
-# ─── 3. Fiyat Verileri (yfinance) ───────────────────────────────────────────
+    logger.warning("Tüm dominance kaynakları başarısız")
+    return {}
 
 def fetch_crypto_prices() -> dict:
     """

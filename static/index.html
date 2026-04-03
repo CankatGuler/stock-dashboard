@@ -255,7 +255,12 @@ async function loadCrypto(){
   }
   const sc=dt.stablecoin||{};const scv=sc.total_dominance||sc.dominance||0;
   if(scv>0)h+=mrow2('Stablecoin Dom.',`%${scv.toFixed(1)}`,sc.note||'',scv>12?'amber':scv<6?'green':'neutral');
-  const ls=dt.long_short||{};if(ls.long_pct!==undefined)h+=mrow2('Long/Short',`${ls.long_pct}% / ${ls.short_pct}%`,ls.note||'',ls.signal||'neutral');
+  const ls=dt.long_short||{};
+  if(ls.long_pct!==undefined){
+    // "API key gerekli" notu varsa farklı göster
+    const lsLabel = ls.note&&ls.note.includes('proxy')?'Long/Short (Proxy)':'Long/Short';
+    h+=mrow2(lsLabel,`${ls.long_pct}% / ${ls.short_pct}%`,ls.note||'',ls.signal||'neutral');
+  }
   const svf=dt.spot_vs_futures||{};if(svf.spot_pct!==undefined)h+=mrow2('Spot vs Futures',`Spot %${svf.spot_pct}`,svf.note||'',svf.signal||'neutral');
   h+='</div><div class="card"><div class="ct">📖 Okuma Rehberi</div><div style="font-size:11px;line-height:1.9;color:var(--text2)"><b style="color:var(--text)">F&G 0-25:</b> Dip bölgesi<br><b style="color:var(--text)">F&G 75+:</b> Zirve riski<br><b style="color:var(--text)">BTC Dom ↑:</b> Altcoin baskılı<br><b style="color:var(--text)">Long > %65:</b> Squeeze riski</div></div></div>';
 
