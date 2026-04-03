@@ -500,8 +500,126 @@ async def chat_with_director(request: Request):
         return {"status": "error", "message": str(e)}
 
 
-@app.get("/api/library")
-async def get_library():
+@app.get("/api/crypto")
+async def get_crypto_dashboard():
+    """
+    BTC kripto dashboard metrikleri:
+    - Fear & Greed Index
+    - BTC Dominansı
+    - Funding Rate proxy
+    - Open Interest proxy
+    - Long/Short oranı
+    - On-chain proxies (MVRV, RSI, hacim)
+    - Stablecoin dominansı
+    """
+    def _fetch():
+        from crypto_fetcher import (
+            fetch_crypto_fear_greed,
+            fetch_bitcoin_dominance,
+            fetch_long_short_ratio,
+            fetch_onchain_proxies,
+            fetch_stablecoin_dominance,
+        )
+        import yfinance as yf
+
+        result = {}
+
+        # Fear & Greed
+        try:
+            fg = fetch_crypto_fear_greed()
+            result["fear_greed"] = fg
+        except Exception as e:
+            result["fear_greed"] = {"error": str(e)}
+
+        # BTC Dominansı
+        try:
+            dom = fetch_bitcoin_dominance()
+            result["dominance"] = dom
+        except Exception as e:
+            result["dominance"] = {"error": str(e)}
+
+        # Long/Short oranı (funding rate proxy içerir)
+        try:
+            ls = fetch_long_short_ratio()
+            result["long_short"] = ls
+        except Exception as e:
+            result["long_short"] = {"error": str(e)}
+
+        # On-chain proxies (MVRV, RSI, hacim trendi)
+        try:
+            onchain = fetch_onchain_proxies()
+            result["onchain"] = onchain
+        except Exception as e:
+            result["onchain"] = {}
+
+        # Exchange Net Flow / Madenci Baskısı
+        try:
+            from crypto_fetcher import fetch_exchange_net_flow
+            result["exchange_flow"] = fetch_exchange_net_flow()
+        except Exception as e:
+            result["exchange_flow"] = {"error": str(e)}
+
+        # NVT Signal
+        try:
+            from crypto_fetcher import fetch_nvt_signal
+            result["nvt"] = fetch_nvt_signal()
+        except Exception as e:
+            result["nvt"] = {"error": str(e)}
+
+        # Active Addresses
+        try:
+            from crypto_fetcher import fetch_active_addresses_proxy
+            result["active_addresses"] = fetch_active_addresses_proxy()
+        except Exception as e:
+            result["active_addresses"] = {"error": str(e)}
+
+        # SOPR Proxy
+        try:
+            from crypto_fetcher import fetch_sopr_proxy
+            result["sopr"] = fetch_sopr_proxy()
+        except Exception as e:
+            result["sopr"] = {"error": str(e)}
+
+        # Stablecoin dominansı
+        try:
+            stable = fetch_stablecoin_dominance()
+            result["stablecoin"] = stable
+        except Exception as e:
+            result["stablecoin"] = {"error": str(e)}
+
+        # Spot vs Futures hacim proxy (BTC-USD spot vs BITO ETF)
+        try:
+            btc_hist  = yf.Ticker("BTC-USD").history(period="2d")
+            bito_hist = yf.Ticker("BITO").history(period="2d")
+            if not btc_hist.empty and not bito_hist.empty:
+                spot_vol    = float(btc_hist["Volume"].iloc[-1])
+                futures_vol = float(bito_hist["Volume"].iloc[-1]) * 10  # normalize
+                ratio = spot_vol / (spot_vol + futures_vol) if (spot_vol + futures_vol) > 0 else 0.5
+                if ratio > 0.65:
+                    sv_signal = "green"
+                    sv_note   = f"Spot hacmi baskın (%{ratio*100:.0f}) — gerçek alım satım, spekülatif değil"
+                elif ratio < 0.35:
+                    sv_signal = "amber"
+                    sv_note   = f"Futures hacmi baskın (%{(1-ratio)*100:.0f}) — spekülatif hareket olabilir"
+                else:
+                    sv_signal = "neutral"
+                    sv_note   = f"Spot/Futures dengeli — sağlıklı piyasa yapısı"
+                result["spot_vs_futures"] = {
+                    "spot_pct": round(ratio * 100, 1),
+                    "signal":   sv_signal,
+                    "note":     sv_note,
+                }
+        except Exception:
+            pass
+
+        return result
+
+    try:
+        loop = asyncio.get_event_loop()
+        data = await loop.run_in_executor(None, _fetch)
+        return {"status": "ok", "data": data}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
     """Finansal terimler kütüphanesi — knowledge_library.py'den."""
     try:
         from knowledge_library import TERMS, CATEGORIES

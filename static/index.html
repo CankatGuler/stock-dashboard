@@ -251,6 +251,7 @@
   <div class="tab" onclick="switchTab('macro')">Makro</div>
   <div class="tab" onclick="switchTab('director')">Direktör</div>
   <div class="tab" onclick="switchTab('archive')">Arşiv</div>
+  <div class="tab" onclick="switchTab('crypto')">Kripto</div>
   <div class="tab" onclick="switchTab('library')">Kütüphane</div>
   <div class="tab" onclick="switchTab('help')">Yardım</div>
 </div>
@@ -378,6 +379,14 @@
     </div>
   </div>
 
+
+  <!-- ══ KRİPTO ═════════════════════════════════════════════════════════ -->
+  <div id="page-crypto" class="page">
+    <div id="crypto-content" class="loading-msg">
+      <span class="spinner"></span> Kripto metrikler yükleniyor...
+    </div>
+  </div>
+
   <!-- ══ ARŞİV ══════════════════════════════════════════════════════════ -->
   <div id="page-archive" class="page">
     <div class="card">
@@ -410,395 +419,183 @@
 </div><!-- /content -->
 
 <script>
-// ══ Yardımcı ═════════════════════════════════════════════════════════════════
 
-const BASE = window.location.origin;
+// ══ Kripto Dashboard ══════════════════════════════════════════════════════════
 
-async function apiFetch(path) {
-  try {
-    const r = await fetch(BASE + path);
-    return await r.json();
-  } catch(e) {
-    return { status:'error', message: e.message };
+async function loadCrypto() {
+  const el = document.getElementById('crypto-content');
+  const d  = await apiFetch('/api/crypto');
+  if (d.status !== 'ok') {
+    el.innerHTML = '<span style="color:var(--text2)">Kripto verisi alınamadı: ' + d.message + '</span>';
+    return;
   }
-}
+  const dt = d.data;
 
-function sigClass(signal) {
-  return signal === 'green' ? 'green' : signal === 'red' ? 'red' : signal === 'amber' ? 'yellow' : 'neutral';
-}
-
-function fmtChg(pct) {
-  if (!pct && pct !== 0) return '—';
-  const cls = pct > 0 ? 'green' : pct < 0 ? 'red' : 'neutral';
-  return `<span class="${cls}">${pct > 0 ? '+' : ''}${pct.toFixed(2)}%</span>`;
-}
-
-// ══ Saat ═════════════════════════════════════════════════════════════════════
-
-function updateClock() {
-  const now = new Date();
-  const tr  = new Date(now.getTime() + 3 * 3600000);
-  document.getElementById('clock').textContent =
-    tr.toISOString().substr(11, 8) + ' TR';
-}
-setInterval(updateClock, 1000);
-updateClock();
-
-// ══ Sekme Değiştirme ══════════════════════════════════════════════════════════
-
-function switchTab(name) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  event.target.classList.add('active');
-  document.getElementById('page-' + name).classList.add('active');
-
-  // Lazy load
-  if (name === 'macro' && !window._macroLoaded) { loadMacro(); window._macroLoaded = true; }
-  if (name === 'archive' && !window._archiveLoaded) { loadArchive(); window._archiveLoaded = true; }
-  if (name === 'library' && !window._libraryLoaded) { renderLibrary(); window._libraryLoaded = true; }
-  if (name === 'help'    && !window._helpLoaded)    { renderHelp(); window._helpLoaded = true; }
-}
-
-// ══ Ana Sayfa ════════════════════════════════════════════════════════════════
-
-async function loadHome() {
-  await Promise.all([loadPulse(), loadBriefing(), loadNews(), loadPortfolio()]);
-}
-
-// Market Pulse
-async function loadPulse() {
-  const d = await apiFetch('/api/macro');
-  if (d.status !== 'ok') return;
-  const data = d.data;
-
-  const pulseMap = {
-    'BTC':    'pc-BTC',
-    'ETH':    'pc-ETH',
-    'VIX':    'pc-VIX',
-    'SPX':    'pc-SPX',
-    'NDX':    'pc-NDX',
-    'BIST':   'pc-BIST-tl',
-    'DXY':    'pc-DXY',
-    'GOLD':   'pc-GOLD',
-    'TNX':    'pc-TNX',
-    'USDTRY': 'pc-USDTRY',
+  const sigDot = (s) => {
+    const c = s === 'green' ? 'var(--green)' : s === 'red' ? 'var(--red)' : s === 'amber' ? 'var(--yellow)' : 'var(--border)';
+    return `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;
+                  background:${c};margin-right:8px;margin-top:3px;flex-shrink:0"></span>`;
   };
 
-  // BTC yfinance'ten ayrıca
-  for (const [key, cardId] of Object.entries(pulseMap)) {
-    if (!data[key]) continue;
-    const ind = data[key];
-    const card = document.getElementById(cardId);
-    if (!card) continue;
-    const cls = sigClass(ind.signal);
-    const val = ind.unit === '%' ? `%${ind.value.toFixed(2)}` :
-                ind.unit === '$' ? `$${ind.value.toLocaleString('en',{maximumFractionDigits:2})}` :
-                ind.value.toLocaleString('en',{maximumFractionDigits:2});
-    card.querySelector('.pc-value').className = `pc-value ${cls}`;
-    card.querySelector('.pc-value').textContent = val;
-    card.querySelector('.pc-chg').className = `pc-chg ${ind.change_pct > 0 ? 'green' : ind.change_pct < 0 ? 'red' : 'neutral'}`;
-    card.querySelector('.pc-chg').textContent = `${ind.change_pct > 0 ? '+' : ''}${ind.change_pct.toFixed(2)}%`;
-  }
-
-  // BIST USD: TL değerini USD/TRY'ye böl
-  if (data['BIST'] && data['USDTRY'] && data['USDTRY'].value > 0) {
-    const bistUSD = data['BIST'].value / data['USDTRY'].value;
-    const bistUSDCard = document.getElementById('pc-BIST-usd');
-    if (bistUSDCard) {
-      bistUSDCard.querySelector('.pc-value').className = 'pc-value neutral';
-      bistUSDCard.querySelector('.pc-value').textContent =
-        '$' + bistUSD.toLocaleString('en', {maximumFractionDigits:2});
-      bistUSDCard.querySelector('.pc-chg').textContent = '';
-    }
-  }
-}
-
-// Direktör Brifingı
-async function loadBriefing() {
-  const d = await apiFetch('/api/briefing');
-  const el = document.getElementById('briefing-text');
-  if (d.status === 'ok') {
-    el.className = '';
-    el.textContent = d.briefing;
-  } else {
-    el.className = '';
-    el.textContent = 'Brifing alınamadı: ' + d.message;
-    el.style.color = 'var(--text2)';
-  }
-}
-
-// Haberler
-async function loadNews() {
-  const d = await apiFetch('/api/news');
-  const el = document.getElementById('news-list');
-  if (d.status !== 'ok' || !d.news || !d.news.length) {
-    el.className = '';
-    el.innerHTML = '<span style="color:var(--text2);font-size:12px;">Haber yüklenemedi.</span>';
-    return;
-  }
-  const impactColor = { pozitif:'var(--green)', negatif:'var(--red)', nötr:'var(--yellow)' };
-  el.className = '';
-  el.innerHTML = d.news.map(n => `
-    <div class="news-item">
-      <div class="news-impact" style="background:${impactColor[n.impact] || 'var(--text2)'}"></div>
-      <div>
-        <div class="news-title">${n.title}</div>
-        <div class="news-summary">${n.summary}</div>
-        <span class="news-tag">${n.asset_class || ''}</span>
-      </div>
-    </div>
-  `).join('');
-}
-
-// Portföy
-async function loadPortfolio() {
-  const d = await apiFetch('/api/portfolio');
-  const el = document.getElementById('portfolio-list');
-  if (d.status !== 'ok') {
-    el.className = '';
-    el.textContent = 'Portföy yüklenemedi.';
-    return;
-  }
-  const classOrder = ['tefas','us_equity','crypto','commodity'];
-  let html = '';
-  for (const ac of classOrder) {
-    const cls = d.classes[ac];
-    if (!cls) continue;
-    const pnlCls = cls.pnl >= 0 ? 'green' : 'red';
-    html += `
-      <div class="portfolio-row">
-        <div class="pr-label">${cls.label}</div>
-        <div class="pr-bar"><div class="pr-bar-fill" style="width:${cls.weight}%"></div></div>
-        <div class="pr-value">$${cls.value.toLocaleString('en')}</div>
-        <div class="pr-pnl ${pnlCls}">${cls.pnl >= 0 ? '+' : ''}${cls.pnl_pct.toFixed(1)}%</div>
-      </div>`;
-  }
-  // Toplam
-  const totalPnlCls = d.total_pnl >= 0 ? 'green' : 'red';
-  html += `
-    <div class="portfolio-total">
-      <div>
-        <div class="pt-label">TOPLAM DEĞER</div>
-        <div class="pt-value">$${d.total_value.toLocaleString('en')}</div>
-      </div>
-      <div style="text-align:right">
-        <div class="pt-label">TOPLAM K/Z</div>
-        <div class="pt-pnl ${totalPnlCls}">
-          ${d.total_pnl >= 0 ? '+' : ''}$${Math.abs(d.total_pnl).toLocaleString('en')}
-          (${d.total_pnl_pct >= 0 ? '+' : ''}${d.total_pnl_pct.toFixed(1)}%)
+  const metricRow = (label, value, note, signal) => `
+    <div style="display:flex;align-items:flex-start;gap:8px;padding:9px 0;border-bottom:1px solid var(--border);">
+      ${sigDot(signal || 'neutral')}
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap">
+          <span style="font-size:12px;font-weight:600;color:var(--text)">${label}</span>
+          <span style="font-family:var(--mono);font-size:13px;font-weight:600;white-space:nowrap;
+                 color:${signal==='green'?'var(--green)':signal==='red'?'var(--red)':signal==='amber'?'var(--yellow)':'var(--text)'}">${value}</span>
         </div>
+        ${note ? `<div style="font-size:11px;color:var(--text2);margin-top:3px;line-height:1.5">${note}</div>` : ''}
       </div>
     </div>`;
+
+  let html2 = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">';
+
+  // ══ KOLON 1: Duygu & Yapı ═══════════════════════════════════════════
+  html2 += '<div style="display:flex;flex-direction:column;gap:16px">';
+  html2 += '<div class="card"><div class="card-title">😱 Duygu & Piyasa Yapısı</div>';
+
+  // Fear & Greed
+  const fg = dt.fear_greed || {};
+  if (fg.index !== undefined) {
+    const fgSig = fg.index <= 25 ? 'red' : fg.index <= 45 ? 'amber' : fg.index >= 75 ? 'green' : 'neutral';
+    html2 += metricRow('Fear & Greed', `${fg.index} / 100 — ${fg.label||''}`, fg.note||'', fgSig);
+  }
+
+  // BTC Dominansı
+  const dom = dt.dominance || {};
+  if (dom.btc_dominance !== undefined) {
+    const domSig = dom.btc_dominance > 58 ? 'amber' : dom.btc_dominance < 42 ? 'green' : 'neutral';
+    html2 += metricRow('BTC Dominansı',
+      `%${dom.btc_dominance.toFixed(1)}`,
+      dom.note || (dom.btc_dominance > 55 ? 'Para altcoin'lerden BTC'ye geçiyor' : 'Normal aralık'),
+      domSig);
+    if (dom.eth_dominance) html2 += metricRow('ETH Dominansı', `%${dom.eth_dominance.toFixed(1)}`, '', 'neutral');
+  }
+
+  // Stablecoin Dom
+  const sc = dt.stablecoin || {};
+  const scVal = sc.total_dominance || sc.dominance || 0;
+  if (scVal > 0) {
+    const scSig = scVal > 12 ? 'amber' : scVal < 6 ? 'green' : 'neutral';
+    html2 += metricRow('Stablecoin Dom.', `%${scVal.toFixed(1)}`,
+      scVal > 12 ? 'Yüksek — yatırımcılar kenarda' : scVal < 6 ? 'Düşük — eufori riski' : 'Normal',
+      scSig);
+  }
+
+  // Long/Short
+  const ls = dt.long_short || {};
+  if (ls.long_pct !== undefined) {
+    html2 += metricRow('Long / Short', `${ls.long_pct}% / ${ls.short_pct}%`, ls.note||'', ls.signal||'neutral');
+  }
+
+  // Spot vs Futures
+  const svf = dt.spot_vs_futures || {};
+  if (svf.spot_pct !== undefined) {
+    html2 += metricRow('Spot vs Futures', `Spot %${svf.spot_pct}`, svf.note||'', svf.signal||'neutral');
+  }
+
+  html2 += '</div>'; // card
+
+  // Rehber kutusu
+  html2 += `<div class="card"><div class="card-title">📖 Okuma Rehberi</div>
+    <div style="font-size:11px;line-height:1.8;color:var(--text2)">
+      <b style="color:var(--text)">F&G 0-25:</b> Aşırı korku → dip bölgesi<br>
+      <b style="color:var(--text)">F&G 75+:</b> Açgözlülük → zirve riski<br>
+      <b style="color:var(--text)">BTC Dom ↑:</b> Altcoin'ler baskılı<br>
+      <b style="color:var(--text)">Stable Dom ↑:</b> Kenarda bekleyiş<br>
+      <b style="color:var(--text)">Long > %65:</b> Long squeeze riski<br>
+      <b style="color:var(--text)">Short > %60:</b> Short squeeze fırsatı
+    </div>
+  </div>`;
+  html2 += '</div>'; // kolon 1
+
+  // ══ KOLON 2: Fiyat & Momentum ════════════════════════════════════════
+  html2 += '<div style="display:flex;flex-direction:column;gap:16px">';
+  html2 += '<div class="card"><div class="card-title">📈 Fiyat & Momentum</div>';
+
+  const oc = dt.onchain || {};
+  if (oc.mvrv_proxy) {
+    html2 += metricRow('MVRV Proxy', `${oc.mvrv_proxy.value.toFixed(2)}x`,
+      oc.mvrv_proxy.note, oc.mvrv_proxy.signal);
+  }
+  if (oc.btc_rsi) {
+    html2 += metricRow('BTC RSI (14)', `${oc.btc_rsi.value.toFixed(1)}`,
+      oc.btc_rsi.note, oc.btc_rsi.signal);
+  }
+  if (oc.volume_trend) {
+    html2 += metricRow('Hacim Trendi (7g)',
+      `${oc.volume_trend.value > 0 ? '+' : ''}${oc.volume_trend.value.toFixed(1)}%`,
+      oc.volume_trend.note, oc.volume_trend.signal);
+  }
+
+  // Exchange Net Flow
+  const ef = dt.exchange_flow || {};
+  if (ef.note) html2 += metricRow('Exchange/Madenci Akışı', ef.value !== undefined ? ef.value.toFixed(2) : '—', ef.note, ef.signal||'neutral');
+
+  html2 += '</div>'; // card
+
+  // MVRV rehberi
+  html2 += `<div class="card"><div class="card-title">📖 Okuma Rehberi</div>
+    <div style="font-size:11px;line-height:1.8;color:var(--text2)">
+      <b style="color:var(--text)">MVRV > 3.5:</b> Tarihsel zirve bölgesi<br>
+      <b style="color:var(--text)">MVRV 1.5-2.5:</b> Sağlıklı boğa<br>
+      <b style="color:var(--text)">MVRV < 1:</b> Dip bölgesi, alım fırsatı<br>
+      <b style="color:var(--text)">RSI > 75:</b> Aşırı alım, dikkat<br>
+      <b style="color:var(--text)">RSI < 25:</b> Aşırı satış, fırsat<br>
+      <b style="color:var(--text)">Hacim ↑ + Fiyat ↑:</b> Sağlıklı ralli
+    </div>
+  </div>`;
+  html2 += '</div>'; // kolon 2
+
+  // ══ KOLON 3: On-Chain Proxies ════════════════════════════════════════
+  html2 += '<div style="display:flex;flex-direction:column;gap:16px">';
+  html2 += '<div class="card"><div class="card-title">⛓ On-Chain Metrikler</div>';
+
+  // NVT
+  const nvt = dt.nvt || {};
+  if (nvt.nvt_current !== undefined) {
+    html2 += metricRow('NVT Signal',
+      `${nvt.nvt_current.toFixed(0)} (ratio: ${nvt.nvt_ratio?.toFixed(2)||'—'})`,
+      nvt.note||'', nvt.signal||'neutral');
+  } else if (nvt.note) {
+    html2 += metricRow('NVT Signal', '—', nvt.note, nvt.signal||'neutral');
+  }
+
+  // SOPR
+  const sopr = dt.sopr || {};
+  if (sopr.sopr_7d !== undefined) {
+    html2 += metricRow('SOPR Proxy (7g)', sopr.sopr_7d.toFixed(3), sopr.note||'', sopr.signal||'neutral');
+    if (sopr.sopr_30d) html2 += metricRow('SOPR Proxy (30g)', sopr.sopr_30d.toFixed(3), '', 'neutral');
+  }
+
+  // Active Addresses
+  const aa = dt.active_addresses || {};
+  if (aa.active_est !== undefined) {
+    html2 += metricRow('Aktif Adres (proxy)',
+      `~${aa.active_est.toLocaleString('en')}K / gün`,
+      aa.note||'', aa.signal||'neutral');
+  }
+
+  html2 += '</div>'; // card
+
+  // On-chain rehberi
+  html2 += `<div class="card"><div class="card-title">📖 Okuma Rehberi</div>
+    <div style="font-size:11px;line-height:1.8;color:var(--text2)">
+      <b style="color:var(--text)">NVT > ortalama:</b> Fiyat fundamentalden kopmuş<br>
+      <b style="color:var(--text)">NVT < 0.7x:</b> Ağ yoğun, fiyat ucuz<br>
+      <b style="color:var(--text)">SOPR < 1:</b> Zarar satışı = dip sinyali<br>
+      <b style="color:var(--text)">SOPR > 1.15:</b> Büyük kâr realizasyonu<br>
+      <b style="color:var(--text)">Aktif adres ↑:</b> Ağ büyüyor, sağlıklı<br>
+      <b style="color:var(--text)">Aktif adres ↓:</b> İlgi kaybı, dikkat
+    </div>
+  </div>`;
+  html2 += '</div>'; // kolon 3
+
+  html2 += '</div>'; // grid 3 kolon
+
   el.className = '';
-  el.innerHTML = html;
-}
-
-// ══ Makro Sayfası ═════════════════════════════════════════════════════════════
-
-async function loadMacro() {
-  const d = await apiFetch('/api/macro');
-  const el = document.getElementById('macro-content');
-  if (d.status !== 'ok') {
-    el.textContent = 'Makro veri alınamadı.';
-    return;
-  }
-
-  const groupOrder = [
-    ['fear',      '😨 Volatilite & Korku'],
-    ['rates',     '📊 Faiz & Tahvil'],
-    ['credit',    '💳 Kredi Piyasası'],
-    ['fx',        '💵 Döviz'],
-    ['commodity', '🥇 Emtia'],
-    ['market',    '📈 Endeksler'],
-    ['sector',    '🏭 Sektör ETF\'leri'],
-    ['turkey',    '🇹🇷 Türkiye'],
-  ];
-
-  const groups = {};
-  for (const [key, ind] of Object.entries(d.data)) {
-    const g = ind.group;
-    if (!groups[g]) groups[g] = [];
-    groups[g].push({key, ...ind});
-  }
-
-  const dotColor = { green:'var(--green)', red:'var(--red)', amber:'var(--yellow)', neutral:'var(--border)' };
-
-  let html = '<div style="columns:2;column-gap:16px;">';
-  for (const [grp, label] of groupOrder) {
-    if (!groups[grp] || !groups[grp].length) continue;
-    html += `<div class="macro-group" style="break-inside:avoid;">`;
-    html += `<div class="macro-group-title">${label}</div>`;
-    for (const ind of groups[grp]) {
-      const val = ind.unit === '%' ? `%${ind.value.toFixed(2)}` :
-                  ind.unit === '$' ? `$${ind.value.toLocaleString('en',{maximumFractionDigits:2})}` :
-                  ind.unit === '₺' ? `₺${ind.value.toFixed(2)}` :
-                  ind.value.toLocaleString('en',{maximumFractionDigits:2});
-      const chgCls = ind.change_pct > 0 ? 'green' : ind.change_pct < 0 ? 'red' : 'neutral';
-      html += `
-        <div class="macro-row">
-          <div class="mr-dot" style="background:${dotColor[ind.signal] || 'var(--border)'}"></div>
-          <div class="mr-label">${ind.label}</div>
-          <div class="mr-value">${val}</div>
-          <div class="mr-chg ${chgCls}">${ind.change_pct > 0 ? '+' : ''}${ind.change_pct.toFixed(2)}%</div>
-        </div>
-        ${ind.note ? `<div style="font-size:10px;color:var(--text2);padding:2px 0 4px 18px;">${ind.note}</div>` : ''}
-      `;
-    }
-    html += '</div>';
-  }
-  html += '</div>';
-  el.className = '';
-  el.innerHTML = html;
-}
-
-// ══ Direktör Chat ═════════════════════════════════════════════════════════════
-
-function handleChatKey(e) {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
-}
-
-async function sendChat() {
-  const input = document.getElementById('chat-input');
-  const msg   = input.value.trim();
-  if (!msg) return;
-
-  addMsg('user', msg);
-  input.value = '';
-  document.getElementById('chat-send').disabled = true;
-
-  // Thinking indicator
-  const thinkId = 'think-' + Date.now();
-  addMsg('bot', '<span class="spinner"></span> Direktör düşünüyor...', thinkId, true);
-
-  const d = await apiFetch_post('/api/chat', { message: msg });
-
-  // Thinking'i kaldır
-  const thinkEl = document.getElementById(thinkId);
-  if (thinkEl) thinkEl.parentElement.remove();
-
-  addMsg('bot', d.status === 'ok' ? d.response : '⚠️ ' + d.message);
-  document.getElementById('chat-send').disabled = false;
-}
-
-async function apiFetch_post(path, body) {
-  try {
-    const r = await fetch(BASE + path, {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(body),
-    });
-    return await r.json();
-  } catch(e) {
-    return { status:'error', message: e.message };
-  }
-}
-
-function addMsg(role, text, id, isHtml) {
-  const msgs = document.getElementById('chat-messages');
-  const now  = new Date();
-  const tr   = new Date(now.getTime() + 3*3600000);
-  const time = tr.toISOString().substr(11,5);
-
-  const div = document.createElement('div');
-  div.className = `msg ${role}`;
-  if (id) div.id = id;
-
-  const bubble = document.createElement('div');
-  bubble.className = 'msg-bubble';
-  if (isHtml) bubble.innerHTML = text;
-  else        bubble.textContent = text;
-
-  const timeDiv = document.createElement('div');
-  timeDiv.className = 'msg-time';
-  timeDiv.textContent = role === 'user' ? `Sen · ${time}` : `Direktör · ${time}`;
-
-  div.appendChild(bubble);
-  div.appendChild(timeDiv);
-  msgs.appendChild(div);
-  msgs.scrollTop = msgs.scrollHeight;
-}
-
-// ══ Arşiv ════════════════════════════════════════════════════════════════════
-
-async function loadArchive() {
-  const d = await apiFetch('/api/archive');
-  const el = document.getElementById('archive-list');
-  if (d.status !== 'ok' || !d.decisions || !d.decisions.length) {
-    el.className = '';
-    el.innerHTML = '<span style="color:var(--text2);font-size:12px;">Henüz kayıtlı karar yok. İlk strateji analizinden sonra burada görünecek.</span>';
-    return;
-  }
-  el.className = '';
-  el.innerHTML = [...d.decisions].reverse().map(dec => {
-    const actions = (dec.ana_aksiyonlar || [])
-      .map(a => `${a.eylem} ${a.varlik}`)
-      .slice(0,3).join(' · ');
-    return `
-      <div class="archive-item">
-        <div class="ai-date">${dec.tarih} · VIX: ${dec.vix} · BTC: $${(dec.btc_fiyat||0).toLocaleString('en')}</div>
-        <div class="ai-regime">${dec.rejim || '—'} ${dec.rejim_surekliligi_gun ? `(${dec.rejim_surekliligi_gun} gün)` : ''}</div>
-        <div class="ai-summary">${dec.ozet || ''}</div>
-        ${actions ? `<div class="ai-actions">Aksiyonlar: ${actions}</div>` : ''}
-      </div>`;
-  }).join('');
-}
-
-// ══ Kütüphane ════════════════════════════════════════════════════════════════
-
-async function renderLibrary() {
-  const el = document.getElementById('library-content');
-  el.innerHTML = '<div class="loading-msg"><span class="spinner"></span> Kütüphane yükleniyor...</div>';
-  
-  const d = await apiFetch('/api/library');
-  if (d.status !== 'ok') {
-    el.innerHTML = '<span style="color:var(--text2)">Kütüphane yüklenemedi.</span>';
-    return;
-  }
-
-  const levelBadge = {
-    'başlangıç': '<span style="color:var(--green);font-size:10px;">● Başlangıç</span>',
-    'orta':      '<span style="color:var(--yellow);font-size:10px;">● Orta</span>',
-    'ileri':     '<span style="color:var(--red);font-size:10px;">● İleri</span>',
-  };
-
-  const catOrder = ['temel','degerlem','makro','portfoy','teknik','piyasa'];
-  const grouped = {};
-  for (const t of d.terms) {
-    const c = t.category || 'temel';
-    if (!grouped[c]) grouped[c] = [];
-    grouped[c].push(t);
-  }
-
-  let html2 = '';
-  for (const cat of catOrder) {
-    if (!grouped[cat]) continue;
-    const catInfo = d.categories[cat] || {label: cat, emoji: '📌'};
-    html2 += `<div style="margin-bottom:24px;">
-      <div style="font-size:12px;font-weight:600;color:var(--accent);letter-spacing:1px;
-                  text-transform:uppercase;margin-bottom:8px;padding-bottom:6px;
-                  border-bottom:1px solid var(--border);">
-        ${catInfo.emoji} ${catInfo.label}
-      </div>`;
-    for (const t of grouped[cat]) {
-      html2 += `
-        <div class="lib-item">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-            <span style="font-size:16px;">${t.emoji || '📌'}</span>
-            <span class="lib-term">${t.term}</span>
-            <span style="color:var(--text2);font-size:11px;">${t.eng || ''}</span>
-            <span style="margin-left:auto;">${levelBadge[t.level] || ''}</span>
-          </div>
-          <div class="lib-def">${t.definition || ''}</div>
-          ${t.formula ? `<div style="font-family:var(--mono);font-size:11px;color:var(--accent);
-                          margin-top:4px;padding:4px 8px;background:var(--bg3);border-radius:4px;">
-                          📐 ${t.formula}</div>` : ''}
-          ${t.how_to_read ? `<div style="font-size:11px;color:var(--text2);margin-top:6px;
-                              line-height:1.6;white-space:pre-line;">
-                              <b style="color:var(--text)">Nasıl Okunur:</b><br>${t.how_to_read}</div>` : ''}
-          ${t.example ? `<div class="lib-example">💡 ${t.example}</div>` : ''}
-        </div>`;
-    }
-    html2 += '</div>';
-  }
   el.innerHTML = html2;
 }
 
@@ -860,6 +657,153 @@ function _renderLibraryOLD() {
       <div class="lib-example">💡 ${t.ex}</div>
     </div>
   `).join('');
+}
+
+
+// ══ Kripto Dashboard ══════════════════════════════════════════════════════════
+
+async function loadCrypto() {
+  const el = document.getElementById('crypto-content');
+  const d  = await apiFetch('/api/crypto');
+  if (d.status !== 'ok') {
+    el.innerHTML = '<span style="color:var(--text2)">Kripto verisi alınamadı: ' + d.message + '</span>';
+    return;
+  }
+  const dt = d.data;
+
+  const sigDot = (s) => {
+    const c = s === 'green' ? 'var(--green)' : s === 'red' ? 'var(--red)' : s === 'amber' ? 'var(--yellow)' : 'var(--text2)';
+    return `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c};margin-right:6px;flex-shrink:0"></span>`;
+  };
+
+  const metricRow = (label, value, note, signal) => `
+    <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
+      ${sigDot(signal || 'neutral')}
+      <div style="flex:1">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:12px;font-weight:600;color:var(--text)">${label}</span>
+          <span style="font-family:var(--mono);font-size:14px;font-weight:600;
+                       color:${(signal==='green')?'var(--green)':(signal==='red')?'var(--red)':(signal==='amber')?'var(--yellow)':'var(--text)'}">${value}</span>
+        </div>
+        ${note ? `<div style="font-size:11px;color:var(--text2);margin-top:3px;line-height:1.5">${note}</div>` : ''}
+      </div>
+    </div>`;
+
+  let html2 = '<div class="grid-2" style="gap:16px">';
+
+  // ── Sol Kolon: Duygu & Yapı ──────────────────────────────────────────
+  html2 += '<div>';
+  html2 += '<div class="card" style="margin-bottom:16px">';
+  html2 += '<div class="card-title">😱 Korku & Duygu</div>';
+
+  // Fear & Greed
+  const fg = dt.fear_greed || {};
+  if (fg.index !== undefined) {
+    const fgColor = fg.index <= 25 ? 'var(--red)' : fg.index <= 45 ? 'var(--yellow)' : fg.index >= 75 ? 'var(--green)' : 'var(--text)';
+    const fgSig   = fg.index <= 25 ? 'red' : fg.index <= 45 ? 'amber' : fg.index >= 75 ? 'green' : 'neutral';
+    html2 += metricRow(
+      'Fear & Greed Index',
+      `<span style="color:${fgColor}">${fg.index} — ${fg.label || ''}</span>`,
+      fg.note || '',
+      fgSig
+    );
+  } else {
+    html2 += metricRow('Fear & Greed Index', '—', 'Veri alınamadı', 'neutral');
+  }
+
+  // Long/Short
+  const ls = dt.long_short || {};
+  if (ls.long_pct !== undefined) {
+    html2 += metricRow(
+      'Long / Short Oranı',
+      `${ls.long_pct}% Long / ${ls.short_pct}% Short`,
+      ls.note || '',
+      ls.signal || 'neutral'
+    );
+  }
+
+  // Spot vs Futures
+  const svf = dt.spot_vs_futures || {};
+  if (svf.spot_pct !== undefined) {
+    html2 += metricRow(
+      'Spot vs Futures Hacmi',
+      `Spot %${svf.spot_pct}`,
+      svf.note || '',
+      svf.signal || 'neutral'
+    );
+  }
+
+  html2 += '</div>'; // card
+
+  // ── On-Chain Proxies ─────────────────────────────────────────────────
+  html2 += '<div class="card">';
+  html2 += '<div class="card-title">⛓ On-Chain Proxies</div>';
+
+  const oc = dt.onchain || {};
+  if (oc.mvrv_proxy) {
+    html2 += metricRow('MVRV Proxy', oc.mvrv_proxy.value.toFixed(2) + 'x', oc.mvrv_proxy.note, oc.mvrv_proxy.signal);
+  }
+  if (oc.btc_rsi) {
+    html2 += metricRow('BTC RSI (14)', oc.btc_rsi.value.toFixed(1), oc.btc_rsi.note, oc.btc_rsi.signal);
+  }
+  if (oc.volume_trend) {
+    const vt = oc.volume_trend;
+    html2 += metricRow('Hacim Trendi (7g)', `${vt.value > 0 ? '+' : ''}${vt.value.toFixed(1)}%`, vt.note, vt.signal);
+  }
+  html2 += '</div>'; // card
+  html2 += '</div>'; // sol kolon
+
+  // ── Sağ Kolon: Piyasa Yapısı ─────────────────────────────────────────
+  html2 += '<div>';
+  html2 += '<div class="card" style="margin-bottom:16px">';
+  html2 += '<div class="card-title">🏗 Piyasa Yapısı & Dominans</div>';
+
+  // BTC Dominansı
+  const dom = dt.dominance || {};
+  if (dom.btc_dominance !== undefined) {
+    const domSig = dom.btc_dominance > 58 ? 'amber' : dom.btc_dominance < 42 ? 'green' : 'neutral';
+    html2 += metricRow(
+      'BTC Dominansı',
+      `%${dom.btc_dominance.toFixed(1)}`,
+      dom.note || (dom.btc_dominance > 55 ? 'Para altcoin'lerden BTC'ye geçiyor — altcoin portföyün baskı altında' :
+                   dom.btc_dominance < 45 ? 'Altcoin sezonu — riskli varlıklar öne çıkıyor' : 'Normal aralık'),
+      domSig
+    );
+    if (dom.eth_dominance !== undefined) {
+      html2 += metricRow('ETH Dominansı', `%${dom.eth_dominance.toFixed(1)}`, '', 'neutral');
+    }
+  }
+
+  // Stablecoin Dominansı
+  const sc = dt.stablecoin || {};
+  if (sc.total_dominance !== undefined || sc.dominance !== undefined) {
+    const scVal  = sc.total_dominance || sc.dominance || 0;
+    const scSig  = scVal > 12 ? 'amber' : scVal < 6 ? 'green' : 'neutral';
+    const scNote = scVal > 12 ? 'Yüksek — yatırımcılar kenarda bekliyor, piyasa dip olabilir' :
+                   scVal < 6  ? 'Düşük — para aktif piyasada, eufori riski' : 'Normal aralık';
+    html2 += metricRow('Stablecoin Dominansı', `%${scVal.toFixed(1)}`, sc.note || scNote, scSig);
+  }
+
+  html2 += '</div>'; // card
+
+  // ── Rehber Kutusu ────────────────────────────────────────────────────
+  html2 += `<div class="card">
+    <div class="card-title">📖 Nasıl Okursun?</div>
+    <div style="font-size:12px;line-height:1.8;color:var(--text2)">
+      <div style="margin-bottom:8px"><span style="color:var(--text);font-weight:600">Fear & Greed 0-25:</span> Aşırı korku → tarihsel dip bölgesi, alım fırsatı</div>
+      <div style="margin-bottom:8px"><span style="color:var(--text);font-weight:600">Fear & Greed 75-100:</span> Aşırı açgözlülük → zirve riski, dikkatli ol</div>
+      <div style="margin-bottom:8px"><span style="color:var(--text);font-weight:600">BTC Dom. yükseliyor:</span> Para altcoin'lerden kaçıyor → portföyünü koru</div>
+      <div style="margin-bottom:8px"><span style="color:var(--text);font-weight:600">Stablecoin Dom. yüksek:</span> Yatırımcılar kenarda → potansiyel dip</div>
+      <div style="margin-bottom:8px"><span style="color:var(--text);font-weight:600">Long/Short aşırı long:</span> Squeeze riski — düşüş bekleniyor olabilir</div>
+      <div><span style="color:var(--text);font-weight:600">MVRV > 3.5:</span> Tarihsel zirve bölgesi → kâr realizasyonu düşün</div>
+    </div>
+  </div>`;
+
+  html2 += '</div>'; // sağ kolon
+  html2 += '</div>'; // grid-2
+
+  el.className = '';
+  el.innerHTML = html2;
 }
 
 // ══ Yardım ════════════════════════════════════════════════════════════════════
