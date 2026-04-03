@@ -218,7 +218,7 @@ async def get_macro():
     """Makro göstergeler — dashboard ana sayfa için."""
     try:
         from macro_dashboard import fetch_macro_data
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         data = await loop.run_in_executor(None, fetch_macro_data)
         result = {}
         for key, ind in data.items():
@@ -361,7 +361,7 @@ async def get_briefing():
                 pass
             return _vix, _spy_chg, _btc
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         vix, spy_chg, btc = await loop.run_in_executor(None, _fetch_market_data)
         usd_try = await loop.run_in_executor(None, fetch_usd_try_rate)
 
@@ -468,7 +468,7 @@ async def get_news():
         return []
 
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         news = await loop.run_in_executor(None, _fetch_news)
         news = news[:4] if news else []
 
@@ -493,7 +493,7 @@ async def chat_with_director(request: Request):
         if not message:
             return {"status": "error", "message": "Mesaj boş"}
         from chat_director import ask_director
-        loop   = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         answer = await loop.run_in_executor(None, ask_director, message)
         return {"status": "ok", "response": answer}
     except Exception as e:
@@ -615,10 +615,11 @@ async def get_crypto_dashboard():
         return result
 
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         data = await loop.run_in_executor(None, _fetch)
         return {"status": "ok", "data": data}
     except Exception as e:
+        logger.error("Crypto endpoint hatası: %s", e, exc_info=True)
         return {"status": "error", "message": str(e)}
 
 
