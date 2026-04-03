@@ -172,7 +172,85 @@ def _build_portfolio_context(usd_try: float) -> str:
         return f"Portföy alınamadı: {e}"
 
 
-def _build_memory_context() -> str:
+def _extract_tickers_from_message(message: str) -> list[str]:
+    """
+    Kullanıcı mesajından hisse/kripto sembollerini tespit et.
+    Büyük harfli 1-5 karakter kelimeler potansiyel ticker.
+    Bilinen kripto ve yaygın kısaltmaları filtrele.
+    """
+    import re
+    # Büyük harfli 2-6 karakter kelimeler (ticker formatı)
+    candidates = re.findall(r'\b([A-Z]{2,6}(?:-USD)?)\b', message.upper())
+
+    # Filtrele — Türkçe büyük harf kısaltmalar ve stopword'ler
+    stopwords = {
+        "VIX", "DXY", "ETF", "ABD", "BTC", "ETH", "SOL", "USD", "TRY",
+        "TL", "FED", "GDP", "CPI", "PCE", "AI", "API", "EPS", "FCF",
+        "ROE", "ROA", "PE", "PEG", "YOY", "QOQ", "TTM", "EBITDA",
+        "OK", "TR", "EN", "DE", "KI", "BI", "NE", "BU", "DA",
+    }
+
+    tickers = []
+    for c in candidates:
+        if c not in stopwords and len(c) >= 2:
+            tickers.append(c)
+
+    return list(dict.fromkeys(tickers))[:5]  # max 5, tekrarsız
+
+
+def _fetch_live_prices(tickers: list[str]) -> str:
+    """
+    Verilen ticker listesi için anlık fiyat ve temel metrikleri çek.
+    Direktörün sistem promptuna enjekte edilecek.
+    """
+    if not tickers:
+        return ""
+
+    import yfinance as yf
+
+    lines = ["\nANLIK FİYAT VERİSİ (otomatik çekildi):"]
+    found_any = False
+
+    for tk in tickers:
+        try:
+            ticker_obj = yf.Ticker(tk)
+            hist = ticker_obj.history(period="5d")
+            if hist.empty:
+                continue
+
+            price     = float(hist["Close"].iloc[-1])
+            prev      = float(hist["Close"].iloc[-2]) if len(hist) >= 2 else price
+            chg_pct   = (price - prev) / prev * 100 if prev > 0 else 0
+            price_5d  = float(hist["Close"].iloc[0])
+            chg_5d    = (price - price_5d) / price_5d * 100 if price_5d > 0 else 0
+
+            # Temel metrikler (hızlı — sadece fast_info)
+            fi = ticker_obj.fast_info
+            mkt_cap = getattr(fi, "market_cap", None)
+            mc_str  = ""
+            if mkt_cap:
+                if mkt_cap >= 1e12:
+                    mc_str = f" | Piyasa Değeri: ${mkt_cap/1e12:.2f}T"
+                elif mkt_cap >= 1e9:
+                    mc_str = f" | Piyasa Değeri: ${mkt_cap/1e9:.1f}B"
+
+            chg_sign  = "+" if chg_pct >= 0 else ""
+            chg5_sign = "+" if chg_5d  >= 0 else ""
+            lines.append(
+                f"  {tk}: ${price:,.2f} "
+                f"(günlük {chg_sign}{chg_pct:.2f}%, "
+                f"5g {chg5_sign}{chg_5d:.2f}%)"
+                f"{mc_str}"
+            )
+            found_any = True
+        except Exception:
+            continue  # Geçersiz ticker, sessizce atla
+
+    if not found_any:
+        return ""
+
+    lines.append("(Kaynak: yfinance — gerçek zamanlı veri)")
+    return "\n".join(lines)
     """Hafıza sisteminden güncel direktör bağlamını getir."""
     try:
         from director_memory import memory
@@ -233,6 +311,10 @@ def ask_director(user_message: str) -> str:
     tr_time       = (datetime.now(timezone.utc) +
                      timedelta(hours=3)).strftime("%d %B %Y, %H:%M")
 
+    # Mesajda geçen ticker'lar için anlık fiyat çek
+    detected_tickers = _extract_tickers_from_message(user_message)
+    live_price_ctx   = _fetch_live_prices(detected_tickers)
+
     # ── Sistem Promptu ──────────────────────────────────────────────────────
     system_prompt = f"""Sen deneyimli bir portföy strateji direktörüsün. \
 Kullanıcının (Cankat) kişisel yatırım direktörüsün.
@@ -244,6 +326,7 @@ sorumluluktan kaçan yanıtlar verme — sen zaten o uzmanısın.
 {portfolio_ctx}
 
 {memory_ctx}
+{live_price_ctx}
 
 TARİH/SAAT: {tr_time} (Türkiye)
 USD/TRY: {usd_try:.2f}
@@ -254,6 +337,7 @@ KURALLAR:
 - Geçmiş konuşmaya atıfta bulunabilirsin — sohbet geçmişi sende var.
 - Kullanıcı makale veya haber paylaşırsa, portföye etkisini analiz et.
 - Emin olmadığın konularda bunu açıkça söyle.
+- Fiyat sorulan hisseler için yukarıdaki "ANLIK FİYAT VERİSİ" bölümünü kullan.
 - Yanıtını Telegram'da okunabilir şekilde formatla (HTML değil, düz metin tercih et, \
   ama <b>bold</b> ve <i>italic</i> için HTML kullanabilirsin).
 """
