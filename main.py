@@ -620,24 +620,25 @@ async def get_crypto_dashboard():
         return {"status": "ok", "data": data}
     except Exception as e:
         return {"status": "error", "message": str(e)}
-    """Finansal terimler kütüphanesi — knowledge_library.py'den."""
+
+
+@app.get("/api/library")
+async def get_library():
+    """Finansal terimler kütüphanesi."""
     try:
         from knowledge_library import TERMS, CATEGORIES
         return {"status": "ok", "terms": TERMS, "categories": CATEGORIES}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+
+@app.get("/api/archive")
+async def get_archive():
     """Direktör karar arşivi."""
     try:
         from director_memory import memory
         decisions = memory.get_recent_decisions(n=30)
         return {"status": "ok", "decisions": decisions}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-    """Portföy durumunu döndürür. Reflex dashboard bu endpoint'i okuyacak."""
-    try:
-        from portfolio_manager import load_portfolio
-        portfolio = load_portfolio()
-        return {"status": "ok", "positions": portfolio}
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
