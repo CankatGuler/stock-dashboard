@@ -71,6 +71,13 @@ async def start_bot():
     _application.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
     )
+    # Fotoğraf ve görsel belge mesajları
+    _application.add_handler(
+        MessageHandler(filters.PHOTO, handle_message)
+    )
+    _application.add_handler(
+        MessageHandler(filters.Document.IMAGE, handle_message)
+    )
 
     await _application.initialize()
     await _application.start()
@@ -316,7 +323,7 @@ async def cmd_portfoy_ekle(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"⏳ {ticker} ekleniyor...")
 
         from portfolio_manager import add_position
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(
             None,
             lambda: add_position(
@@ -366,7 +373,7 @@ async def cmd_portfoy_sil(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     try:
         from portfolio_manager import remove_position
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, remove_position, ticker)
         await update.message.reply_text(
             f"✅ <b>{ticker}</b> portföyden silindi.",
@@ -398,7 +405,7 @@ async def cmd_portfoy_guncelle(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"⏳ {ticker} güncelleniyor...")
 
         from portfolio_manager import update_position
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, update_position, ticker, shares, avg_cost)
 
         await update.message.reply_text(
@@ -606,7 +613,7 @@ async def cmd_portfoy_azalt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
         await update.message.reply_text(f"⏳ {ticker} azaltılıyor...")
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, update_position, ticker, yeni_adet, avg_cost)
 
         await update.message.reply_text(
@@ -635,7 +642,7 @@ async def cmd_makro(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     try:
         from macro_dashboard import fetch_macro_data
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         data = await loop.run_in_executor(None, fetch_macro_data)
 
         if not data:
@@ -757,7 +764,7 @@ async def cmd_tarama(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("⏳ Hisse taraması yapılıyor...")
     try:
         from portfolio_scanner import scan_portfolio
-        loop   = asyncio.get_event_loop()
+        loop   = asyncio.get_running_loop()
         result = await loop.run_in_executor(None, scan_portfolio)
         if result:
             for chunk in [result[i:i+4000] for i in range(0, len(result), 4000)]:
@@ -794,7 +801,7 @@ async def cmd_hisse(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         usd_try   = fetch_usd_try_rate()
         port_ctx  = _build_portfolio_context(usd_try)
 
-        loop   = asyncio.get_event_loop()
+        loop   = asyncio.get_running_loop()
         result = await loop.run_in_executor(
             None, analyze_ticker, ticker, port_ctx[:300]
         )
@@ -819,45 +826,123 @@ async def cmd_tetikle(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"⏳ Katman {layer} çalıştırılıyor...")
     try:
         from trigger_monitor import run as run_trigger
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, run_trigger, layer, True)  # manual=True
     except Exception as e:
         await update.message.reply_text(f"❌ Hata: {e}")
 
 
-# ─── Serbest Metin: Direktöre İlet ────────────────────────────────────────────
+# ─── Mesajlar: Direktöre İlet (Metin + Görsel) ────────────────────────────────
 
 async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """
-    Strateji Odası'na yazılan her serbest metin mesajını direktöre iletir.
-    Direktör portföy bağlamıyla cevap verir.
+    Strateji Odası'na yazılan metin VE görsel mesajları direktöre iletir.
+    Fotoğraf gönderildiğinde Claude Vision API ile analiz yapar.
     """
-    # Sadece Strateji Odası'ndan gelen mesajları işle
     chat_id = str(update.effective_chat.id)
     if chat_id != str(STRATEJI_CHAT_ID):
-        return  # Alarm kanalından gelen mesajları yoksay
-
-    user_text = update.message.text
-    if not user_text or not user_text.strip():
         return
 
-    # "Yazıyor..." göstergesi
-    await ctx.bot.send_chat_action(
-        chat_id=update.effective_chat.id,
-        action="typing",
-    )
+    message = update.message
+
+    # ── Fotoğraf veya görsel belge ────────────────────────────────────────
+    if message.photo or (message.document and
+                         message.document.mime_type and
+                         message.document.mime_type.startswith("image/")):
+        caption = (message.caption or "").strip()
+        soru    = caption if caption else "Bu görseli analiz et ve portföyüme etkisini değerlendir."
+
+        await ctx.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+
+        try:
+            import base64, anthropic, os
+            from datetime import datetime, timezone, timedelta
+            from chat_director import (
+                _build_portfolio_context, _build_memory_context,
+                _load_history, _save_history, MAX_HISTORY_TURNS
+            )
+            from strategy_data import fetch_usd_try_rate
+
+            # Görseli indir
+            if message.photo:
+                file = await ctx.bot.get_file(message.photo[-1].file_id)
+            else:
+                file = await ctx.bot.get_file(message.document.file_id)
+
+            file_bytes = await file.download_as_bytearray()
+            img_b64    = base64.standard_b64encode(bytes(file_bytes)).decode()
+
+            # Portföy ve hafıza bağlamı
+            usd_try = 44.0
+            try:
+                usd_try = fetch_usd_try_rate()
+            except Exception:
+                pass
+
+            portfolio_ctx = _build_portfolio_context(usd_try)
+            memory_ctx    = _build_memory_context()
+            tr_time = (datetime.now(timezone.utc) +
+                       timedelta(hours=3)).strftime("%d %B %Y, %H:%M")
+
+            system_prompt = (
+                "Sen deneyimli bir portföy strateji direktörüsün. "
+                "Kullanıcı sana bir görsel paylaştı. "
+                "Görseli dikkatlice oku ve portföy bağlamında somut yorum yap.\n\n"
+                f"{portfolio_ctx}\n\n{memory_ctx}\n\n"
+                f"TARİH/SAAT: {tr_time} | USD/TRY: {usd_try:.2f}\n\n"
+                "Türkçe yanıt ver. Somut ve eyleme dönüştürülebilir ol."
+            )
+
+            history = _load_history()
+            # Görsel + soru mesajı
+            history.append({"role": "user", "content": [
+                {"type": "image", "source": {
+                    "type": "base64", "media_type": "image/jpeg", "data": img_b64
+                }},
+                {"type": "text", "text": soru}
+            ]})
+
+            client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY", ""))
+
+            loop = asyncio.get_running_loop()
+            def _call():
+                return client.messages.create(
+                    model="claude-sonnet-4-6",
+                    max_tokens=1500,
+                    system=system_prompt,
+                    messages=history[-MAX_HISTORY_TURNS * 2:],
+                )
+            resp   = await loop.run_in_executor(None, _call)
+            answer = resp.content[0].text.strip()
+
+            # History'e base64 olmadan kaydet
+            history[-1] = {"role": "user", "content": f"[GÖRSEL] {soru}"}
+            history.append({"role": "assistant", "content": answer})
+            _save_history(history)
+
+            for chunk in [answer[i:i+4000] for i in range(0, len(answer), 4000)]:
+                await message.reply_text(chunk, parse_mode=ParseMode.HTML)
+
+        except Exception as e:
+            logger.error("Görsel işleme hatası: %s", e)
+            await message.reply_text(
+                "⚠️ Görseli işleyemedim. Görseli açıklayan bir metin yazıp tekrar dene."
+            )
+        return
+
+    # ── Metin mesajı ──────────────────────────────────────────────────────
+    user_text = (message.text or "").strip()
+    if not user_text:
+        return
+
+    await ctx.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
 
     try:
         from chat_director import ask_director
-        response = await asyncio.get_event_loop().run_in_executor(
-            None, ask_director, user_text
-        )
-        # Yanıt 4096 karakteri aşabilir, böl
+        loop     = asyncio.get_running_loop()
+        response = await loop.run_in_executor(None, ask_director, user_text)
         for chunk in [response[i:i+4000] for i in range(0, len(response), 4000)]:
-            await update.message.reply_text(chunk, parse_mode=ParseMode.HTML)
+            await message.reply_text(chunk, parse_mode=ParseMode.HTML)
     except Exception as e:
         logger.error("Direktör yanıt hatası: %s", e)
-        await update.message.reply_text(
-            f"⚠️ Direktör yanıt veremedi: {e}\n"
-            "Lütfen tekrar dene."
-        )
+        await message.reply_text(f"⚠️ Direktör yanıt veremedi: {e}\nLütfen tekrar dene.")
