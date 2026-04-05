@@ -282,6 +282,29 @@ def _fetch_live_prices(tickers: list[str]) -> str:
 
 # ─── Ana Direktör Fonksiyonu ──────────────────────────────────────────────────
 
+def _build_memory_context() -> str:
+    """Hafıza sisteminden güncel direktör bağlamını getir."""
+    try:
+        from director_memory import memory
+        regime, days = memory.get_current_regime()
+        locks        = memory.get_active_locks()
+        recent       = memory.get_recent_decisions(n=3)
+
+        lines = []
+        if regime and regime != "Bilinmiyor":
+            lines.append(f"MEVCUT REJİM: {regime} ({days} gündür)")
+        if locks:
+            lines.append(f"KİLİTLİ VARLIKLAR: {', '.join(locks.keys())}")
+        if recent:
+            son = recent[-1]
+            lines.append(
+                f"SON KARAR ({son.get('tarih','?')}): {son.get('ozet','')[:100]}"
+            )
+        return "\n".join(lines) if lines else ""
+    except Exception:
+        return ""
+
+
 def ask_director(user_message: str) -> str:
     """
     Kullanıcının mesajına direktörden yanıt al.
