@@ -29,17 +29,15 @@ ALPHRACTAL_BASE = "https://api.alphractal.com"
 
 def _alphractal_get(path: str, asset: str = "btc", days: int = 3) -> list:
     """
-    Alphractal API'den veri çek. En son değeri döndürmek için kullanılır.
+    Alphractal API'den veri çek.
     path: /{asset}/market/Mvrv_zscore gibi, {asset} otomatik replace edilir.
-    Döner: [{time, ...}, ...] listesi, boş liste hata durumunda.
     """
     import requests
     api_key = os.getenv("ALPHRACTAL_API_KEY", "")
     if not api_key:
-        logger.debug("ALPHRACTAL_API_KEY eksik")
+        logger.warning("ALPHRACTAL_API_KEY eksik — Alphractal verisi çekilemiyor")
         return []
 
-    # Son N günlük veri
     start = (datetime.now(timezone.utc) - timedelta(days=days)).strftime(
         "%Y-%m-%dT00:00:00Z"
     )
@@ -52,10 +50,12 @@ def _alphractal_get(path: str, asset: str = "btc", days: int = 3) -> list:
             timeout=12,
         )
         if resp.status_code == 200:
-            return resp.json() or []
-        logger.debug("Alphractal %s → HTTP %s", path, resp.status_code)
+            data = resp.json() or []
+            logger.info("Alphractal OK: %s → %d kayıt", path, len(data))
+            return data
+        logger.warning("Alphractal %s → HTTP %s: %s", path, resp.status_code, resp.text[:200])
     except Exception as e:
-        logger.debug("Alphractal hata %s: %s", path, e)
+        logger.warning("Alphractal hata %s: %s", path, e)
     return []
 
 
