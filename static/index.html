@@ -267,11 +267,14 @@ async function loadCrypto(){
   // Kolon 2
   h+='<div style="display:flex;flex-direction:column;gap:16px"><div class="card"><div class="ct">📈 Fiyat & Momentum</div>';
   const oc=dt.onchain||{};
-  if(oc.mvrv_proxy)h+=mrow2('MVRV Proxy',`${oc.mvrv_proxy.value.toFixed(2)}x`,oc.mvrv_proxy.note,oc.mvrv_proxy.signal);
+  if(oc.mvrv_zscore)h+=mrow2('MVRV Z-Score',`${oc.mvrv_zscore.value.toFixed(2)}`,oc.mvrv_zscore.note,oc.mvrv_zscore.signal);
+  else if(oc.mvrv_proxy)h+=mrow2('MVRV Ratio',`${oc.mvrv_proxy.value.toFixed(2)}x`,oc.mvrv_proxy.note,oc.mvrv_proxy.signal);
+  if(oc.nupl)h+=mrow2('NUPL',`${oc.nupl.value.toFixed(3)}`,oc.nupl.note,oc.nupl.signal);
+  if(oc.lth_mvrv)h+=mrow2('LTH-MVRV',`${oc.lth_mvrv.value.toFixed(2)}`,oc.lth_mvrv.note,oc.lth_mvrv.signal);
   if(oc.btc_rsi)h+=mrow2('BTC RSI (14)',`${oc.btc_rsi.value.toFixed(1)}`,oc.btc_rsi.note,oc.btc_rsi.signal);
   if(oc.volume_trend)h+=mrow2('Hacim Trendi (7g)',`${oc.volume_trend.value>0?'+':''}${oc.volume_trend.value.toFixed(1)}%`,oc.volume_trend.note,oc.volume_trend.signal);
-  const ef=dt.exchange_flow||{};if(ef.note)h+=mrow2('Exchange/Madenci',ef.value!==undefined?ef.value.toFixed(2):'—',ef.note,ef.signal||'neutral');
-  h+='</div><div class="card"><div class="ct">📖 Okuma Rehberi</div><div style="font-size:11px;line-height:1.9;color:var(--text2)"><b style="color:var(--text)">MVRV > 3.5:</b> Zirve bölgesi<br><b style="color:var(--text)">MVRV < 1:</b> Dip bölgesi<br><b style="color:var(--text)">RSI > 75:</b> Aşırı alım<br><b style="color:var(--text)">RSI < 25:</b> Aşırı satış</div></div></div>';
+  const ef=dt.exchange_flow||{};if(ef.note)h+=mrow2('Exchange Net Flow',ef.value!==undefined?`${ef.value>0?'+':''}${ef.value.toFixed(0)} BTC`:'—',ef.note,ef.signal||'neutral');
+  h+='</div><div class="card"><div class="ct">📖 Okuma Rehberi</div><div style="font-size:11px;line-height:1.9;color:var(--text2)"><b style="color:var(--text)">MVRV Z > 7:</b> Tarihsel zirve<br><b style="color:var(--text)">MVRV Z < 0:</b> Dip bölgesi<br><b style="color:var(--text)">NUPL > 0.75:</b> Euphoria<br><b style="color:var(--text)">NUPL < 0:</b> Kapitülasyon<br><b style="color:var(--text)">RSI > 75:</b> Aşırı alım</div></div></div>';
 
   // Kolon 3
   h+='<div style="display:flex;flex-direction:column;gap:16px"><div class="card"><div class="ct">⛓ On-Chain Metrikler</div>';
@@ -279,7 +282,7 @@ async function loadCrypto(){
   if(nvt.nvt_current!==undefined)h+=mrow2('NVT Signal',`${nvt.nvt_current.toFixed(0)} (${nvt.nvt_ratio?.toFixed(2)||'—'}x)`,nvt.note||'',nvt.signal||'neutral');
   else if(nvt.note)h+=mrow2('NVT Signal','—',nvt.note,'neutral');
   const sopr=dt.sopr||{};
-  if(sopr.sopr_7d!==undefined){h+=mrow2('SOPR (7g)',sopr.sopr_7d.toFixed(3),sopr.note||'',sopr.signal||'neutral');if(sopr.sopr_30d)h+=mrow2('SOPR (30g)',sopr.sopr_30d.toFixed(3),'','neutral');}
+  if(sopr.sopr_7d!==undefined){h+=mrow2('STH-SOPR',sopr.sopr_7d.toFixed(3),sopr.note||'',sopr.signal||'neutral');if(sopr.sopr_30d)h+=mrow2('SOPR (30g)',sopr.sopr_30d.toFixed(3),'','neutral');}
   const aa=dt.active_addresses||{};
   if(aa.active_est!==undefined)h+=mrow2('Aktif Adres',`~${aa.active_est.toLocaleString('en')}K/gün`,aa.note||'',aa.signal||'neutral');
   h+='</div><div class="card"><div class="ct">📖 Okuma Rehberi</div><div style="font-size:11px;line-height:1.9;color:var(--text2)"><b style="color:var(--text)">NVT yüksek:</b> Spekülatif fiyat<br><b style="color:var(--text)">SOPR < 1:</b> Dip sinyali<br><b style="color:var(--text)">SOPR > 1.15:</b> Kâr realizasyonu<br><b style="color:var(--text)">Aktif adres ↑:</b> Ağ büyüyor</div></div></div>';

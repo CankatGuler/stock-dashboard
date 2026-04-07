@@ -16,10 +16,58 @@
 # Her metrik için: değer + bölge tanımı + ne anlama geldiği
 
 import logging
+import os
 import time
 from datetime import datetime, timezone, timedelta
 
 logger = logging.getLogger(__name__)
+
+
+# ─── Alphractal API Yardımcı ─────────────────────────────────────────────────
+
+ALPHRACTAL_BASE = "https://api.alphractal.com"
+
+def _alphractal_get(path: str, asset: str = "btc", days: int = 3) -> list:
+    """
+    Alphractal API'den veri çek. En son değeri döndürmek için kullanılır.
+    path: /{asset}/market/Mvrv_zscore gibi, {asset} otomatik replace edilir.
+    Döner: [{time, ...}, ...] listesi, boş liste hata durumunda.
+    """
+    import requests
+    api_key = os.getenv("ALPHRACTAL_API_KEY", "")
+    if not api_key:
+        logger.debug("ALPHRACTAL_API_KEY eksik")
+        return []
+
+    # Son N günlük veri
+    start = (datetime.now(timezone.utc) - timedelta(days=days)).strftime(
+        "%Y-%m-%dT00:00:00Z"
+    )
+    url = f"{ALPHRACTAL_BASE}{path.replace('{asset}', asset)}"
+    try:
+        resp = requests.get(
+            url,
+            headers={"X-Api-Key": api_key},
+            params={"startDate": start},
+            timeout=12,
+        )
+        if resp.status_code == 200:
+            return resp.json() or []
+        logger.debug("Alphractal %s → HTTP %s", path, resp.status_code)
+    except Exception as e:
+        logger.debug("Alphractal hata %s: %s", path, e)
+    return []
+
+
+def _alph_latest(path: str, field: str, asset: str = "btc") -> float | None:
+    """Alphractal'dan en son günün değerini çek."""
+    data = _alphractal_get(path, asset=asset, days=5)
+    if data:
+        last = data[-1]
+        val  = last.get(field)
+        if val is not None:
+            return float(val)
+    return None
 
 # ─── Bitcoin Halving Tarihleri ───────────────────────────────────────────────
 HALVING_DATES = [
@@ -86,6 +134,7 @@ def fetch_crypto_fear_greed() -> dict:
                        f"Tarihsel tepeler bu bölgede oluştu. Kâr al!")
 
         return {
+            "index":      score,   # HTML fg.index olarak bekliyor
             "score":      score,
             "prev_score": prev_score,
             "change":     change,
@@ -285,127 +334,99 @@ def get_halving_cycle() -> dict:
 
 def fetch_onchain_proxies() -> dict:
     """
-    Glassnode'un ücretsiz verisi çok kısıtlı.
-    Bunun yerine yfinance'ten çekilebilen proxy değerleri kullan:
-
-    MVRV Proxy: BTC Piyasa Değeri / Realized Value tahmini
-    NVT Proxy: Piyasa değeri / Zincir hacmi tahmini
-    Exchange Flow Proxy: BTC Spot hacim değişimi
+    On-chain metrikler — Alphractal API (gerçek veri) + yfinance fallback.
+    MVRV Z-Score, NUPL, STH/LTH MVRV, BTC RSI, Hacim Trendi.
     """
     results = {}
 
+    # ── MVRV Z-Score (Alphractal) ─────────────────────────────────────────
+    mvrv_z = _alph_latest("/{asset}/market/Mvrv_zscore", "mvrv_zscore")
+    if mvrv_z is not None:
+        if mvrv_z >= 7:
+            sig, note = "red",    f"MVRV Z-Score: {mvrv_z:.2f} — AŞIRI ISITILMIŞ. Tarihsel zirve bölgesi. Kâr realizasyonu düşün."
+        elif mvrv_z >= 4:
+            sig, note = "amber",  f"MVRV Z-Score: {mvrv_z:.2f} — Yüksek bölge. Risk artıyor, yeni alım yapma."
+        elif mvrv_z >= 1:
+            sig, note = "neutral",f"MVRV Z-Score: {mvrv_z:.2f} — Normal boğa bölgesi."
+        elif mvrv_z >= -0.5:
+            sig, note = "green",  f"MVRV Z-Score: {mvrv_z:.2f} — Adil değer civarı. İyi alım bölgesi."
+        else:
+            sig, note = "green",  f"MVRV Z-Score: {mvrv_z:.2f} — DİP BÖLGESİ! Tarihsel kapitülasyon sinyali."
+        results["mvrv_zscore"] = {"value": mvrv_z, "signal": sig, "note": note}
+
+    # ── MVRV Ratio (Alphractal) ───────────────────────────────────────────
+    mvrv_cur = _alph_latest("/{asset}/market/CapMVRVCur", "capMVRVCur")
+    if mvrv_cur is not None:
+        if mvrv_cur >= 3.5:
+            sig, note = "red",    f"MVRV Ratio: {mvrv_cur:.2f} — YÜKSEK RİSK. Kâr al."
+        elif mvrv_cur >= 2.5:
+            sig, note = "amber",  f"MVRV Ratio: {mvrv_cur:.2f} — Dikkat bölgesi."
+        elif mvrv_cur >= 1.0:
+            sig, note = "green",  f"MVRV Ratio: {mvrv_cur:.2f} — Sağlıklı boğa bölgesi."
+        else:
+            sig, note = "green",  f"MVRV Ratio: {mvrv_cur:.2f} — Dip bölgesi, güçlü alım sinyali."
+        results["mvrv_proxy"] = {"value": mvrv_cur, "signal": sig, "note": note}
+
+    # ── NUPL (Alphractal) ─────────────────────────────────────────────────
+    nupl = _alph_latest("/{asset}/market/Nupl", "nupl")
+    if nupl is not None:
+        if nupl >= 0.75:
+            sig, note = "red",    f"NUPL: {nupl:.3f} — EUPHORIA. Zirve yakın olabilir."
+        elif nupl >= 0.5:
+            sig, note = "amber",  f"NUPL: {nupl:.3f} — Açgözlülük bölgesi. Dikkatli ol."
+        elif nupl >= 0:
+            sig, note = "neutral",f"NUPL: {nupl:.3f} — Umut/iyimserlik bölgesi."
+        elif nupl >= -0.25:
+            sig, note = "green",  f"NUPL: {nupl:.3f} — Korku bölgesi. Orta vadeli alım fırsatı."
+        else:
+            sig, note = "green",  f"NUPL: {nupl:.3f} — KAPİTÜLASYON. Güçlü alım sinyali."
+        results["nupl"] = {"value": nupl, "signal": sig, "note": note}
+
+    # ── LTH-MVRV (Alphractal) ─────────────────────────────────────────────
+    lth_mvrv = _alph_latest("/{asset}/lifespan/Lth_mvrv", "lth_mvrv")
+    if lth_mvrv is not None:
+        sig = "red" if lth_mvrv >= 3.5 else "amber" if lth_mvrv >= 2 else "green" if lth_mvrv >= 0.9 else "green"
+        results["lth_mvrv"] = {"value": lth_mvrv, "signal": sig,
+                               "note": f"LTH-MVRV: {lth_mvrv:.2f} — Uzun vadeli tutucularin kar/zarar durumu"}
+
+    # ── BTC RSI — yfinance (teknik, gunluk) ───────────────────────────────
     try:
         import yfinance as yf
-
-        # BTC tarihsel veri
-        btc = yf.Ticker("BTC-USD")
-        hist = btc.history(period="2y", interval="1d")
-
-        if len(hist) < 200:
-            return results
-
-        current_price = float(hist["Close"].iloc[-1])
-        volumes       = hist["Volume"]
-
-        # ── MVRV Proxy ───────────────────────────────────────────────────
-        # Realized price ≈ 365 günlük VWAP (Volume Weighted Average Price)
-        # Bu gerçek realized price değil ama iyi bir proxy
-        recent_365 = hist.tail(365)
-        if len(recent_365) > 0:
-            vwap_365 = (recent_365["Close"] * recent_365["Volume"]).sum() / recent_365["Volume"].sum()
-            mvrv_proxy = round(current_price / vwap_365, 2) if vwap_365 > 0 else 1.0
-
-            if mvrv_proxy >= 3.5:
-                mvrv_signal = "red"
-                mvrv_note   = (f"MVRV Proxy: {mvrv_proxy:.2f} — YÜKSEK RİSK. "
-                              f"Tarihsel tepeler 3.5-5.0 arasında oluştu. Kâr al!")
-            elif mvrv_proxy >= 2.5:
-                mvrv_signal = "amber"
-                mvrv_note   = (f"MVRV Proxy: {mvrv_proxy:.2f} — Dikkat bölgesi. "
-                              f"Hâlâ potansiyel var ama risk artıyor.")
-            elif mvrv_proxy >= 1.5:
-                mvrv_signal = "green"
-                mvrv_note   = (f"MVRV Proxy: {mvrv_proxy:.2f} — Sağlıklı bölge. "
-                              f"Çoğu yatırımcı kârda, panik satış riski düşük.")
-            elif mvrv_proxy >= 1.0:
-                mvrv_signal = "green"
-                mvrv_note   = (f"MVRV Proxy: {mvrv_proxy:.2f} — Adil değer civarı. "
-                              f"İyi alım bölgesi, uzun vadeli fırsat.")
-            else:
-                mvrv_signal = "green"
-                mvrv_note   = (f"MVRV Proxy: {mvrv_proxy:.2f} — DİP BÖLGESİ! "
-                              f"Tarihsel diplerle örtüşüyor. Güçlü alım sinyali.")
-
-            results["mvrv_proxy"] = {
-                "value":  mvrv_proxy,
-                "signal": mvrv_signal,
-                "note":   mvrv_note,
-            }
-
-        # ── Hacim Trendi (Exchange Flow Proxy) ────────────────────────────
-        # Son 7 günlük hacim vs önceki 7 gün
+        hist = yf.Ticker("BTC-USD").history(period="30d", interval="1d")
         if len(hist) >= 14:
-            recent_7  = float(volumes.tail(7).mean())
-            prev_7    = float(volumes.tail(14).head(7).mean())
-            vol_change= round((recent_7 - prev_7) / prev_7 * 100, 1) if prev_7 > 0 else 0
-
-            if vol_change >= 50:
-                vol_signal = "amber"
-                vol_note   = (f"Hacim +%{vol_change:.0f} artış — yüksek aktivite. "
-                             f"Borsalara büyük giriş/çıkış var, volatilite artabilir.")
-            elif vol_change >= 20:
-                vol_signal = "green"
-                vol_note   = f"Hacim +%{vol_change:.0f} artış — sağlıklı katılım."
-            elif vol_change <= -30:
-                vol_signal = "amber"
-                vol_note   = (f"Hacim -%{abs(vol_change):.0f} düşüş — ilgi azalıyor. "
-                             f"Consolidasyon veya dip sinyali olabilir.")
-            else:
-                vol_signal = "neutral"
-                vol_note   = f"Hacim stabil — normal seyir."
-
-            results["volume_trend"] = {
-                "value":  vol_change,
-                "signal": vol_signal,
-                "note":   vol_note,
-            }
-
-        # ── Momentum (RSI Proxy) ──────────────────────────────────────────
-        if len(hist) >= 14:
-            closes  = hist["Close"].tail(14)
-            gains   = closes.diff().clip(lower=0).mean()
-            losses  = (-closes.diff().clip(upper=0)).mean()
-            rsi     = round(100 - (100 / (1 + gains / losses)), 1) if losses > 0 else 50
-
+            closes = hist["Close"].tail(14)
+            gains  = closes.diff().clip(lower=0).mean()
+            losses = (-closes.diff().clip(upper=0)).mean()
+            rsi    = round(100 - (100 / (1 + gains / losses)), 1) if losses > 0 else 50
             if rsi >= 75:
-                rsi_signal = "red"
-                rsi_note   = f"BTC RSI: {rsi} — AŞIRI ALIM. Kısa vadeli düzeltme riski."
+                sig, note = "red",    f"BTC RSI: {rsi} — ASIRI ALIM. Duzeltme riski."
             elif rsi >= 55:
-                rsi_signal = "amber"
-                rsi_note   = f"BTC RSI: {rsi} — Yüksek momentum, dikkatli ol."
+                sig, note = "amber",  f"BTC RSI: {rsi} — Yuksek momentum, dikkat."
             elif rsi <= 25:
-                rsi_signal = "green"
-                rsi_note   = f"BTC RSI: {rsi} — AŞIRI SATIŞ. Güçlü alım sinyali."
+                sig, note = "green",  f"BTC RSI: {rsi} — ASIRI SATIS. Alim firsati."
             elif rsi <= 45:
-                rsi_signal = "green"
-                rsi_note   = f"BTC RSI: {rsi} — Düşük, alım fırsatı."
+                sig, note = "green",  f"BTC RSI: {rsi} — Dusuk, alim firsati."
             else:
-                rsi_signal = "neutral"
-                rsi_note   = f"BTC RSI: {rsi} — Nötr bölge."
+                sig, note = "neutral",f"BTC RSI: {rsi} — Notr bolge."
+            results["btc_rsi"] = {"value": rsi, "signal": sig, "note": note}
 
-            results["btc_rsi"] = {
-                "value":  rsi,
-                "signal": rsi_signal,
-                "note":   rsi_note,
-            }
-
+            # Hacim trendi
+            if len(hist) >= 14:
+                vols    = hist["Volume"]
+                r7      = float(vols.tail(7).mean())
+                p7      = float(vols.tail(14).head(7).mean())
+                vol_chg = round((r7 - p7) / p7 * 100, 1) if p7 > 0 else 0
+                vsig    = "amber" if vol_chg >= 50 else "green" if vol_chg >= 20 else "amber" if vol_chg <= -30 else "neutral"
+                results["volume_trend"] = {
+                    "value":  vol_chg,
+                    "signal": vsig,
+                    "note":   f"Hacim {'+' if vol_chg>=0 else ''}{vol_chg:.0f}% degisim (7g)"
+                }
     except Exception as e:
-        logger.warning("On-chain proxies failed: %s", e)
+        logger.debug("RSI/hacim hesaplama: %s", e)
 
     return results
 
-
-# ─── 6. Stablecoin Dominance ─────────────────────────────────────────────────
 
 def fetch_stablecoin_dominance() -> dict:
     """
@@ -649,331 +670,205 @@ def get_crypto_signal_summary(data: dict) -> dict:
 # ─── 8. Long/Short Ratio (Coinglass) ────────────────────────────────────────
 
 def fetch_long_short_ratio() -> dict:
-    """
-    Coinglass'tan BTC Long/Short oranı.
-    Yüksek long → long squeeze riski
-    Yüksek short → short squeeze fırsatı
-    """
+    """Long/Short oranı — Alphractal API (gercek turev verisi)."""
+    val = _alph_latest("/{asset}/derivatives/Long_short_ratio", "long_short_ratio")
+    if val is not None:
+        if val > 2.0:
+            sig  = "red"
+            note = f"Long/Short: {val:.2f} — ASIRI LONG. Squeeze riski yuksek."
+        elif val > 1.2:
+            sig  = "amber"
+            note = f"Long/Short: {val:.2f} — Long agirlikli, dikkat."
+        elif val < 0.5:
+            sig  = "green"
+            note = f"Long/Short: {val:.2f} — Short agirlikli — bounce firsati olabilir."
+        else:
+            sig  = "neutral"
+            note = f"Long/Short: {val:.2f} — Dengeli pozisyon dagilimi."
+        # Dashboard uyumlu format (long_pct / short_pct)
+        total    = val + 1
+        long_pct = round(val / total * 100, 1)
+        return {"long_pct": long_pct, "short_pct": round(100-long_pct,1),
+                "signal": sig, "note": note}
+
+    # Fallback: yfinance proxy
     try:
-        import requests
-        # Coinglass ücretsiz endpoint
-        resp = requests.get(
-            "https://open-api.coinglass.com/public/v2/indicator/long_short_account_ratio",
-            params={"symbol": "BTC", "interval": "1h", "limit": 2},
-            headers={
-                "User-Agent":   "Mozilla/5.0",
-                "coinglassSecret": "",  # Ücretsiz — key olmadan da temel veri gelir
-            },
-            timeout=10,
-        )
-
-        if resp.status_code == 200:
-            data = resp.json().get("data", [])
-            if data and len(data) > 0:
-                latest   = data[0]
-                ls_ratio = float(latest.get("longAccount", 0))
-                ss_ratio = float(latest.get("shortAccount", 0))
-
-                if ls_ratio > 0.65:
-                    signal = "red"
-                    note   = (f"Long/Short: %{ls_ratio*100:.0f} long — AŞIRI LONG. "
-                             f"Long squeeze riski yüksek! Fiyat düşerse uzun pozisyonlar tasfiye edilir.")
-                elif ls_ratio < 0.40:
-                    signal = "green"
-                    note   = (f"Long/Short: %{(1-ls_ratio)*100:.0f} short ağırlıklı — SHORT SQUEEZE potansiyeli. "
-                             f"Fiyat yükselirse shortlar kapanmak zorunda kalır.")
-                else:
-                    signal = "neutral"
-                    note   = (f"Long/Short: %{ls_ratio*100:.0f} long / %{ss_ratio*100:.0f} short — "
-                             f"Dengeli pozisyon dağılımı.")
-
-                return {
-                    "long_pct":  round(ls_ratio * 100, 1),
-                    "short_pct": round(ss_ratio * 100, 1),
-                    "signal":    signal,
-                    "note":      note,
-                }
-
-        # Fallback: yfinance'ten BTC fiyat hareketinden L/S tahmini
-        raise Exception("Coinglass API key gerekiyor, fallback kullanılıyor")
-
-    except Exception:
-        try:
-            import yfinance as yf
-            btc_hist = yf.Ticker("BTC-USD").history(period="3d", interval="1h")["Close"]
-            if len(btc_hist) >= 6:
-                recent_chg = (btc_hist.iloc[-1] - btc_hist.iloc[-6]) / btc_hist.iloc[-6] * 100
-                if recent_chg > 3:
-                    return {"long_pct": 62, "short_pct": 38, "signal": "red",
-                            "note": f"BTC son 6 saatte %{recent_chg:.1f} yükseldi — long ağırlıklı tahmin, squeeze riski (proxy veri)"}
-                elif recent_chg < -3:
-                    return {"long_pct": 38, "short_pct": 62, "signal": "green",
-                            "note": f"BTC son 6 saatte %{recent_chg:.1f} düştü — short ağırlıklı tahmin, bounce fırsatı (proxy veri)"}
-                else:
-                    return {"long_pct": 50, "short_pct": 50, "signal": "neutral",
-                            "note": f"BTC yatay (%{recent_chg:+.1f}) — dengeli pozisyon tahmini (proxy veri, Coinglass API key gerekli)"}
-        except Exception as e:
-            logger.debug("Long/Short fallback failed: %s", e)
-
-    return {"signal": "neutral", "note": "Long/Short verisi alınamadı"}
-
-
-# ─── 9. Exchange Net Flow (Gerçek) ───────────────────────────────────────────
-
-def fetch_exchange_net_flow() -> dict:
-    """
-    Borsalara giren/çıkan BTC miktarı.
-    Glassnode ücretsiz katmanı çok kısıtlı.
-    CryptoQuant'ın halka açık verilerinden proxy.
-    Fallback: yfinance BTC spot hacim vs futures hacim farkı.
-    """
-    try:
-        import requests
-        # CryptoQuant'ın halka açık özet verisi
-        resp = requests.get(
-            "https://api.cryptoquant.com/live/v2/charts/bitcoin/mpi",
-            headers={"User-Agent": "Mozilla/5.0"},
-            timeout=8,
-        )
-        if resp.status_code == 200:
-            data = resp.json()
-            # MPI (Miner Position Index) — madencilerin satış baskısı
-            value = float(data.get("value", 0))
-            if value > 2:
-                return {"value": value, "signal": "red",
-                        "note": f"Madenci Satış Baskısı (MPI: {value:.1f}) — madenciler agresif satıyor, arz baskısı yüksek"}
-            elif value < 0:
-                return {"value": value, "signal": "green",
-                        "note": f"Madenci Birikimi (MPI: {value:.1f}) — madenciler tutuyor, arz baskısı düşük"}
+        import yfinance as yf
+        h = yf.Ticker("BTC-USD").history(period="2d", interval="1h")["Close"]
+        if len(h) >= 6:
+            chg = (h.iloc[-1] - h.iloc[-6]) / h.iloc[-6] * 100
+            if chg > 3:
+                return {"long_pct": 62, "short_pct": 38, "signal": "red",
+                        "note": f"BTC +%{chg:.1f} (6s) — long agirlikli tahmin (proxy)"}
+            elif chg < -3:
+                return {"long_pct": 38, "short_pct": 62, "signal": "green",
+                        "note": f"BTC %{chg:.1f} (6s) — short agirlikli tahmin (proxy)"}
             else:
-                return {"value": value, "signal": "neutral",
-                        "note": f"Madenci Akışı Normal (MPI: {value:.1f})"}
+                return {"long_pct": 50, "short_pct": 50, "signal": "neutral",
+                        "note": f"BTC yatay (%{chg:+.1f}) — dengeli tahmin (proxy)"}
     except Exception:
         pass
+    return {"signal": "neutral", "note": "Long/Short verisi alinamadi"}
 
-    # Gelişmiş proxy: BTC Spot vs ETF hacim farkı
+
+def fetch_exchange_net_flow() -> dict:
+    """Exchange Net Flow — Alphractal API (gercek on-chain verisi)."""
+    val = _alph_latest("/{asset}/exchange_flow/Netflow", "netflow")
+    if val is not None:
+        if val > 1000:
+            sig  = "red"
+            note = f"Exchange Netflow: +{val:,.0f} BTC — Borsalara giris YUKSEK. Satis baskisi artabilir."
+        elif val > 0:
+            sig  = "amber"
+            note = f"Exchange Netflow: +{val:,.0f} BTC — Borsalara hafif giris."
+        elif val > -1000:
+            sig  = "green"
+            note = f"Exchange Netflow: {val:,.0f} BTC — Borsalardan cikis. HODLing artıyor."
+        else:
+            sig  = "green"
+            note = f"Exchange Netflow: {val:,.0f} BTC — GUCLU CIKIS. Kurumsal birikim sinyali."
+        return {"value": val, "signal": sig, "note": note}
+
+    # Fallback: IBIT proxy
     try:
         import yfinance as yf
-        # IBIT (BlackRock BTC ETF) hacmi = kurumsal talep göstergesi
-        ibit_hist = yf.Ticker("IBIT").history(period="5d", interval="1d")
-        btc_hist  = yf.Ticker("BTC-USD").history(period="5d", interval="1d")
-
-        if len(ibit_hist) >= 3 and len(btc_hist) >= 3:
-            ibit_vol_chg = (ibit_hist["Volume"].iloc[-1] - ibit_hist["Volume"].iloc[-3]) / ibit_hist["Volume"].iloc[-3] * 100
-            btc_vol_chg  = (btc_hist["Volume"].iloc[-1]  - btc_hist["Volume"].iloc[-3])  / btc_hist["Volume"].iloc[-3]  * 100
-
-            if ibit_vol_chg > 30:
-                return {
-                    "signal": "green",
-                    "note": f"BTC ETF (IBIT) hacmi +%{ibit_vol_chg:.0f} artış — kurumsal talep güçleniyor, alım akışı var"
-                }
-            elif ibit_vol_chg < -30:
-                return {
-                    "signal": "amber",
-                    "note": f"BTC ETF (IBIT) hacmi -%{abs(ibit_vol_chg):.0f} düşüş — kurumsal ilgi azalıyor"
-                }
+        ibit = yf.Ticker("IBIT").history(period="5d")
+        btc  = yf.Ticker("BTC-USD").history(period="5d")
+        if len(ibit) >= 3 and len(btc) >= 3:
+            ibit_chg = (ibit["Volume"].iloc[-1] - ibit["Volume"].iloc[-3]) / ibit["Volume"].iloc[-3] * 100
+            if ibit_chg > 30:
+                return {"signal": "green", "note": f"BTC ETF (IBIT) hacmi +%{ibit_chg:.0f} — kurumsal talep guclu (proxy)"}
+            elif ibit_chg < -30:
+                return {"signal": "amber", "note": f"BTC ETF (IBIT) hacmi -%{abs(ibit_chg):.0f} — kurumsal ilgi azaliyor (proxy)"}
             else:
-                return {
-                    "signal": "neutral",
-                    "note": f"BTC ETF (IBIT) hacmi stabil — kurumsal talep normal seyrediyor"
-                }
-    except Exception as e:
-        logger.debug("Exchange flow proxy failed: %s", e)
+                return {"signal": "neutral", "note": "Exchange akisi: normal seyir (proxy)"}
+    except Exception:
+        pass
+    return {"signal": "neutral", "note": "Exchange net flow verisi alinamadi"}
 
-    return {"signal": "neutral", "note": "Exchange Net Flow verisi alınamadı"}
-
-
-# ─── 10. NVT Signal ──────────────────────────────────────────────────────────
 
 def fetch_nvt_signal() -> dict:
-    """
-    NVT (Network Value to Transactions) proxy.
-    Piyasa değeri / Zincir üzeri işlem hacmi.
-    Yüksek NVT = fiyat fundamentallerden kopmuş, spekülatif.
-    Düşük NVT  = ağ yoğun kullanılıyor, fiyat ucuz kalabilir.
+    """NVT Signal — Alphractal API (gercek on-chain veri)."""
+    # NVTAdj90: 90 gunluk adjusted NVT
+    nvt = _alph_latest("/{asset}/market/NVTAdj90", "nVTAdj90")
+    if nvt is None:
+        nvt = _alph_latest("/{asset}/market/NVTAdj", "nVTAdj")
 
-    Proxy hesabı:
-    - BTC Piyasa Değeri: yfinance'ten market cap
-    - İşlem Hacmi proxy: BTC-USD günlük işlem hacmi
-    """
+    if nvt is not None:
+        if nvt >= 65:
+            sig  = "red"
+            note = f"NVT Signal: {nvt:.0f} — YUKSEK. Fiyat on-chain aktivitesinin cok uzerinde: spekulatif balon riski."
+        elif nvt >= 45:
+            sig  = "amber"
+            note = f"NVT Signal: {nvt:.0f} — Orta-yuksek. Dikkatli izle."
+        elif nvt <= 20:
+            sig  = "green"
+            note = f"NVT Signal: {nvt:.0f} — DUSUK. Ag yogun kullaniliyor, fiyat cazip."
+        else:
+            sig  = "neutral"
+            note = f"NVT Signal: {nvt:.0f} — Normal aralikta."
+        return {"nvt_current": nvt, "nvt_ratio": 1.0, "signal": sig, "note": note}
+
+    # Fallback: yfinance proxy
     try:
         import yfinance as yf
-        btc_hist = yf.Ticker("BTC-USD").history(period="90d", interval="1d")
+        h = yf.Ticker("BTC-USD").history(period="90d")
+        if len(h) >= 30:
+            BTC_SUPPLY = 19_700_000
+            prices, vols = h["Close"], h["Volume"]
+            nvt_series = (prices * BTC_SUPPLY) / vols
+            nvt_cur  = round(float(nvt_series.iloc[-1]), 1)
+            nvt_avg  = round(float(nvt_series.tail(90).mean()), 1)
+            ratio    = round(nvt_cur / nvt_avg, 2) if nvt_avg > 0 else 1.0
+            sig      = "red" if ratio >= 1.5 else "amber" if ratio >= 1.2 else "green" if ratio <= 0.7 else "neutral"
+            return {"nvt_current": nvt_cur, "nvt_ratio": ratio, "signal": sig,
+                    "note": f"NVT: {nvt_cur:.0f} (ratio: {ratio:.2f}) — proxy veri"}
+    except Exception:
+        pass
+    return {}
 
-        if len(btc_hist) < 30:
-            return {}
-
-        # Piyasa değeri proxy: fiyat × 19.7M (yaklaşık dolaşımdaki BTC)
-        BTC_SUPPLY = 19_700_000
-        prices     = btc_hist["Close"]
-        volumes    = btc_hist["Volume"]  # USD cinsinden işlem hacmi
-
-        # NVT = Market Cap / Daily Transaction Volume
-        market_cap      = prices.iloc[-1] * BTC_SUPPLY
-        recent_vol_avg  = float(volumes.tail(14).mean())  # 14 günlük ort. hacim
-
-        if recent_vol_avg <= 0:
-            return {}
-
-        nvt = round(market_cap / recent_vol_avg, 1)
-
-        # NVT Signal = NVT'nin 90 günlük hareketli ortalaması
-        nvt_series = (prices * BTC_SUPPLY) / volumes
-        nvt_signal_val = round(float(nvt_series.tail(90).mean()), 1)
-        nvt_current    = round(float(nvt_series.iloc[-1]), 1)
-
-        # Normalize: mevcut / 90 gün ortalaması
-        nvt_ratio = round(nvt_current / nvt_signal_val, 2) if nvt_signal_val > 0 else 1.0
-
-        if nvt_ratio >= 1.5:
-            signal = "red"
-            note   = (f"NVT Signal: {nvt_current:.0f} (90g ort. {nvt_signal_val:.0f}, ratio: {nvt_ratio:.2f}) — "
-                     f"YÜKSEK. Piyasa değeri işlem hacminin çok üzerinde: spekülatif balonun işareti olabilir.")
-        elif nvt_ratio >= 1.2:
-            signal = "amber"
-            note   = (f"NVT Signal: {nvt_current:.0f} (ratio: {nvt_ratio:.2f}) — "
-                     f"Orta-yüksek. Dikkatli izle.")
-        elif nvt_ratio <= 0.7:
-            signal = "green"
-            note   = (f"NVT Signal: {nvt_current:.0f} (ratio: {nvt_ratio:.2f}) — "
-                     f"DÜŞÜK. Ağ yoğun kullanılıyor, fiyat fundamentallere göre cazip.")
-        else:
-            signal = "neutral"
-            note   = (f"NVT Signal: {nvt_current:.0f} (ratio: {nvt_ratio:.2f}) — "
-                     f"Normal aralıkta.")
-
-        return {
-            "nvt_current": nvt_current,
-            "nvt_signal":  nvt_signal_val,
-            "nvt_ratio":   nvt_ratio,
-            "signal":      signal,
-            "note":        note,
-        }
-
-    except Exception as e:
-        logger.debug("NVT failed: %s", e)
-        return {}
-
-
-# ─── 11. Active Addresses Proxy ──────────────────────────────────────────────
 
 def fetch_active_addresses_proxy() -> dict:
-    """
-    Günlük aktif Bitcoin cüzdan sayısı proxy.
-    Glassnode ücretsiz API çok kısıtlı.
-    Proxy: BTC işlem sayısı ve unique address count tahmin.
+    """Aktif adres sayisi — Alphractal API (gercek on-chain veri)."""
+    val = _alph_latest("/{asset}/addresses/AdrActCnt", "adrActCnt")
+    if val is not None:
+        active_k = round(val / 1000, 0)
+        if val >= 1_500_000:
+            sig  = "green"
+            note = f"Aktif Adres: ~{active_k:.0f}K/gun — YUKSEK katilim. Ag aktivitesi guclu."
+        elif val >= 800_000:
+            sig  = "neutral"
+            note = f"Aktif Adres: ~{active_k:.0f}K/gun — Normal aktivite."
+        elif val >= 400_000:
+            sig  = "amber"
+            note = f"Aktif Adres: ~{active_k:.0f}K/gun — Dusuk aktivite, ilgi azaliyor."
+        else:
+            sig  = "amber"
+            note = f"Aktif Adres: ~{active_k:.0f}K/gun — Cok dusuk aktivite."
+        return {"active_est": int(active_k), "n_tx": int(val), "signal": sig, "note": note}
 
-    blockchain.info'nun halka açık istatistikleri kullanılır.
-    """
+    # Fallback: blockchain.info
     try:
         import requests
-        # blockchain.info halka açık API — ücretsiz
-        resp = requests.get(
-            "https://api.blockchain.info/stats",
-            headers={"User-Agent": "Mozilla/5.0"},
-            timeout=10,
-        )
-        if resp.status_code == 200:
-            stats = resp.json()
+        r = requests.get("https://api.blockchain.info/stats",
+                         headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+        if r.status_code == 200:
+            n_tx     = int(r.json().get("n_tx", 0))
+            est      = round(n_tx * 1.7 / 1000)
+            sig      = "green" if est >= 1500 else "neutral" if est >= 800 else "amber"
+            return {"active_est": est, "n_tx": n_tx, "signal": sig,
+                    "note": f"Aktif Adres Proxy: ~{est}K/gun (blockchain.info)"}
+    except Exception:
+        pass
+    return {"signal": "neutral", "note": "Aktif adres verisi alinamadi"}
 
-            n_tx         = int(stats.get("n_tx", 0))
-            # 24h active addresses tahmin: tx sayısı × ortalama address per tx (≈1.7)
-            active_est   = round(n_tx * 1.7 / 1000)  # Binler cinsinden
-
-            # Tarihsel referans: ~800K-1.2M aktif adres normal, 1.5M+ boğa
-            if active_est >= 1500:
-                signal = "green"
-                note   = (f"Aktif Adres Proxy: ~{active_est}K/gün — YÜKSEK katılım. "
-                         f"Ağ aktivitesi güçlü, yeni kullanıcı girişi devam ediyor.")
-            elif active_est >= 800:
-                signal = "neutral"
-                note   = (f"Aktif Adres Proxy: ~{active_est}K/gün — Normal aktivite.")
-            elif active_est >= 400:
-                signal = "amber"
-                note   = (f"Aktif Adres Proxy: ~{active_est}K/gün — Düşük aktivite. "
-                         f"Katılım azalıyor, dikkat.")
-            else:
-                signal = "amber"
-                note   = (f"Aktif Adres Proxy: ~{active_est}K/gün — Çok düşük aktivite. "
-                         f"Konsolidasyon dönemi veya ilgi kaybı.")
-
-            return {
-                "n_tx":       n_tx,
-                "active_est": active_est,
-                "signal":     signal,
-                "note":       note,
-            }
-    except Exception as e:
-        logger.debug("Active addresses failed: %s", e)
-
-    return {"signal": "neutral", "note": "Aktif adres verisi alınamadı"}
-
-
-# ─── 12. SOPR Proxy ──────────────────────────────────────────────────────────
 
 def fetch_sopr_proxy() -> dict:
-    """
-    SOPR (Spent Output Profit Ratio) proxy.
-    Gerçek SOPR Glassnode premium endpoint gerektirir.
-    Proxy: Kısa vadeli tutulan BTC'nin kâr/zarar durumu.
+    """SOPR — Alphractal API (gercek UTXO bazli veri)."""
+    # STH-SOPR daha anlamlı (kisa vadeli tutucularin davranisi)
+    sth_sopr = _alph_latest("/{asset}/lifespan/Sth_sopr", "sth_sopr")
+    lth_sopr = _alph_latest("/{asset}/lifespan/Lth_sopr", "lth_sopr")
+    sopr     = _alph_latest("/{asset}/lifespan/Sopr",     "sopr")
 
-    Yöntem: 1-30 gün önce alınan BTC'nin ortalama maliyeti vs mevcut fiyat.
-    30 günlük VWAP < mevcut fiyat → SOPR > 1 (kâr realizasyonu)
-    30 günlük VWAP > mevcut fiyat → SOPR < 1 (zarar realizasyonu = dip)
-    """
+    main_val = sth_sopr or sopr
+    if main_val is not None:
+        if main_val < 0.95:
+            sig  = "green"
+            note = f"STH-SOPR: {main_val:.3f} — 1 ALTINDA. Kisa vadeli tutucularin zarar satisi = DIP sinyali."
+        elif main_val < 1.0:
+            sig  = "green"
+            note = f"STH-SOPR: {main_val:.3f} — Hafif zarar bolgesi. Zayif eller temizleniyor."
+        elif main_val < 1.05:
+            sig  = "neutral"
+            note = f"STH-SOPR: {main_val:.3f} — 1 civari. Kar ve zarar dengeli."
+        elif main_val < 1.15:
+            sig  = "amber"
+            note = f"STH-SOPR: {main_val:.3f} — Kar realizasyonu var. Satis baskisi olabilir."
+        else:
+            sig  = "red"
+            note = f"STH-SOPR: {main_val:.3f} — YUKSEK kar realizasyonu. Tepe yakın olabilir."
+        return {"sopr_7d": main_val, "sopr_30d": lth_sopr or main_val,
+                "signal": sig, "note": note}
+
+    # Fallback: yfinance VWAP proxy
     try:
         import yfinance as yf
-        btc_hist = yf.Ticker("BTC-USD").history(period="60d", interval="1d")
+        h = yf.Ticker("BTC-USD").history(period="60d")
+        if len(h) >= 30:
+            cur   = float(h["Close"].iloc[-1])
+            r7    = h.tail(7)
+            vwap7 = float((r7["Close"]*r7["Volume"]).sum() / r7["Volume"].sum()) if r7["Volume"].sum() > 0 else cur
+            s7    = round(cur / vwap7, 3)
+            r30   = h.tail(30)
+            vwap30= float((r30["Close"]*r30["Volume"]).sum() / r30["Volume"].sum()) if r30["Volume"].sum() > 0 else cur
+            s30   = round(cur / vwap30, 3)
+            sig   = "green" if s7 < 1 else "amber" if s7 > 1.1 else "neutral"
+            return {"sopr_7d": s7, "sopr_30d": s30, "signal": sig,
+                    "note": f"SOPR Proxy (7g): {s7:.3f} — proxy veri"}
+    except Exception:
+        pass
+    return {}
 
-        if len(btc_hist) < 30:
-            return {}
-
-        current_price = float(btc_hist["Close"].iloc[-1])
-
-        # 7 günlük VWAP (kısa vadeli tutuculara proxy)
-        recent_7   = btc_hist.tail(7)
-        vwap_7     = float((recent_7["Close"] * recent_7["Volume"]).sum() / recent_7["Volume"].sum()) if recent_7["Volume"].sum() > 0 else current_price
-
-        # 30 günlük VWAP (orta vadeli tutuculara proxy)
-        recent_30  = btc_hist.tail(30)
-        vwap_30    = float((recent_30["Close"] * recent_30["Volume"]).sum() / recent_30["Volume"].sum()) if recent_30["Volume"].sum() > 0 else current_price
-
-        sopr_proxy_7  = round(current_price / vwap_7,  3)
-        sopr_proxy_30 = round(current_price / vwap_30, 3)
-
-        # Yorumla — SOPR 1'in altı en kritik sinyal
-        if sopr_proxy_7 < 0.95:
-            signal = "green"
-            note   = (f"SOPR Proxy (7g): {sopr_proxy_7:.3f} — 1'İN ALTI. "
-                     f"Kısa vadeli tutuculAR ZARAR REALIZE EDİYOR. "
-                     f"Tarihsel olarak dip bölgeleriyle örtüşür. Güçlü alım sinyali.")
-        elif sopr_proxy_7 < 1.0:
-            signal = "green"
-            note   = (f"SOPR Proxy (7g): {sopr_proxy_7:.3f} — Hafif zarar bölgesi. "
-                     f"Zayıf eller temizleniyor, dip arayışı devam ediyor.")
-        elif sopr_proxy_7 < 1.05:
-            signal = "neutral"
-            note   = (f"SOPR Proxy (7g): {sopr_proxy_7:.3f} — 1 civarı. "
-                     f"Kâr ve zarar dengeli, piyasa kararsız.")
-        elif sopr_proxy_7 < 1.15:
-            signal = "amber"
-            note   = (f"SOPR Proxy (7g): {sopr_proxy_7:.3f} — Kâr realizasyonu var. "
-                     f"Kısa vadeli satış baskısı devam edebilir.")
-        else:
-            signal = "red"
-            note   = (f"SOPR Proxy (7g): {sopr_proxy_7:.3f} — YÜKSEK kâr realizasyonu. "
-                     f"Büyük kâr satışları dönemindeyiz, tepe yakın olabilir.")
-
-        return {
-            "sopr_7d":  sopr_proxy_7,
-            "sopr_30d": sopr_proxy_30,
-            "signal":   signal,
-            "note":     note,
-        }
-
-    except Exception as e:
-        logger.debug("SOPR proxy failed: %s", e)
-        return {}
 
 
 # ─── CoinGecko Fiyat Çekici (yfinance fallback) ──────────────────────────────
