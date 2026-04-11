@@ -164,31 +164,31 @@ async def _run_in_executor(fn, *args):
 # APScheduler'a geçirilen async fonksiyonlar — her katman için ayrı
 
 async def _run_layer1():
-    from trigger_monitor import run as run_trigger
+    from alerts.trigger_monitor import run as run_trigger
     logger.info("Katman 1 başlatılıyor...")
     await _run_in_executor(run_trigger, 1, False)
 
 
 async def _run_layer2():
-    from trigger_monitor import run as run_trigger
+    from alerts.trigger_monitor import run as run_trigger
     logger.info("Katman 2 başlatılıyor...")
     await _run_in_executor(run_trigger, 2, False)
 
 
 async def _run_layer3():
-    from trigger_monitor import run as run_trigger
+    from alerts.trigger_monitor import run as run_trigger
     logger.info("Katman 3 başlatılıyor...")
     await _run_in_executor(run_trigger, 3, True)
 
 
 async def _run_performance_tracker():
-    from performance_tracker import run as run_perf
+    from data.performance_tracker import run as run_perf
     logger.info("Performans takibi başlatılıyor...")
     await _run_in_executor(run_perf)
 
 
 async def _run_portfolio_scanner():
-    from portfolio_scanner import run as run_scanner
+    from data.portfolio_scanner import run as run_scanner
     logger.info("Hisse taraması başlatılıyor...")
     await _run_in_executor(run_scanner)
 
@@ -217,7 +217,7 @@ async def health_check():
 async def get_macro():
     """Makro göstergeler — dashboard ana sayfa için."""
     try:
-        from macro_dashboard import fetch_macro_data
+        from data.macro_dashboard import fetch_macro_data
         loop = asyncio.get_running_loop()
         data = await loop.run_in_executor(None, fetch_macro_data)
         result = {}
@@ -242,7 +242,7 @@ async def get_portfolio_detail():
     try:
         from core.database import SessionLocal
         from core import crud
-        from strategy_data import fetch_usd_try_rate
+        from data.strategy_data import fetch_usd_try_rate
         import yfinance as yf
 
         usd_try = fetch_usd_try_rate()
@@ -281,7 +281,7 @@ async def get_portfolio_detail():
                 if tk in ("ALTIN_GRAM_TRY",) and gold_usd > 0:
                     live = shr * (gold_usd * usd_try / 31.1035) / usd_try
                 elif ac == "tefas":
-                    from turkey_fetcher import fetch_tefas_fund
+                    from data.turkey_fetcher import fetch_tefas_fund
                     fd = fetch_tefas_fund(tk)
                     if fd and fd.get("price", 0) > 0:
                         live = shr * float(fd["price"]) / usd_try
@@ -349,7 +349,7 @@ async def get_briefing():
 
     try:
         import yfinance as yf
-        from strategy_data import fetch_usd_try_rate
+        from data.strategy_data import fetch_usd_try_rate
 
         # Anlık veriler — executor'da çalıştır
         def _fetch_market_data():
@@ -521,7 +521,7 @@ async def get_crypto_dashboard():
     - Stablecoin dominansı
     """
     def _fetch():
-        from crypto_fetcher import (
+        from data.crypto_fetcher import (
             fetch_crypto_fear_greed,
             fetch_bitcoin_dominance,
             fetch_long_short_ratio,
@@ -562,28 +562,28 @@ async def get_crypto_dashboard():
 
         # Exchange Net Flow / Madenci Baskısı
         try:
-            from crypto_fetcher import fetch_exchange_net_flow
+            from data.crypto_fetcher import fetch_exchange_net_flow
             result["exchange_flow"] = fetch_exchange_net_flow()
         except Exception as e:
             result["exchange_flow"] = {"error": str(e)}
 
         # NVT Signal
         try:
-            from crypto_fetcher import fetch_nvt_signal
+            from data.crypto_fetcher import fetch_nvt_signal
             result["nvt"] = fetch_nvt_signal()
         except Exception as e:
             result["nvt"] = {"error": str(e)}
 
         # Active Addresses
         try:
-            from crypto_fetcher import fetch_active_addresses_proxy
+            from data.crypto_fetcher import fetch_active_addresses_proxy
             result["active_addresses"] = fetch_active_addresses_proxy()
         except Exception as e:
             result["active_addresses"] = {"error": str(e)}
 
         # SOPR Proxy
         try:
-            from crypto_fetcher import fetch_sopr_proxy
+            from data.crypto_fetcher import fetch_sopr_proxy
             result["sopr"] = fetch_sopr_proxy()
         except Exception as e:
             result["sopr"] = {"error": str(e)}
@@ -677,7 +677,7 @@ async def test_alphractal():
 async def get_library():
     """Finansal terimler kütüphanesi."""
     try:
-        from knowledge_library import TERMS, CATEGORIES
+        from memory.knowledge_library import TERMS, CATEGORIES
         return {"status": "ok", "terms": TERMS, "categories": CATEGORIES}
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -687,7 +687,7 @@ async def get_library():
 async def get_archive():
     """Direktör karar arşivi."""
     try:
-        from director_memory import memory
+        from memory.director_memory import memory
         decisions = memory.get_recent_decisions(n=30)
         return {"status": "ok", "decisions": decisions}
     except Exception as e:
@@ -698,7 +698,7 @@ async def get_archive():
 async def get_memory():
     """Direktör hafıza durumunu döndürür."""
     try:
-        from director_memory import memory
+        from memory.director_memory import memory
         regime, days = memory.get_current_regime()
         locks = memory.get_active_locks()
         recent = memory.get_recent_decisions(n=5)
@@ -721,6 +721,6 @@ async def manual_trigger(layer: int):
     """
     if layer not in (1, 2, 3):
         return {"status": "error", "message": "Geçerli katman: 1, 2 veya 3"}
-    from trigger_monitor import run as run_trigger
+    from alerts.trigger_monitor import run as run_trigger
     asyncio.create_task(_run_sync(run_trigger, layer))
     return {"status": "ok", "message": f"Katman {layer} tetiklendi"}

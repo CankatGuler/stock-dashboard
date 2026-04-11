@@ -75,7 +75,7 @@ def enrich_all_positions(positions: list, usd_try: float = None) -> list:
         try:
             if asset_class == "tefas":
                 # TEFAS: TL fiyat → USD
-                from turkey_fetcher import fetch_tefas_fund
+                from data.turkey_fetcher import fetch_tefas_fund
                 fund = fetch_tefas_fund(ticker)
                 if fund and fund.get("price", 0) > 0:
                     current_price_raw = float(fund["price"])

@@ -522,7 +522,7 @@ def collect_all_strategy_data(
         data["veri_kalitesi"]["makro"] = "cache"
     else:
         try:
-            from macro_dashboard import fetch_macro_data, compute_market_regime
+            from data.macro_dashboard import fetch_macro_data, compute_market_regime
             _macro  = fetch_macro_data()
             _regime = compute_market_regime(_macro)
             data["macro"] = {
@@ -546,7 +546,7 @@ def collect_all_strategy_data(
     # Her katman bağımsız — birbirini beklemek zorunda değil
     def fetch_layer2():
         try:
-            from economic_data import fetch_all_economic_data, build_economic_context
+            from data.economic_data import fetch_all_economic_data, build_economic_context
             r = fetch_all_economic_data()
             return ("layer2", {
                 "economic":          r.get("macro_econ", {}),
@@ -563,7 +563,7 @@ def collect_all_strategy_data(
 
     def fetch_layer3():
         try:
-            from crypto_fetcher import fetch_all_crypto_data
+            from data.crypto_fetcher import fetch_all_crypto_data
             r = fetch_all_crypto_data(crypto_positions=tuple(
                 {k: v for k, v in p.items() if isinstance(v, (str, int, float, bool))}
                 for p in crypto_pos
@@ -574,14 +574,14 @@ def collect_all_strategy_data(
 
     def fetch_layer4():
         try:
-            from commodity_fetcher import fetch_all_commodity_data
+            from data.commodity_fetcher import fetch_all_commodity_data
             return ("layer4", fetch_all_commodity_data())
         except Exception as e:
             return ("layer4_err", str(e))
 
     def fetch_layer5():
         try:
-            from turkey_fetcher import fetch_all_turkey_data
+            from data.turkey_fetcher import fetch_all_turkey_data
             return ("layer5", fetch_all_turkey_data(
                 tefas_codes=tuple(tefas_codes) if tefas_codes else None
             ))
@@ -590,14 +590,14 @@ def collect_all_strategy_data(
 
     def fetch_correlations():
         try:
-            from correlation_engine import fetch_all_correlations
+            from data.correlation_engine import fetch_all_correlations
             return ("corr", fetch_all_correlations(portfolio_tickers=tickers))
         except Exception as e:
             return ("corr_err", str(e))
 
     def fetch_calendar():
         try:
-            from financial_calendar import get_upcoming_events
+            from data.financial_calendar import get_upcoming_events
             return ("cal", get_upcoming_events(tickers=tickers, days_ahead=30, min_stars=2))
         except Exception as e:
             return ("cal_err", str(e))
@@ -616,7 +616,7 @@ def collect_all_strategy_data(
 
     def fetch_portfolio_integrated():
         try:
-            from portfolio_integrator import build_integrated_portfolio
+            from data.portfolio_integrator import build_integrated_portfolio
             up = data.get("user_profile", {})
             return ("port_int", build_integrated_portfolio(
                 positions=positions,
@@ -707,7 +707,7 @@ def collect_all_strategy_data(
 
     # ── Tarihsel Kriz Karşılaştırması (senkron — hızlı hesaplama) ─────────
     try:
-        from crisis_comparator import compare_to_historical_crises, get_crisis_context_for_claude
+        from data.crisis_comparator import compare_to_historical_crises, get_crisis_context_for_claude
         _macro_ind = data.get("macro", {}).get("indicators", {})
         _econ      = data.get("macro_econ", {})
         _val       = data.get("valuation", {})

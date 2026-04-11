@@ -13,42 +13,127 @@
 import os
 import json
 import logging
+import re
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# Konuşma geçmişinin tutulduğu dosya
 CHAT_HISTORY_FILE = Path(__file__).parent / "chat_history.json"
+MAX_HISTORY_TURNS = 20
 
-# Son kaç mesajı bağlam olarak tutacağız
-# Daha fazlası = daha iyi bağlam ama daha yüksek token maliyeti
-MAX_HISTORY_TURNS = 20  # 10 soru + 10 cevap
+# GitHub'daki geçmiş dosyası yolu
+GITHUB_HISTORY_PATH = "chat_history.json"
+
+
+# ─── GitHub Geçmiş Yönetimi ──────────────────────────────────────────────────
+
+def _github_read_history() -> tuple[list, str]:
+    """GitHub'dan chat geçmişini oku. (data, sha) döndürür."""
+    try:
+        import requests, base64
+        token = os.getenv("GH_PAT", "")
+        repo  = os.getenv("GITHUB_REPO", "")
+        if not token or not repo:
+            return [], ""
+        url  = f"https://api.github.com/repos/{repo}/contents/{GITHUB_HISTORY_PATH}"
+        resp = requests.get(url, headers={
+            "Authorization": f"token {token}",
+            "Accept": "application/vnd.github.v3+json",
+        }, timeout=10)
+        if resp.status_code == 404:
+            return [], ""
+        if resp.status_code == 200:
+            data = resp.json()
+            content = base64.b64decode(data["content"]).decode("utf-8")
+            return json.loads(content), data.get("sha", "")
+    except Exception as e:
+        logger.debug("GitHub geçmiş okuma: %s", e)
+    return [], ""
+
+
+def _github_write_history(history: list, sha: str = "") -> bool:
+    """Chat geçmişini GitHub'a yaz."""
+    try:
+        import requests, base64
+        token = os.getenv("GH_PAT", "")
+        repo  = os.getenv("GITHUB_REPO", "")
+        if not token or not repo:
+            return False
+        content = base64.b64encode(
+            json.dumps(history, ensure_ascii=False, indent=2).encode()
+        ).decode()
+        url  = f"https://api.github.com/repos/{repo}/contents/{GITHUB_HISTORY_PATH}"
+        body = {
+            "message": "chore: direktör sohbet geçmişi güncellendi",
+            "content": content,
+        }
+        if sha:
+            body["sha"] = sha
+        # Mevcut sha'yı al
+        if not sha:
+            r = requests.get(url, headers={
+                "Authorization": f"token {token}",
+                "Accept": "application/vnd.github.v3+json",
+            }, timeout=8)
+            if r.status_code == 200:
+                body["sha"] = r.json().get("sha", "")
+        resp = requests.put(url, headers={
+            "Authorization": f"token {token}",
+            "Accept": "application/vnd.github.v3+json",
+        }, json=body, timeout=15)
+        return resp.status_code in (200, 201)
+    except Exception as e:
+        logger.debug("GitHub geçmiş yazma: %s", e)
+    return False
 
 
 # ─── Konuşma Geçmişi Yönetimi ────────────────────────────────────────────────
 
 def _load_history() -> list[dict]:
-    """Konuşma geçmişini diskten yükle."""
+    """
+    Konuşma geçmişini yükle.
+    Önce lokal dosya, yoksa GitHub'dan çek.
+    """
+    # Lokal dosya varsa kullan (hız için)
     if CHAT_HISTORY_FILE.exists():
         try:
             return json.loads(CHAT_HISTORY_FILE.read_text(encoding="utf-8"))
         except Exception:
-            return []
-    return []
+            pass
+    # GitHub'dan yükle
+    history, _ = _github_read_history()
+    if history:
+        # Lokal'e cache'le
+        try:
+            CHAT_HISTORY_FILE.write_text(
+                json.dumps(history, ensure_ascii=False, indent=2),
+                encoding="utf-8"
+            )
+        except Exception:
+            pass
+    return history
 
 
 def _save_history(history: list[dict]) -> None:
-    """Konuşma geçmişini diske kaydet."""
-    # Sadece son MAX_HISTORY_TURNS kaydı tut
-    trimmed = history[-MAX_HISTORY_TURNS * 2:]  # Her tur: 1 user + 1 assistant
+    """
+    Konuşma geçmişini kaydet.
+    Hem lokal dosyaya hem GitHub'a yaz.
+    """
+    trimmed = history[-MAX_HISTORY_TURNS * 2:]
+    # Lokal kaydet
     try:
         CHAT_HISTORY_FILE.write_text(
             json.dumps(trimmed, ensure_ascii=False, indent=2),
             encoding="utf-8"
         )
     except Exception as e:
-        logger.error("Sohbet geçmişi kaydedilemedi: %s", e)
+        logger.error("Lokal geçmiş kaydedilemedi: %s", e)
+    # GitHub'a kaydet (arka planda, deploy'dan sonra da korunsun)
+    try:
+        _github_write_history(trimmed)
+    except Exception as e:
+        logger.warning("GitHub geçmiş kaydedilemedi: %s", e)
 
 
 def get_history_summary() -> str:
@@ -68,6 +153,27 @@ def clear_history() -> None:
     if CHAT_HISTORY_FILE.exists():
         CHAT_HISTORY_FILE.unlink()
     logger.info("Sohbet geçmişi temizlendi.")
+
+
+def inject_system_message(text: str, label: str = "SİSTEM ALARMI") -> None:
+    """
+    Otomatik sistem mesajlarını (Katman 1/2/3, haftalık tarama vs.)
+    sohbet geçmişine 'assistant' rolüyle ekle.
+    Böylece direktör bu mesajları bağlam olarak görür.
+    """
+    try:
+        history = _load_history()
+        # Mesajı kısa tut — çok uzun alarmlar token'ı şişirir
+        max_len = 1500
+        truncated = text[:max_len] + ("..." if len(text) > max_len else "")
+        history.append({
+            "role":    "assistant",
+            "content": f"[{label}]\n{truncated}"
+        })
+        _save_history(history)
+        logger.debug("Sistem mesajı geçmişe eklendi: %s karakter", len(truncated))
+    except Exception as e:
+        logger.warning("inject_system_message hatası: %s", e)
 
 
 # ─── Portföy Bağlamı ─────────────────────────────────────────────────────────
@@ -131,7 +237,7 @@ def _build_portfolio_context(usd_try: float) -> str:
                         live_tl  = gold_usd * usd_try / 31.1035
                         live_usd = shr * live_tl / usd_try
                     elif ac == "tefas":
-                        from turkey_fetcher import fetch_tefas_fund
+                        from data.turkey_fetcher import fetch_tefas_fund
                         fd = fetch_tefas_fund(tk)
                         if fd and fd.get("price", 0) > 0:
                             live_usd = shr * float(fd["price"]) / usd_try
@@ -184,7 +290,7 @@ def _extract_tickers_from_message(message: str) -> list[str]:
 
     # Filtrele — Türkçe büyük harf kısaltmalar ve stopword'ler
     stopwords = {
-        "VIX", "DXY", "ETF", "ABD", "BTC", "ETH", "SOL", "USD", "TRY",
+        "VIX", "DXY", "ETF", "ABD", "USD", "TRY",
         "TL", "FED", "GDP", "CPI", "PCE", "AI", "API", "EPS", "FCF",
         "ROE", "ROA", "PE", "PEG", "YOY", "QOQ", "TTM", "EBITDA",
         "OK", "TR", "EN", "DE", "KI", "BI", "NE", "BU", "DA",
@@ -256,7 +362,7 @@ def _fetch_live_prices(tickers: list[str]) -> str:
 def _build_memory_context() -> str:
     """Hafıza sisteminden güncel direktör bağlamını getir."""
     try:
-        from director_memory import memory
+        from memory.director_memory import memory
         regime, days = memory.get_current_regime()
         locks        = memory.get_active_locks()
         recent       = memory.get_recent_decisions(n=3)
@@ -342,27 +448,44 @@ KURALLAR:
     # Mevcut mesajı geçmişe ekle
     history.append({"role": "user", "content": user_message})
 
-    # Claude'a gönder
-    client  = anthropic.Anthropic(api_key=api_key)
-    try:
-        response = client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=1500,           # Sohbet için yeterli, tam analizden kısa
-            system=system_prompt,
-            messages=history[-MAX_HISTORY_TURNS * 2:],  # Son N tur
-        )
-        answer = response.content[0].text.strip()
+    # Claude'a gönder — 529 overloaded için 3 deneme
+    client = anthropic.Anthropic(api_key=api_key)
+    last_error = None
 
-        # Direktörün yanıtını geçmişe ekle ve kaydet
-        history.append({"role": "assistant", "content": answer})
-        _save_history(history)
+    for attempt in range(3):
+        try:
+            response = client.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=1500,
+                system=system_prompt,
+                messages=history[-MAX_HISTORY_TURNS * 2:],
+            )
+            answer = response.content[0].text.strip()
 
-        logger.info("Direktör yanıtladı (%d karakter).", len(answer))
-        return answer
+            history.append({"role": "assistant", "content": answer})
+            _save_history(history)
+            logger.info("Direktör yanıtladı (%d karakter).", len(answer))
+            return answer
 
-    except anthropic.APIError as e:
-        logger.error("Claude API hatası: %s", e)
-        return f"⚠️ Direktör şu an erişilemez: {e}"
-    except Exception as e:
-        logger.error("Beklenmeyen hata: %s", e)
-        return "⚠️ Beklenmeyen bir hata oluştu. Lütfen tekrar dene."
+        except anthropic.APIError as e:
+            last_error = e
+            error_str = str(e)
+            # 529 overloaded — kısa bekle ve tekrar dene
+            if "529" in error_str or "overloaded" in error_str.lower():
+                if attempt < 2:
+                    wait = (attempt + 1) * 3  # 3s, 6s
+                    logger.warning("Claude API aşırı yüklü, %ds sonra tekrar deneniyor (deneme %d/3)...", wait, attempt + 1)
+                    import time as _time
+                    _time.sleep(wait)
+                    continue
+            logger.error("Claude API hatası: %s", e)
+            break
+        except Exception as e:
+            last_error = e
+            logger.error("Beklenmeyen hata: %s", e)
+            break
+
+    # Tüm denemeler başarısız
+    if last_error and ("529" in str(last_error) or "overloaded" in str(last_error).lower()):
+        return "⚠️ Claude API şu an yoğun. 1-2 dakika sonra tekrar dene."
+    return f"⚠️ Direktör yanıt veremedi: {last_error}"

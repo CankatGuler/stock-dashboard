@@ -215,7 +215,7 @@ async def cmd_portfoy(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         from core.database import SessionLocal
         from core import crud
         import yfinance as yf
-        from strategy_data import fetch_usd_try_rate
+        from data.strategy_data import fetch_usd_try_rate
 
         usd_try = fetch_usd_try_rate()
 
@@ -345,7 +345,7 @@ async def cmd_portfoy_ekle(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
         await update.message.reply_text(f"⏳ {ticker} ekleniyor...")
 
-        from strategy_data import fetch_usd_try_rate
+        from data.strategy_data import fetch_usd_try_rate
         from core.database import SessionLocal
         from core import crud
 
@@ -462,7 +462,7 @@ async def cmd_portfoy_sil(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             return
 
         # Kar/Zarar hesapla
-        from strategy_data import fetch_usd_try_rate
+        from data.strategy_data import fetch_usd_try_rate
         usd_try  = fetch_usd_try_rate()
 
         maliyet_toplam  = adet * avg_cost
@@ -475,7 +475,7 @@ async def cmd_portfoy_sil(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         kar_sign  = "+" if kar_zarar >= 0 else ""
 
         # Supabase'e satış yaz
-        from strategy_data import fetch_usd_try_rate
+        from data.strategy_data import fetch_usd_try_rate
         usd_try = fetch_usd_try_rate()
 
         def _full_sell():
@@ -549,7 +549,7 @@ async def cmd_portfoy_guncelle(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         # Guncelleme: mevcut pozisyonu sil, yeni fiyatla tekrar ekle
         from core.database import SessionLocal
         from core import crud
-        from strategy_data import fetch_usd_try_rate
+        from data.strategy_data import fetch_usd_try_rate
 
         usd_try = fetch_usd_try_rate()
 
@@ -598,7 +598,7 @@ async def cmd_portfoy_detay(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     try:
         from core.database import SessionLocal
         from core import crud
-        from strategy_data import fetch_usd_try_rate
+        from data.strategy_data import fetch_usd_try_rate
         import yfinance as yf
 
         usd_try = fetch_usd_try_rate()
@@ -692,7 +692,7 @@ async def cmd_portfoy_detay(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                         cur_val_usd = shr * live_price / usd_try
                     elif ac == "tefas":
                         # TEFAS için fetch_tefas_fund kullan
-                        from turkey_fetcher import fetch_tefas_fund
+                        from data.turkey_fetcher import fetch_tefas_fund
                         fd = fetch_tefas_fund(tk)
                         if fd and fd.get("price", 0) > 0:
                             live_price  = float(fd["price"])
@@ -826,7 +826,7 @@ async def cmd_portfoy_azalt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        from strategy_data import fetch_usd_try_rate
+        from data.strategy_data import fetch_usd_try_rate
         from core.database import SessionLocal
         from core import crud
 
@@ -902,7 +902,7 @@ async def cmd_makro(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("⏳ Makro veriler çekiliyor...")
 
     try:
-        from macro_dashboard import fetch_macro_data
+        from data.macro_dashboard import fetch_macro_data
 
         loop = asyncio.get_running_loop()
         data = await loop.run_in_executor(None, fetch_macro_data)
@@ -1025,7 +1025,7 @@ async def cmd_tarama(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """
     await update.message.reply_text("⏳ Hisse taraması yapılıyor...")
     try:
-        from portfolio_scanner import scan_portfolio
+        from data.portfolio_scanner import scan_portfolio
         loop   = asyncio.get_running_loop()
         result = await loop.run_in_executor(None, scan_portfolio)
         if result:
@@ -1056,9 +1056,9 @@ async def cmd_hisse(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"⏳ {ticker} analiz ediliyor...")
 
     try:
-        from stock_analyzer import analyze_ticker
+        from data.stock_analyzer import analyze_ticker
         from chat_director import _build_portfolio_context
-        from strategy_data import fetch_usd_try_rate
+        from data.strategy_data import fetch_usd_try_rate
 
         usd_try   = fetch_usd_try_rate()
         port_ctx  = _build_portfolio_context(usd_try)
@@ -1087,7 +1087,7 @@ async def cmd_tetikle(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     layer = int(args[0])
     await update.message.reply_text(f"⏳ Katman {layer} çalıştırılıyor...")
     try:
-        from trigger_monitor import run as run_trigger
+        from alerts.trigger_monitor import run as run_trigger
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, run_trigger, layer, True)  # manual=True
     except Exception as e:
@@ -1123,7 +1123,7 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 _build_portfolio_context, _build_memory_context,
                 _load_history, _save_history, MAX_HISTORY_TURNS
             )
-            from strategy_data import fetch_usd_try_rate
+            from data.strategy_data import fetch_usd_try_rate
 
             # Görseli indir
             if message.photo:

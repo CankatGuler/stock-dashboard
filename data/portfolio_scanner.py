@@ -39,7 +39,7 @@ def scan_portfolio() -> str:
     """
     from portfolio_manager import load_portfolio
     from strategy_data import fetch_usd_try_rate
-    from stock_analyzer import get_fundamentals
+    from data.stock_analyzer import get_fundamentals
 
     portfolio = [p for p in load_portfolio()
                  if float(p.get("shares", 0)) > 0
@@ -203,7 +203,7 @@ def run() -> None:
     try:
         msg = scan_portfolio()
         if msg:
-            from telegram_notifier import send_message
+            from alerts.telegram_notifier import send_message
             send_message(msg)
             logger.info("Hisse tarama raporu gönderildi.")
         else:

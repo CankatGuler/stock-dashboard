@@ -39,7 +39,7 @@ def fetch_current_price(ticker: str, currency: str = "USD",
                      "MAC","YAS","GLD","GAF","YAC","NNM"}
     if ticker.upper() in tefas_tickers:
         try:
-            from turkey_fetcher import fetch_tefas_fund
+            from data.turkey_fetcher import fetch_tefas_fund
             fd = fetch_tefas_fund(ticker.upper())
             if fd and fd.get("price", 0) > 0:
                 # TL fiyatı → USD
@@ -186,7 +186,7 @@ def run() -> None:
         return
 
     # Hafıza yükle
-    from director_memory import memory
+    from memory.director_memory import memory
 
     perf_kayitlar = memory._data.get("performance", [])
     if not perf_kayitlar:

@@ -556,5 +556,5 @@ class MemoryManager:
 
 
 # ─── Modül Seviyesi Tek Örnek ─────────────────────────────────────────────────
-# Tüm dosyalar `from director_memory import memory` ile kullanır.
+# Tüm dosyalar `from memory.director_memory import memory` ile kullanır.
 memory = MemoryManager()

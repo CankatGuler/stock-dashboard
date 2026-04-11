@@ -30,7 +30,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # trigger_config'i import et
-from trigger_config import (
+from alerts.trigger_config import (
     LAYER1, LAYER2, COOLDOWN_HOURS, QUIET_HOURS_START, QUIET_HOURS_END,
     MORNING_SUMMARY_HOUR_TR, MORNING_SUMMARY_MINUTE,
     ATR_PERIOD_DAYS, ROTATION_HIERARCHY, MIN_CASH_FOR_BUY_PCT, ASSET_CLASS_MAP,
@@ -1073,7 +1073,7 @@ def generate_morning_summary(portfolio: list, usd_try: float) -> str:
 
             try:
                 if ac == "tefas":
-                    from turkey_fetcher import fetch_tefas_fund
+                    from data.turkey_fetcher import fetch_tefas_fund
                     fd = fetch_tefas_fund(tk)
                     if fd and fd.get("price", 0) > 0:
                         val = shr * float(fd["price"]) / usd_try
@@ -1201,7 +1201,7 @@ def run(layer: int, manual: bool = False) -> None:
     except Exception as e:
         logger.error("USD/TRY alınamadı: %s", e)
         if manual:
-            from trigger_alerts import _send
+            from alerts.trigger_alerts import _send
             _send(f"❌ Katman {layer} — USD/TRY kuru alınamadı: {e}")
         return
 
@@ -1254,7 +1254,7 @@ def run(layer: int, manual: bool = False) -> None:
     # ── Katman 3: Sabah Özeti ────────────────────────────────────────────────
     elif layer == 3:
         summary = generate_morning_summary(portfolio, usd_try)
-        from trigger_alerts import send_morning_summary
+        from alerts.trigger_alerts import send_morning_summary
         send_morning_summary(summary)
         logger.info("Sabah özeti gönderildi.")
         return
@@ -1270,7 +1270,7 @@ def run(layer: int, manual: bool = False) -> None:
             except Exception:
                 vix, btc = 0, 0
 
-            from trigger_alerts import _send
+            from alerts.trigger_alerts import _send
             layer_checks = {
                 1: "VIX spike, BTC crash, USD/TRY spike, Stablecoin de-peg",
                 2: "Yield curve, Altcoin/BTC ayrışma, Funding rate, OI, VIX norm, BTC dom, Türkiye CDS",
@@ -1295,7 +1295,7 @@ def run(layer: int, manual: bool = False) -> None:
     director_response = wake_director(triggered_signals, portfolio, ammo, usd_try)
 
     # ── Telegram'a Gönder ────────────────────────────────────────────────────
-    from trigger_alerts import format_and_send_alert
+    from alerts.trigger_alerts import format_and_send_alert
     format_and_send_alert(triggered_signals, director_response, ammo, usd_try,
                           portfolio=portfolio)
 
@@ -1313,7 +1313,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.test:
-        from trigger_alerts import _send
+        from alerts.trigger_alerts import _send
         ok = _send(
             f"🧪 <b>TEST — Katman {args.layer}</b>\n"
             f"Telegram bağlantısı aktif."

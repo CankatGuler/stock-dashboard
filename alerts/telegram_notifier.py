@@ -2,7 +2,7 @@
 #
 # YENİ SİSTEMDE: bot.py içindeki send_message_sync() kullanılıyor.
 # Bu dosya eski modüllerin (trigger_alerts, trigger_monitor vs.) 
-# "from telegram_notifier import send_message" çağrılarını
+# "from alerts.telegram_notifier import send_message" çağrılarını
 # yeni bot.py'ye yönlendirmek için burada duruyor.
 # Silme — silinirse eski import'lar kırılır.
 
