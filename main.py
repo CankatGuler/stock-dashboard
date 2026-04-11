@@ -625,6 +625,48 @@ async def get_crypto_dashboard():
         return {"status": "error", "message": str(e)}
 
 
+@app.get("/api/db-test")
+async def test_database():
+    """Supabase veritabanı bağlantı testi ve tablo oluşturma."""
+    try:
+        from core.database import check_connection, create_tables
+        connected = check_connection()
+        if not connected:
+            return {"status": "error", "message": "Veritabanına bağlanılamadı"}
+        create_tables()
+        return {
+            "status": "ok",
+            "message": "Supabase bağlantısı başarılı, tablolar hazır",
+            "tables": ["transactions", "portfolio", "system_logs"],
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
+@app.get("/api/alphractal-test")
+async def test_alphractal():
+    """Alphractal API bağlantı testi."""
+    import requests, os
+    api_key = os.getenv("ALPHRACTAL_API_KEY", "")
+    if not api_key:
+        return {"status": "error", "message": "ALPHRACTAL_API_KEY eksik"}
+    try:
+        resp = requests.get(
+            "https://api.alphractal.com/btc/market/Mvrv_zscore",
+            headers={"X-Api-Key": api_key},
+            params={"startDate": "2026-04-01T00:00:00Z"},
+            timeout=15,
+        )
+        return {
+            "status":      "ok",
+            "http_code":   resp.status_code,
+            "key_prefix":  api_key[:8] + "...",
+            "response":    resp.text[:500],
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
 @app.get("/api/library")
 async def get_library():
     """Finansal terimler kütüphanesi."""
