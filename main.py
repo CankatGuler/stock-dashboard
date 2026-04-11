@@ -240,12 +240,17 @@ async def get_macro():
 async def get_portfolio_detail():
     """Portföy anlık değerler ve K/Z — dashboard için."""
     try:
-        from portfolio_manager import load_portfolio
+        from core.database import SessionLocal
+        from core import crud
         from strategy_data import fetch_usd_try_rate
         import yfinance as yf
 
-        portfolio = [p for p in load_portfolio() if float(p.get("shares", 0)) > 0]
-        usd_try   = fetch_usd_try_rate()
+        usd_try = fetch_usd_try_rate()
+
+        with SessionLocal() as db:
+            summary = crud.get_portfolio_summary(db)
+
+        portfolio = [p for p in summary["positions"] if p["is_open"]]
 
         # Altın fiyatı
         gold_usd = 0.0
@@ -266,11 +271,11 @@ async def get_portfolio_detail():
             ac  = (p.get("asset_class") or "us_equity").strip()
             if ac in ("other", ""):
                 ac = "us_equity"
-            shr = float(p.get("shares", 0))
-            avg = float(p.get("avg_cost", 0))
-            cur = p.get("currency", "USD")
-            tk  = p.get("ticker", "")
-            cost = shr * avg / usd_try if cur == "TRY" else shr * avg
+            shr  = float(p["quantity"])
+            avg  = float(p["average_cost_usd"])
+            cur  = p["currency"]
+            tk   = p["symbol"]
+            cost = shr * avg  # average_cost_usd zaten USD normalize
             live = cost
             try:
                 if tk in ("ALTIN_GRAM_TRY",) and gold_usd > 0:
@@ -283,7 +288,7 @@ async def get_portfolio_detail():
                 else:
                     h = yf.Ticker(tk).history(period="2d")
                     if not h.empty:
-                        lp = float(h["Close"].iloc[-1])
+                        lp   = float(h["Close"].iloc[-1])
                         live = shr * lp / usd_try if cur == "TRY" else shr * lp
             except Exception:
                 pass
@@ -308,13 +313,14 @@ async def get_portfolio_detail():
             d["cost"]    = round(d["cost"], 0)
 
         return {
-            "status":      "ok",
-            "total_value": round(total_v, 0),
-            "total_cost":  round(total_c, 0),
-            "total_pnl":   round(total_v - total_c, 0),
+            "status":        "ok",
+            "total_value":   round(total_v, 0),
+            "total_cost":    round(total_c, 0),
+            "total_pnl":     round(total_v - total_c, 0),
             "total_pnl_pct": round((total_v - total_c) / total_c * 100, 2) if total_c else 0,
-            "usd_try":     usd_try,
-            "classes":     class_data,
+            "realized_pnl":  round(summary["total_realized_pnl_usd"], 2),
+            "usd_try":       usd_try,
+            "classes":       class_data,
         }
     except Exception as e:
         return {"status": "error", "message": str(e)}
