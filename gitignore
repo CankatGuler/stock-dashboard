@@ -1,0 +1,11 @@
+.env
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Lokal fallback dosyaları (GitHub API'ye yazılır, local kopyası .gitignore'da)
+portfolio.json
+analysis_history.json
+portfolio_analysis_history.json
+macro_history.json
