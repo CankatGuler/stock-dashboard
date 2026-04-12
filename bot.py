@@ -61,6 +61,7 @@ async def start_bot():
     _application.add_handler(CommandHandler("guncelle", cmd_portfoy_guncelle))
     _application.add_handler(CommandHandler("makro",    cmd_makro))
     _application.add_handler(CommandHandler("hisse",    cmd_hisse))
+    _application.add_handler(CommandHandler("fon",      cmd_fon))
     _application.add_handler(CommandHandler("tarama",   cmd_tarama))
     _application.add_handler(CommandHandler("durum",    cmd_durum))
     _application.add_handler(CommandHandler("onayla",   cmd_onayla))
@@ -184,7 +185,8 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "/makro faiz — Faiz & yield curve & kredi\n"
         "/makro sektor — XLF, XLE, XLK, XLV sektör ETF'leri\n"
         "/makro turkiye — USD/TRY, BIST, TUR ETF\n"
-        "/hisse AMZN — Temel analiz + haberler + direktör yorumu\n"
+        "/hisse AAPL — FMP ile temel analiz + F/K + direktör yorumu\n"
+        "/fon IIH — TEFAS fon güncel fiyatı\n"
         "/tarama — Portföy sağlık taraması\n\n"
         "<b>📊 Portföy Komutları:</b>\n"
         "/portfoy — Anlık portföy özeti\n"
@@ -1039,16 +1041,16 @@ async def cmd_tarama(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def cmd_hisse(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """
-    Hisse temel analizi + son haberler + direktör yorumu.
+    Hisse temel analizi — FMP API ile F/K, piyasa değeri, sektör + direktör yorumu.
     Kullanım: /hisse <TICKER>
-    Örnek: /hisse AMZN
+    Örnek: /hisse AAPL
     """
     args = ctx.args
     if not args:
         await update.message.reply_text(
             "Kullanım: /hisse TICKER\n"
-            "Örnek: /hisse AMZN\n"
-            "Örnek: /hisse NVDA"
+            "Örnek: /hisse AAPL\n"
+            "Örnek: /hisse PLTR"
         )
         return
 
@@ -1056,24 +1058,150 @@ async def cmd_hisse(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"⏳ {ticker} analiz ediliyor...")
 
     try:
-        from data.stock_analyzer import analyze_ticker
-        from chat_director import _build_portfolio_context
+        from data.fmp_client import get_full_analysis
+        from chat_director import _build_portfolio_context, ask_director
         from data.strategy_data import fetch_usd_try_rate
 
-        usd_try   = fetch_usd_try_rate()
-        port_ctx  = _build_portfolio_context(usd_try)
-
         loop   = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None, analyze_ticker, ticker, port_ctx[:300]
-        )
+        data   = await loop.run_in_executor(None, get_full_analysis, ticker)
+        usd_try = fetch_usd_try_rate()
 
-        # 4096 karakter sınırı için böl
-        for chunk in [result[i:i+4000] for i in range(0, len(result), 4000)]:
+        if not data:
+            # FMP başarısız — yfinance ile yedek
+            from data.stock_analyzer import analyze_ticker
+            port_ctx = _build_portfolio_context(usd_try)
+            result   = await loop.run_in_executor(None, analyze_ticker, ticker, port_ctx[:300])
+            for chunk in [result[i:i+4000] for i in range(0, len(result), 4000)]:
+                await update.message.reply_text(chunk, parse_mode=ParseMode.HTML)
+            return
+
+        # ── FMP verisi başarıyla geldi ────────────────────────────────────
+        price      = data.get("price", 0)
+        change_pct = data.get("change_pct", 0)
+        pe         = data.get("pe_ratio")
+        mktcap     = data.get("market_cap", 0)
+        sector     = data.get("sector", "")
+        name       = data.get("name", ticker)
+        beta       = data.get("beta")
+        pb         = data.get("price_to_book")
+        roe        = data.get("roe")
+        w52_high   = data.get("52w_high")
+        w52_low    = data.get("52w_low")
+
+        # Piyasa değeri formatı
+        if mktcap >= 1_000_000_000_000:
+            mktcap_str = f"${mktcap/1e12:.1f}T"
+        elif mktcap >= 1_000_000_000:
+            mktcap_str = f"${mktcap/1e9:.1f}B"
+        else:
+            mktcap_str = f"${mktcap/1e6:.0f}M"
+
+        chg_emoji = "🟢" if change_pct >= 0 else "🔴"
+        chg_sign  = "+" if change_pct >= 0 else ""
+
+        lines = [
+            f"📊 <b>{name} ({ticker})</b>",
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━",
+            f"💵 <b>Fiyat:</b> ${price:,.2f}  {chg_emoji} {chg_sign}{change_pct:.2f}%",
+            f"🏢 <b>Sektör:</b> {sector}",
+            f"💰 <b>Piyasa Değeri:</b> {mktcap_str}",
+        ]
+        if pe:
+            lines.append(f"📈 <b>F/K Oranı:</b> {pe:.1f}x")
+        if pb:
+            lines.append(f"📚 <b>F/DD:</b> {pb:.1f}x")
+        if roe:
+            lines.append(f"💹 <b>ROE:</b> %{roe*100:.1f}")
+        if beta:
+            lines.append(f"⚡ <b>Beta:</b> {beta:.2f}")
+        if w52_high and w52_low:
+            lines.append(f"📉 <b>52H Aralık:</b> ${w52_low:,.2f} — ${w52_high:,.2f}")
+
+        lines.append("")
+
+        # ── Direktörden yorum ─────────────────────────────────────────────
+        port_ctx = _build_portfolio_context(usd_try)
+        soru = (
+            f"{ticker} ({name}) için kısa bir değerlendirme yap. "
+            f"Fiyat: ${price:.2f}, F/K: {pe or 'N/A'}, Sektör: {sector}, "
+            f"Piyasa Değeri: {mktcap_str}. "
+            f"Portföyüme eklemeli miyim? 3-4 cümle, somut ol."
+        )
+        yorum = await loop.run_in_executor(None, ask_director, soru)
+        lines.append(f"🤖 <b>Direktör Yorumu:</b>\n{yorum}")
+
+        mesaj = "\n".join(lines)
+        for chunk in [mesaj[i:i+4000] for i in range(0, len(mesaj), 4000)]:
             await update.message.reply_text(chunk, parse_mode=ParseMode.HTML)
 
     except Exception as e:
         await update.message.reply_text(f"❌ {ticker} analiz edilemedi: {e}")
+
+
+async def cmd_fon(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """
+    TEFAS fon fiyatı sorgula.
+    Kullanım: /fon <FON_KODU>
+    Örnek: /fon IIH
+    Örnek: /fon NNF
+    """
+    args = ctx.args
+    if not args:
+        await update.message.reply_text(
+            "📝 <b>Kullanım:</b>\n"
+            "/fon FON_KODU\n\n"
+            "<b>Örnekler:</b>\n"
+            "/fon IIH — İş Portföy Hisse Senedi Fonu\n"
+            "/fon NNF — Nurol Portföy\n"
+            "/fon TI1 — Tacirler Portföy",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    fon_kodu = args[0].upper()
+    await update.message.reply_text(f"⏳ {fon_kodu} fiyatı çekiliyor...")
+
+    try:
+        from data.tefas_client import get_fund_info
+        loop = asyncio.get_running_loop()
+        info = await loop.run_in_executor(None, get_fund_info, fon_kodu)
+
+        if not info:
+            await update.message.reply_text(
+                f"❌ <b>{fon_kodu}</b> bulunamadı.\n"
+                f"Fon kodunu kontrol et (örn: IIH, NNF, TI1)",
+                parse_mode=ParseMode.HTML,
+            )
+            return
+
+        price      = info["price"]
+        date_str   = info.get("date", "")
+        chg_pct    = info.get("change_1w_pct")
+        old_price  = info.get("price_1w_ago")
+
+        lines = [
+            f"🇹🇷 <b>{fon_kodu} — TEFAS Fon Fiyatı</b>",
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━",
+            f"💵 <b>Güncel Fiyat:</b> ₺{price:.4f}",
+            f"📅 <b>Tarih:</b> {date_str}",
+        ]
+
+        if chg_pct is not None and old_price is not None:
+            chg_emoji = "🟢" if chg_pct >= 0 else "🔴"
+            chg_sign  = "+" if chg_pct >= 0 else ""
+            lines.append(
+                f"{chg_emoji} <b>Haftalık Değişim:</b> "
+                f"{chg_sign}{chg_pct:.2f}% (₺{old_price:.4f} → ₺{price:.4f})"
+            )
+
+        lines.append(f"\n<i>Kaynak: TEFAS | Veri her iş günü ~18:30 güncellenir</i>")
+
+        await update.message.reply_text(
+            "\n".join(lines), parse_mode=ParseMode.HTML
+        )
+
+    except Exception as e:
+        await update.message.reply_text(f"❌ {fon_kodu} fiyatı alınamadı: {e}")
 
 
 async def cmd_tetikle(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
