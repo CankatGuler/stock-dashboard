@@ -180,15 +180,20 @@ def inject_system_message(text: str, label: str = "SİSTEM ALARMI") -> None:
 
 def _build_portfolio_context(usd_try: float) -> str:
     """
-    Mevcut portföy durumunu anlık fiyatlar ve K/Z ile hazırla.
-    Direktör bu bağlamla "hangi varlık ne durumda?" sorusunu yanıtlayabilir.
+    Supabase'den EN GÜNCEL portföy verisiyle direktör bağlamını hazırla.
+    Her çağrıda taze veri çekilir — statik/eski veri kullanılmaz.
     """
     try:
         import yfinance as yf
-        from portfolio_manager import load_portfolio
+        from core.database import SessionLocal
+        from core import crud
 
-        portfolio = [p for p in load_portfolio() if float(p.get("shares", 0)) > 0]
-        if not portfolio:
+        # Supabase'den taze veri çek
+        with SessionLocal() as db:
+            summary = crud.get_portfolio_summary(db)
+
+        positions = [p for p in summary["positions"] if p["is_open"] and p["quantity"] > 0]
+        if not positions:
             return "Portföy boş veya yüklenemedi."
 
         # Altın fiyatını önceden çek
@@ -200,48 +205,46 @@ def _build_portfolio_context(usd_try: float) -> str:
         except Exception:
             pass
 
-        lines = [f"MEVCUT PORTFÖY (USD/TRY: {usd_try:.2f}):"]
-
-        class_groups: dict[str, list] = {}
-        for p in portfolio:
-            ac = p.get("asset_class", "us_equity") or "us_equity"
-            if ac in ("other", ""):
-                ac = "us_equity"
-            class_groups.setdefault(ac, []).append(p)
+        lines = [f"MEVCUT PORTFÖY - CANLI VERİ (Supabase | USD/TRY: {usd_try:.2f}):"]
+        lines.append("(Bu veriler Supabase veritabanından anlık çekilmiştir)")
 
         ac_labels = {
             "us_equity": "ABD Hisse",
             "crypto":    "Kripto",
             "commodity": "Emtia",
-            "tefas":     "TEFAS",
+            "tefas":     "TEFAS Fonu",
             "cash":      "Nakit",
         }
+
+        # Varlık sınıfına göre grupla
+        class_groups: dict[str, list] = {}
+        for p in positions:
+            ac = p.get("asset_class", "us_equity") or "us_equity"
+            class_groups.setdefault(ac, []).append(p)
 
         total_cur  = 0.0
         total_cost = 0.0
 
-        for ac, positions in class_groups.items():
-            lines.append(f"\n{ac_labels.get(ac, ac)}:")
-            for p in positions:
-                tk  = p.get("ticker", "?")
-                shr = float(p.get("shares", 0))
-                avg = float(p.get("avg_cost", 0))
-                cur = p.get("currency", "USD")
+        for ac, pos_list in class_groups.items():
+            lines.append(f"\n── {ac_labels.get(ac, ac)} ──")
+            for p in pos_list:
+                tk       = p["symbol"]
+                shr      = float(p["quantity"])
+                avg      = float(p["avg_cost_usd"])   # Supabase'de USD birim maliyet
+                cur      = p.get("currency", "USD")
+                cost_usd = shr * avg
 
-                cost_usd = shr * avg / usd_try if cur == "TRY" else shr * avg
-
-                # Anlık fiyat
                 # Anlık birim fiyat
-                live_price_usd = avg  # fallback: maliyet birim fiyatı
+                live_price_usd = avg  # fallback
                 try:
                     if tk in ("ALTIN_GRAM_TRY", "XAUTRY=X") and gold_usd > 0:
                         live_tl        = gold_usd * usd_try / 31.1035
                         live_price_usd = live_tl / usd_try
                     elif ac == "tefas":
-                        from data.turkey_fetcher import fetch_tefas_fund
-                        fd = fetch_tefas_fund(tk)
-                        if fd and fd.get("price", 0) > 0:
-                            live_price_usd = float(fd["price"]) / usd_try
+                        from data.tefas_client import get_fund_price
+                        price_tl = get_fund_price(tk)
+                        if price_tl:
+                            live_price_usd = price_tl / usd_try
                     else:
                         h = yf.Ticker(tk).history(period="2d")
                         if not h.empty:
@@ -258,7 +261,7 @@ def _build_portfolio_context(usd_try: float) -> str:
                 total_cur  += live_usd
                 total_cost += cost_usd
 
-                # Açık ve kesin format — direktör birim/toplam karıştırmasın
+                # Kesin ve açık format — birim/toplam karışıklığı olmaz
                 lines.append(
                     f"  {tk}: "
                     f"Miktar: {shr:,g} adet | "
@@ -269,19 +272,22 @@ def _build_portfolio_context(usd_try: float) -> str:
                     f"K/Z: {sign}${pnl:,.0f} ({sign}{pnl_pct:.1f}%)"
                 )
 
-        # Genel toplam
         total_pnl     = total_cur - total_cost
         total_pnl_pct = total_pnl / total_cost * 100 if total_cost > 0 else 0
         lines.append(
-            f"\nTOPLAM: güncel ${total_cur:,.0f} | "
-            f"maliyet ${total_cost:,.0f} | "
-            f"K/Z ${total_pnl:+,.0f} ({total_pnl_pct:+.1f}%)"
+            f"\nPORTFÖY TOPLAMI: "
+            f"Güncel Değer: ${total_cur:,.0f} | "
+            f"Toplam Yatırılan: ${total_cost:,.0f} | "
+            f"Net K/Z: ${total_pnl:+,.0f} ({total_pnl_pct:+.1f}%)"
         )
 
         return "\n".join(lines)
 
     except Exception as e:
+        logger.error("_build_portfolio_context hatası: %s", e)
         return f"Portföy alınamadı: {e}"
+
+
 
 
 def _extract_tickers_from_message(message: str) -> list[str]:
@@ -499,6 +505,12 @@ Nakit oranı yeterli mi? Konsantrasyon riski var mı?
 Asla sadece "Al" veya "Sat" deme. Mantık zincirini göster.
 </nihai_muhakeme>
 
+─── VERİ BİLİNCİ ───────────────────────────────────────────────────────────
+Sana sağlanan portföy verisi Supabase veritabanından, fiyat verisi yfinance'den
+anlık çekilmektedir. Bu bağlam (context) senin CANLI veri kaynağındır.
+"Erişimim yok", "Bağlantım yok", "Veritabanına ulaşamıyorum" DEME.
+Sunulan verilere %100 güvenerek analiz yap.
+
 ─── ÜSLUP ──────────────────────────────────────────────────────────────────
 - Türkçe, temkinli, çok yönlü mentor üslubu.
 - Balık vermek yerine balık tutmayı öğret.
@@ -514,6 +526,9 @@ Cankat'ın kişisel yatırım direktörüsün.
 {live_price_ctx}
 
 TARİH/SAAT: {tr_time} | USD/TRY: {usd_try:.2f}
+
+VERİ BİLİNCİ: Sağlanan portföy verisi Supabase'den anlık çekilmektedir.
+"Erişimim yok" veya "Bağlantım yok" DEME — sunulan bağlam senin canlı veri kaynağındır.
 
 KURALLAR: Türkçe, somut, sorumluluktan kaçma. Geçmiş konuşmaya atıfta bulunabilirsin.
 Telegram formatı için <b>bold</b> ve <i>italic</i> kullanabilirsin.
