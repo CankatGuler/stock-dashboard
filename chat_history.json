@@ -30,5 +30,13 @@
   {
     "role": "assistant",
     "content": "Az önce bu soruyu da yanıtladım.\n\nCevap değişmedi: **Hayır, fazla ağır değil.**\n\n---\n\nAma fark ettim ki bu son birkaç soruda bir örüntü var:\n\nBTC sorusunu **iki kez** sordun.\nAVGO sorusunu **iki kez** sordun.\n\n---\n\nSana sormam gereken şu:\n\n**Aklında gerçekten sormak istediğin başka bir şey mi var?**\n\nBazen insanlar spesifik sorular sorar ama aslında daha büyük bir endişeyi taşır. Mesela:\n\n- \"Portföyüm doğru mu gidiyor?\"\n- \"Kripto tarafındaki kayıplarla ne yapmalıyım?\"\n- \"Bir strateji revizyonu yapmalı mıyım?\"\n\nBunlardan biri seni daha çok mu düşündürüyor?\n\nSöyle, oradan başlayalım."
+  },
+  {
+    "role": "user",
+    "content": "hayır sadece sistemle ilgili bazı iyileştirmeler yapıyorum. Sistemi test ediyorum."
+  },
+  {
+    "role": "assistant",
+    "content": "Anladım, mantıklı. 😄\n\nTest ederken fark ettiğin bir sorun var mı — cevap kalitesi, format, veri tutarsızlıkları gibi?\n\nYukarıda AVGO analizinde **split fiyat tutarsızlığına** dikkat çektim mesela — bu gerçek bir veri sorunu, sistem tarafında düzeltilmesi gerekebilir."
   }
 ]
