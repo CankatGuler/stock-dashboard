@@ -21,10 +21,9 @@ beautifulsoup4>=4.12.3
 lxml>=6.0.0
 html5lib>=1.1
 
-# ── Zamanlama (arka plan görevleri) ────────────────────────────────────────────
-apscheduler>=3.10.0
-
-
-# ── SQL veri tabanı ────────────────────────────────────────────
+# ── Veritabanı ─────────────────────────────────────────────────────────────────
 sqlalchemy>=2.0.0
 psycopg2-binary>=2.9.0
+
+# ── Zamanlama (arka plan görevleri) ────────────────────────────────────────────
+apscheduler>=3.10.0

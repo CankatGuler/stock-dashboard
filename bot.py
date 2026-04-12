@@ -62,6 +62,7 @@ async def start_bot():
     _application.add_handler(CommandHandler("makro",    cmd_makro))
     _application.add_handler(CommandHandler("hisse",    cmd_hisse))
     _application.add_handler(CommandHandler("fon",      cmd_fon))
+    _application.add_handler(CommandHandler("haber",    cmd_haber))
     _application.add_handler(CommandHandler("tarama",   cmd_tarama))
     _application.add_handler(CommandHandler("durum",    cmd_durum))
     _application.add_handler(CommandHandler("onayla",   cmd_onayla))
@@ -187,6 +188,8 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "/makro turkiye — USD/TRY, BIST, TUR ETF\n"
         "/hisse AAPL — FMP ile temel analiz + F/K + direktör yorumu\n"
         "/fon IIH — TEFAS fon güncel fiyatı\n"
+        "/haber — Portföy + makro haber brifingı\n"
+        "/haber AAPL — Tek hisse haberleri\n"
         "/tarama — Portföy sağlık taraması\n\n"
         "<b>📊 Portföy Komutları:</b>\n"
         "/portfoy — Anlık portföy özeti\n"
@@ -1202,6 +1205,130 @@ async def cmd_fon(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         await update.message.reply_text(f"❌ {fon_kodu} fiyatı alınamadı: {e}")
+
+
+async def cmd_haber(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """
+    Portföy bağlamında kategorize haber brifingı.
+    Kullanım:
+      /haber              — Tüm portföy + makro brifing
+      /haber AAPL         — AAPL için haberler (us_stock varsayılan)
+      /haber BTC crypto   — BTC kripto haberleri
+      /haber XAU commodity — Altın haberleri
+      /haber IIH tr_fund  — TEFAS fon haberleri
+    """
+    args = ctx.args
+
+    await update.message.reply_text("⏳ Haberler toplanıyor...")
+
+    try:
+        from data.news_client import (
+            get_global_macro_news, get_local_macro_news,
+            get_asset_news, get_daily_news_briefing,
+        )
+
+        loop = asyncio.get_running_loop()
+
+        # ── Tek varlık modu: /haber AAPL [tip] ───────────────────────────
+        if args:
+            symbol     = args[0].upper()
+            asset_type = args[1].upper() if len(args) > 1 else "US_STOCK"
+
+            # tip normalize
+            type_map = {
+                "HISSE": "US_STOCK", "STOCK": "US_STOCK",
+                "KRIPTO": "CRYPTO",  "CRYPTO": "CRYPTO",
+                "EMTIA": "COMMODITY","COMMODITY": "COMMODITY",
+                "FON": "TR_FUND",    "TEFAS": "TR_FUND", "TR_FUND": "TR_FUND",
+            }
+            asset_type = type_map.get(asset_type, "US_STOCK")
+
+            news = await loop.run_in_executor(
+                None, get_asset_news, symbol, asset_type
+            )
+
+            if not news:
+                await update.message.reply_text(
+                    f"📭 <b>{symbol}</b> için haber bulunamadı.",
+                    parse_mode=ParseMode.HTML,
+                )
+                return
+
+            lines = [f"📰 <b>{symbol} Haberleri</b>", "━" * 28, ""]
+            for i, n in enumerate(news, 1):
+                title   = n.get("title", "")[:120]
+                summary = n.get("summary", "")[:200]
+                url     = n.get("url", "")
+                source  = n.get("source", "")
+                date    = n.get("date", "")[:10]
+                lines.append(f"<b>{i}. {title}</b>")
+                if summary:
+                    lines.append(f"  <i>{summary}</i>")
+                lines.append(f"  📌 {source} | {date}")
+                if url:
+                    lines.append(f"  🔗 {url}")
+                lines.append("")
+
+            mesaj = "\n".join(lines)
+            for chunk in [mesaj[i:i+4000] for i in range(0, len(mesaj), 4000)]:
+                await update.message.reply_text(chunk, parse_mode=ParseMode.HTML)
+            return
+
+        # ── Tam portföy brifing modu: /haber ─────────────────────────────
+        briefing = await loop.run_in_executor(None, get_daily_news_briefing)
+
+        mesajlar = []
+
+        # Küresel makro
+        makro_g = briefing.get("MAKRO_KURESEL", [])
+        if makro_g:
+            lines = ["🌍 <b>Küresel Makro Haberler</b>", "━" * 28, ""]
+            for i, n in enumerate(makro_g[:4], 1):
+                lines.append(f"<b>{i}. {n.get('title','')[:120]}</b>")
+                if n.get("summary"):
+                    lines.append(f"  <i>{n['summary'][:180]}</i>")
+                lines.append(f"  📌 {n.get('source','')} | {n.get('date','')[:10]}")
+                lines.append("")
+            mesajlar.append("\n".join(lines))
+
+        # Türkiye makro
+        makro_t = briefing.get("MAKRO_TURKIYE", [])
+        if makro_t:
+            lines = ["🇹🇷 <b>Türkiye Makro Haberler</b>", "━" * 28, ""]
+            for i, n in enumerate(makro_t[:4], 1):
+                lines.append(f"<b>{i}. {n.get('title','')[:120]}</b>")
+                if n.get("summary"):
+                    lines.append(f"  <i>{n['summary'][:180]}</i>")
+                lines.append(f"  📌 {n.get('source','')} | {n.get('date','')[:10]}")
+                lines.append("")
+            mesajlar.append("\n".join(lines))
+
+        # Portföy özel
+        portfoy_haberler = briefing.get("PORTFOY_OZEL", {})
+        if portfoy_haberler:
+            lines = ["💼 <b>Portföy — Varlığa Özel Haberler</b>", "━" * 28, ""]
+            for symbol, news_list in list(portfoy_haberler.items())[:8]:
+                if not news_list:
+                    continue
+                lines.append(f"📌 <b>{symbol}</b>")
+                for n in news_list[:2]:
+                    lines.append(f"  • {n.get('title','')[:100]}")
+                    if n.get("url"):
+                        lines.append(f"    🔗 {n['url']}")
+                lines.append("")
+            mesajlar.append("\n".join(lines))
+
+        if not mesajlar:
+            await update.message.reply_text("📭 Haber bulunamadı.")
+            return
+
+        for mesaj in mesajlar:
+            for chunk in [mesaj[i:i+4000] for i in range(0, len(mesaj), 4000)]:
+                await update.message.reply_text(chunk, parse_mode=ParseMode.HTML)
+
+    except Exception as e:
+        logger.error("cmd_haber hatası: %s", e)
+        await update.message.reply_text(f"❌ Haberler alınamadı: {e}")
 
 
 async def cmd_tetikle(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
