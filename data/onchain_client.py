@@ -40,7 +40,9 @@ def _get_api_key() -> str:
 def _alphractal_fetch(path: str, asset: str = "btc", days: int = 5) -> list:
     """
     Alphractal API'den ham veri çek.
-    path: "/{asset}/market/Mvrv_zscore" formatında — {asset} otomatik replace edilir.
+    İki format desteklenir:
+      1. /{asset}/market/Mvrv_zscore  (path tabanlı)
+      2. /api/GetMvrvZscore           (query param tabanlı)
     """
     try:
         api_key = _get_api_key()
@@ -51,7 +53,7 @@ def _alphractal_fetch(path: str, asset: str = "btc", days: int = 5) -> list:
         resp = requests.get(
             url,
             headers={"X-Api-Key": api_key},
-            params={"startDate": start},
+            params={"startDate": start, "asset": asset.lower()},
             timeout=_TIMEOUT,
         )
         if resp.status_code == 200:
@@ -74,13 +76,57 @@ def _alphractal_fetch(path: str, asset: str = "btc", days: int = 5) -> list:
         return []
 
 
-def _latest(path: str, field: str, asset: str = "btc") -> Optional[float]:
-    """Belirtilen metriğin en son değerini döndür."""
+def _alphractal_api(endpoint: str, asset: str = "btc", days: int = 5) -> list:
+    """
+    /api/GetXxx formatındaki endpoint'leri çek.
+    Bu format bazı planlarda daha geniş erişim sağlıyor.
+    """
+    try:
+        api_key = _get_api_key()
+        start   = (datetime.now(timezone.utc) - timedelta(days=days)).strftime(
+            "%Y-%m-%dT00:00:00Z"
+        )
+        url  = f"{ALPHRACTAL_BASE}/api/{endpoint}"
+        resp = requests.get(
+            url,
+            headers={"X-Api-Key": api_key},
+            params={"startDate": start, "asset": asset.lower()},
+            timeout=_TIMEOUT,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            if isinstance(data, list) and data:
+                logger.info("Alphractal /api OK: %s → %d kayıt", endpoint, len(data))
+                return data
+            return []
+        logger.warning("Alphractal /api HTTP %s: %s", resp.status_code, endpoint)
+        return []
+    except Exception as e:
+        logger.warning("Alphractal /api hata [%s]: %s", endpoint, e)
+        return []
+
+
+def _latest(path: str, field: str, asset: str = "btc",
+            api_endpoint: str = None, api_field: str = None) -> Optional[float]:
+    """
+    Belirtilen metriğin en son değerini döndür.
+    Önce path formatını dener, başarısız olursa /api/Get... formatını dener.
+    """
+    # Format 1: /{asset}/market/Mvrv_zscore
     data = _alphractal_fetch(path, asset=asset)
     if data:
         val = data[-1].get(field)
         if val is not None:
             return float(val)
+
+    # Format 2: /api/GetMvrvZscore (eğer belirtilmişse)
+    if api_endpoint:
+        data2 = _alphractal_api(api_endpoint, asset=asset)
+        if data2:
+            f = api_field or field
+            val = data2[-1].get(f)
+            if val is not None:
+                return float(val)
     return None
 
 
@@ -88,55 +134,66 @@ def _latest(path: str, field: str, asset: str = "btc") -> Optional[float]:
 
 def get_mvrv_zscore(asset: str = "btc") -> Optional[float]:
     """MVRV Z-Score — piyasanın aşırı ısınma/soğuma durumu."""
-    return _latest("/{asset}/market/Mvrv_zscore", "mvrv_zscore", asset)
+    return _latest("/{asset}/market/Mvrv_zscore", "mvrv_zscore", asset,
+                   api_endpoint="GetMvrvZscore", api_field="mvrv_zscore")
 
 
 def get_mvrv_ratio(asset: str = "btc") -> Optional[float]:
     """MVRV Ratio — piyasa değeri / realize edilmiş değer."""
-    return _latest("/{asset}/market/CapMVRVCur", "capMVRVCur", asset)
+    return _latest("/{asset}/market/CapMVRVCur", "capMVRVCur", asset,
+                   api_endpoint="GetCapMVRVCur", api_field="capMVRVCur")
 
 
 def get_nupl(asset: str = "btc") -> Optional[float]:
-    """NUPL — Net Unrealized Profit/Loss. Piyasanın genel kar/zarar durumu."""
-    return _latest("/{asset}/market/Nupl", "nupl", asset)
+    """NUPL — Net Unrealized Profit/Loss."""
+    return _latest("/{asset}/market/Nupl", "nupl", asset,
+                   api_endpoint="GetNupl", api_field="nupl")
 
 
 def get_lth_mvrv(asset: str = "btc") -> Optional[float]:
     """LTH-MVRV — Uzun vadeli tutucuların MVRV'si."""
-    return _latest("/{asset}/lifespan/Lth_mvrv", "lth_mvrv", asset)
+    return _latest("/{asset}/lifespan/Lth_mvrv", "lth_mvrv", asset,
+                   api_endpoint="GetLth_mvrv", api_field="lth_mvrv")
 
 
 def get_sopr(asset: str = "btc") -> Optional[float]:
     """SOPR — Harcanan çıktıların kar/zarar oranı."""
-    return _latest("/{asset}/lifespan/Sopr", "sopr", asset)
+    return _latest("/{asset}/lifespan/Sopr", "sopr", asset,
+                   api_endpoint="GetSopr", api_field="sopr")
 
 
 def get_sth_sopr(asset: str = "btc") -> Optional[float]:
-    """STH-SOPR — Kısa vadeli tutucuların SOPR'u. Dip sinyali için kritik."""
-    return _latest("/{asset}/lifespan/Sth_sopr", "sth_sopr", asset)
+    """STH-SOPR — Kısa vadeli tutucuların SOPR'u."""
+    return _latest("/{asset}/lifespan/Sth_sopr", "sth_sopr", asset,
+                   api_endpoint="GetSth_sopr", api_field="sth_sopr")
 
 
 def get_exchange_netflow(asset: str = "btc") -> Optional[float]:
     """Exchange Net Flow — Borsalara BTC giriş/çıkışı."""
-    return _latest("/{asset}/exchange_flow/Netflow", "netflow", asset)
+    return _latest("/{asset}/exchange_flow/Netflow", "netflow", asset,
+                   api_endpoint="GetExchangeNetflow", api_field="netflow")
 
 
 def get_long_short_ratio(asset: str = "btc") -> Optional[float]:
     """Long/Short Oranı — Türev piyasasındaki pozisyon dağılımı."""
-    return _latest("/{asset}/derivatives/Long_short_ratio", "long_short_ratio", asset)
+    return _latest("/{asset}/derivatives/Long_short_ratio", "long_short_ratio", asset,
+                   api_endpoint="GetLongShortRatio", api_field="long_short_ratio")
 
 
 def get_nvt(asset: str = "btc") -> Optional[float]:
     """NVT Signal (90g) — Piyasa değeri / işlem hacmi oranı."""
-    val = _latest("/{asset}/market/NVTAdj90", "nVTAdj90", asset)
+    val = _latest("/{asset}/market/NVTAdj90", "nVTAdj90", asset,
+                  api_endpoint="GetNVTAdj90", api_field="nVTAdj90")
     if val is None:
-        val = _latest("/{asset}/market/NVTAdj", "nVTAdj", asset)
+        val = _latest("/{asset}/market/NVTAdj", "nVTAdj", asset,
+                      api_endpoint="GetNVTAdj", api_field="nVTAdj")
     return val
 
 
 def get_active_addresses(asset: str = "btc") -> Optional[float]:
     """Aktif Adres Sayısı — Ağ kullanım yoğunluğu."""
-    return _latest("/{asset}/addresses/AdrActCnt", "adrActCnt", asset)
+    return _latest("/{asset}/addresses/AdrActCnt", "adrActCnt", asset,
+                   api_endpoint="GetAdrActCnt", api_field="adrActCnt")
 
 
 def get_funding_rate(asset: str = "btc") -> Optional[float]:
