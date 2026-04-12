@@ -1,31 +1,22 @@
-# data/news_client.py — Finansal Haber Akışı İstemcisi (v3)
+# data/news_client.py — Finansal Haber Akışı (Claude web_search tabanlı)
 #
-# Düzeltmeler:
-#   - Evrensel tarih çözücü (dateutil + time.struct_time desteği)
-#   - Genişletilmiş keyword listesi (daha fazla eşleşme)
-#   - Türkiye için Google News TR (RSS erişim sorunu çözüldü)
-#   - Case-insensitive filtreleme
-#   - Şeffaf hata günlükleri
+# FMP ücretsiz planı haber endpoint'lerini desteklemiyor.
+# Google News bu ortamda proxy kısıtlaması yaşıyor.
+# Çözüm: Anthropic Claude API'nin web_search tool'u
+# — zaten sahibiz, ek ücret yok, tüm web'i tarıyor.
 
 import logging
 import os
-import time
-from datetime import datetime, timedelta
 from typing import Optional
 from urllib.parse import quote_plus
 
-import feedparser
 import requests
-from dateutil import parser as dateutil_parser
 from dotenv import load_dotenv
 
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-FMP_BASE_V3     = "https://financialmodelingprep.com/api/v3"
-FMP_BASE_STABLE = "https://financialmodelingprep.com/stable"
-_TIMEOUT  = 12
-_MAX_NEWS = 5
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
 COMMODITY_MAP = {
     "XAU": "gold", "GC=F": "gold", "ALTIN": "gold", "ALTIN_GRAM_TRY": "gold",
@@ -37,270 +28,182 @@ COMMODITY_MAP = {
     "XCU": "copper", "HG=F": "copper",
 }
 
-# Geniş keyword listeleri — tekil/çoğul, kısaltma varyasyonları dahil
-TRUE_MACRO_KEYWORDS = [
-    "vix", "dxy", "treasury yield", "treasury yields", "fed", "powell",
-    "ovx", "global macro", "dollar index", "bond yield", "bond yields",
-    "10-year yield", "10-year", "yield curve", "safe haven",
-    "risk-off", "risk off", "market volatility",
-]
 
-US_ECONOMY_KEYWORDS = [
-    "ism", "pmi", "nfp", "nonfarm", "payroll", "unemployment", "jobless",
-    "cpi", "interest rate", "interest rates", "rate hike", "rate cut",
-    "recession", "us economy", "fomc", "inflation", "federal reserve", "fed",
-    "jobs report", "jobs data", "gdp", "economic growth", "consumer price",
-    "producer price", "retail sales", "housing", "ism manufacturing",
-    "purchasing managers",
-]
+# ─── Claude web_search ile haber çek ─────────────────────────────────────────
 
-TURKEY_KEYWORDS = [
-    "tcmb", "merkez bankası", "ppk", "borsa istanbul", "bist",
-    "tüfe", "tufe", "enflasyon", "faiz", "mehmet şimşek", "simsek",
-    "türk lirası", "turk lirasi", "türkiye ekonomi", "turkiye ekonomi",
-    "yabancı yatırımcı", "cari açık", "döviz kuru", "tl",
-]
-
-
-# ─── Evrensel Tarih Çözücü ────────────────────────────────────────────────────
-
-def is_within_30_days(date_val) -> bool:
+def _claude_search_news(query: str, max_results: int = 5) -> list[dict]:
     """
-    RSS (time.struct_time), FMP (ISO string) veya herhangi bir tarih formatını
-    tolere eden evrensel tarih filtresi.
-    Tarih yoksa veya parse edilemezse True döner (haberi kaybetme).
+    Claude API'nin web_search tool'unu kullanarak haber çek.
+    Döner: [{title, summary, url, date, source}]
     """
-    if not date_val:
-        return True
-    try:
-        if isinstance(date_val, time.struct_time):
-            dt = datetime.fromtimestamp(time.mktime(date_val))
-        else:
-            dt = dateutil_parser.parse(str(date_val))
-            if dt.tzinfo is not None:
-                dt = dt.replace(tzinfo=None)
-        days_ago = (datetime.now() - dt).days
-        return days_ago <= 30
-    except Exception as e:
-        print(f"[TARIH-PARSE] Tarih çözülemedi: {date_val!r} — {e}")
-        return True  # Hata durumunda haberi kaybetme
-
-
-# ─── Yardımcılar ──────────────────────────────────────────────────────────────
-
-def _fmp_key():
-    return os.getenv("FMP_API_KEY") or None
-
-
-def _clean_html(text: str) -> str:
-    import re
-    return re.sub(r"<[^>]+>", "", text or "").strip()[:300]
-
-
-def _contains_any(text: str, keywords: list) -> bool:
-    """Case-insensitive keyword arama."""
-    text_lower = text.lower()
-    return any(kw.lower() in text_lower for kw in keywords)
-
-
-def _fmp_get(endpoint: str, params: dict = None, base: str = None) -> list:
-    key = _fmp_key()
-    if not key:
-        print("[ERROR] FMP_API_KEY eksik — haber çekilemiyor")
+    if not ANTHROPIC_API_KEY:
+        logger.error("ANTHROPIC_API_KEY eksik")
         return []
+
+    system = (
+        "Sen bir finansal haber asistanısın. "
+        "Web araması yaparak son haberleri bul. "
+        "SADECE JSON formatında yanıt ver, başka hiçbir şey yazma. "
+        "Format: [{\"title\": \"...\", \"summary\": \"...\", \"url\": \"...\", \"date\": \"...\", \"source\": \"...\"}] "
+        f"En fazla {max_results} haber döndür. Özeti 150 karakter ile sınırla."
+    )
+
     try:
-        p = {"apikey": key, "limit": 30}
-        if params:
-            p.update(params)
-        base_url = base or FMP_BASE_STABLE
-        resp = requests.get(f"{base_url}/{endpoint}", params=p, timeout=_TIMEOUT)
-        if resp.status_code == 429:
-            print(f"[ERROR] FMP rate limit aşıldı")
-            return []
+        resp = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key":         ANTHROPIC_API_KEY,
+                "anthropic-version": "2023-06-01",
+                "content-type":      "application/json",
+            },
+            json={
+                "model":      "claude-haiku-4-5-20251001",
+                "max_tokens": 1500,
+                "system":     system,
+                "tools": [{"type": "web_search_20250305", "name": "web_search"}],
+                "messages": [{"role": "user", "content": query}],
+            },
+            timeout=30,
+        )
+
         if resp.status_code != 200:
-            print(f"[ERROR] FMP HTTP {resp.status_code}: {resp.text[:200]}")
+            logger.error("Claude API HTTP %s: %s", resp.status_code, resp.text[:200])
             return []
-        data = resp.json()
-        if not isinstance(data, list):
-            print(f"[ERROR] FMP beklenmeyen format: {type(data)}")
+
+        data     = resp.json()
+        content  = data.get("content", [])
+        
+        # text bloğunu bul
+        text_blocks = [b["text"] for b in content if b.get("type") == "text" and b.get("text")]
+        if not text_blocks:
             return []
-        return data
+        
+        text = text_blocks[-1].strip()
+        
+        # JSON'u temizle ve parse et
+        import re, json
+        # Markdown code block varsa temizle
+        text = re.sub(r"```json\s*", "", text)
+        text = re.sub(r"```\s*", "", text)
+        text = text.strip()
+        
+        # JSON array bul
+        match = re.search(r"\[.*\]", text, re.DOTALL)
+        if match:
+            news_list = json.loads(match.group())
+            logger.info("Claude web_search: %d haber bulundu", len(news_list))
+            return news_list[:max_results]
+
     except Exception as e:
-        print(f"[ERROR] _fmp_get [{endpoint}]: {e}")
-        return []
+        logger.error("_claude_search_news hatası: %s", e)
 
-
-def _fmp_to_news(raw_list: list) -> list:
-    """FMP ham verisini standart formata çevir. v3 ve stable endpoint uyumlu."""
-    result = []
-    for item in raw_list:
-        result.append({
-            "title":   item.get("title", ""),
-            "summary": _clean_html(
-                item.get("text", "") or item.get("snippet", "") or item.get("summary", "")
-            ),
-            "url":     item.get("url", "") or item.get("link", ""),
-            "date":    item.get("publishedDate", "") or item.get("date", "") or item.get("publishedAt", ""),
-            "source":  item.get("site", "") or item.get("publisher", {}).get("name", "FMP"),
-        })
-    return result
-
-
-def _parse_rss(url: str) -> list:
-    try:
-        feed = feedparser.parse(url)
-        results = []
-        for entry in feed.entries:
-            # RSS'de published_parsed (time.struct_time) veya published (string)
-            date_val = entry.get("published_parsed") or entry.get("published", "")
-            results.append({
-                "title":    entry.get("title", ""),
-                "summary":  _clean_html(entry.get("summary", entry.get("description", ""))),
-                "url":      entry.get("link", ""),
-                "date":     date_val,
-                "source":   feed.feed.get("title", "RSS"),
-            })
-        return results
-    except Exception as e:
-        print(f"[ERROR] _parse_rss [{url[:60]}]: {e}")
-        return []
-
-
-def _apply_filters(items: list, required_keywords: list = None) -> list:
-    """30 gün filtresi + opsiyonel keyword karantinası."""
-    result = []
-    for item in items:
-        # 30 gün filtresi
-        if not is_within_30_days(item.get("date", "")):
-            continue
-        # Keyword karantinası (varsa)
-        if required_keywords:
-            text = (item.get("title", "") + " " + item.get("summary", ""))
-            if not _contains_any(text, required_keywords):
-                continue
-        result.append(item)
-        if len(result) >= _MAX_NEWS:
-            break
-    return result
+    return []
 
 
 # ─── 1. Gerçek Makro Haberler ─────────────────────────────────────────────────
 
-def get_true_macro_news() -> list:
-    """VIX, DXY, Treasury Yield, Fed, Powell haberleri."""
-    try:
-        raw      = _fmp_get("stock_market_news")
-        news     = _fmp_to_news(raw)
-        filtered = _apply_filters(news, required_keywords=TRUE_MACRO_KEYWORDS)
-        print(f"[INFO] Gerçek makro: {len(filtered)} haber (ham: {len(news)})")
-        return filtered
-    except Exception as e:
-        print(f"[ERROR] get_true_macro_news: {e}")
-        return []
+def get_true_macro_news() -> list[dict]:
+    """VIX, DXY, Fed, Treasury Yield haberleri."""
+    query = (
+        "Search for today's top financial macro news about: "
+        "VIX volatility index, DXY dollar index, US Treasury yields, "
+        "Federal Reserve Fed Jerome Powell, global macro market risk. "
+        "Find the 5 most recent and important news articles from last 7 days."
+    )
+    results = _claude_search_news(query, max_results=5)
+    logger.info("Gerçek makro: %d haber", len(results))
+    return results
 
 
 # ─── 2. ABD Ekonomi Haberleri ─────────────────────────────────────────────────
 
-def get_us_economy_news() -> list:
-    """ISM, PMI, NFP, CPI, Fed, faiz kararı haberleri."""
-    try:
-        raw = _fmp_get("news/general-latest", {"page": 0, "limit": 30})
-        if not raw:
-            raw = _fmp_get("stock_market_news", {"limit": 30}, base=FMP_BASE_V3)
-        news     = _fmp_to_news(raw)
-        filtered = _apply_filters(news, required_keywords=US_ECONOMY_KEYWORDS)
-        print(f"[INFO] ABD ekonomi: {len(filtered)} haber (ham: {len(news)})")
-        return filtered
-    except Exception as e:
-        print(f"[ERROR] get_us_economy_news: {e}")
-        return []
+def get_us_economy_news() -> list[dict]:
+    """ISM, PMI, NFP, CPI, faiz kararı haberleri."""
+    query = (
+        "Search for the latest US economy news about: "
+        "ISM manufacturing PMI, NFP nonfarm payroll jobs report, "
+        "CPI inflation data, Federal Reserve interest rate decision, "
+        "FOMC meeting, US GDP growth, recession indicators. "
+        "Find 5 most important articles from the last 7 days."
+    )
+    results = _claude_search_news(query, max_results=5)
+    logger.info("ABD ekonomi: %d haber", len(results))
+    return results
 
 
 # ─── 3. Türkiye Ekonomi Haberleri ─────────────────────────────────────────────
 
-def get_turkey_economy_news() -> list:
-    """TCMB, faiz, TÜFE, BIST haberleri. Google News TR kullanır."""
-    try:
-        query   = "TCMB faiz enflasyon Türkiye ekonomi Borsa İstanbul"
-        encoded = quote_plus(query)
-        url     = f"https://news.google.com/rss/search?q={encoded}&hl=tr-TR&gl=TR&ceid=TR:tr"
-
-        items    = _parse_rss(url)
-        filtered = _apply_filters(items, required_keywords=TURKEY_KEYWORDS)
-        print(f"[INFO] Türkiye: {len(filtered)} haber (ham: {len(items)})")
-
-        # Fallback: keyword filtresi olmadan sadece 30 gün filtresi
-        if not filtered and items:
-            print("[INFO] Türkiye karantina filtresi hiç geçemedi, sadece 30g filtresi uygulanıyor")
-            filtered = _apply_filters(items, required_keywords=None)
-
-        return filtered
-    except Exception as e:
-        print(f"[ERROR] get_turkey_economy_news: {e}")
-        return []
+def get_turkey_economy_news() -> list[dict]:
+    """TCMB, faiz, TÜFE, Borsa İstanbul haberleri."""
+    query = (
+        "Türkiye ekonomisi ile ilgili son haberleri ara: "
+        "TCMB Merkez Bankası faiz kararı, PPK toplantısı, "
+        "enflasyon TÜFE verileri, Borsa İstanbul BIST, "
+        "Mehmet Şimşek ekonomi, Türk lirası TL kuru. "
+        "Son 7 günden en önemli 5 haberi bul."
+    )
+    results = _claude_search_news(query, max_results=5)
+    logger.info("Türkiye: %d haber", len(results))
+    return results
 
 
 # ─── 4. Varlığa Özgü Haberler ────────────────────────────────────────────────
 
-def get_asset_news(symbol: str, asset_type: str) -> list:
-    """
-    Tek varlık için haber. 30 gün zorunlu.
-    asset_type: US_STOCK | CRYPTO | COMMODITY | TR_FUND
-    """
+def get_asset_news(symbol: str, asset_type: str) -> list[dict]:
+    """Tek varlık için haber. asset_type: US_STOCK | CRYPTO | COMMODITY | TR_FUND"""
     asset_type = asset_type.upper()
-    news       = []
 
-    try:
-        if asset_type == "US_STOCK":
-            raw  = _fmp_get("news/stock-latest", {"tickers": symbol.upper(), "limit": 20})
-            if not raw:
-                raw = _fmp_get("stock_news", {"tickers": symbol.upper(), "limit": 20}, base=FMP_BASE_V3)
-            news = _fmp_to_news(raw)
-            print(f"[INFO] {symbol} US_STOCK ham: {len(raw)}")
+    if asset_type == "US_STOCK":
+        query = (
+            f"Search for the latest news about {symbol} stock. "
+            f"Find recent articles about {symbol} earnings, analyst ratings, "
+            f"product launches, company news from last 7 days. Top 5 results."
+        )
 
-        elif asset_type == "CRYPTO":
-            clean = symbol.upper().replace("-USD", "").replace("USD", "")
-            raw   = _fmp_get("news/crypto-latest", {"symbol": f"{clean}USD", "limit": 20})
-            if not raw:
-                raw = _fmp_get("crypto_news", {"symbol": f"{clean}USD", "limit": 20}, base=FMP_BASE_V3)
-            if not raw:
-                # Fallback: genel haberlerden filtrele
-                all_raw = _fmp_get("stock_market_news")
-                raw = [r for r in all_raw if clean in r.get("title", "").upper()]
-            news = _fmp_to_news(raw)
-            print(f"[INFO] {symbol} CRYPTO ham: {len(raw)}")
+    elif asset_type == "CRYPTO":
+        clean = symbol.upper().replace("-USD", "").replace("USD", "")
+        query = (
+            f"Search for the latest {clean} cryptocurrency news. "
+            f"Find recent articles about {clean} price, adoption, regulation, "
+            f"market developments from last 7 days. Top 5 results."
+        )
 
-        elif asset_type == "COMMODITY":
-            asset_name = COMMODITY_MAP.get(symbol.upper(), symbol.lower())
-            query  = f'"{asset_name}" (price OR demand OR supply OR "central bank") +when:30d'
-            url    = f"https://news.google.com/rss/search?q={quote_plus(query)}&hl=en-US&gl=US&ceid=US:en"
-            news   = _parse_rss(url)
-            print(f"[INFO] {symbol} COMMODITY ham: {len(news)}")
+    elif asset_type == "COMMODITY":
+        asset_name = COMMODITY_MAP.get(symbol.upper(), symbol.lower())
+        query = (
+            f"Search for the latest {asset_name} commodity news. "
+            f"Find recent articles about {asset_name} price, demand, supply, "
+            f"central bank demand, market outlook from last 7 days. Top 5 results."
+        )
 
-        elif asset_type == "TR_FUND":
-            query  = f'"{symbol.upper()} fonu" +when:30d'
-            url    = f"https://news.google.com/rss/search?q={quote_plus(query)}&hl=tr-TR&gl=TR&ceid=TR:tr"
-            news   = _parse_rss(url)
-            print(f"[INFO] {symbol} TR_FUND ham: {len(news)}")
+    elif asset_type == "TR_FUND":
+        query = (
+            f"Türkiye yatırım fonu {symbol} hakkında son haberleri ara. "
+            f"TEFAS fon performansı, fon yöneticisi kararları, "
+            f"piyasa gelişmeleri. Son 7 günden 5 haber."
+        )
 
-        else:
-            print(f"[ERROR] Bilinmeyen asset_type: {asset_type}")
-            return []
-
-    except Exception as e:
-        print(f"[ERROR] get_asset_news [{symbol}/{asset_type}]: {e}")
+    else:
+        logger.warning("Bilinmeyen asset_type: %s", asset_type)
         return []
 
-    filtered = _apply_filters(news, required_keywords=None)
-    print(f"[INFO] {symbol} filtrelenmiş: {len(filtered)}")
-    return filtered
+    results = _claude_search_news(query, max_results=5)
+    logger.info("%s (%s): %d haber", symbol, asset_type, len(results))
+    return results
 
 
 # ─── 5. Sabah Brifing ────────────────────────────────────────────────────────
 
 def get_daily_news_briefing() -> dict:
     """Tam portföy + makro haber brifingı."""
-    result = {"MAKRO_GERCEK": [], "ABD_EKONOMI": [], "TURKIYE": [], "PORTFOY_OZEL": {}}
+    import time as _time
+
+    result = {
+        "MAKRO_GERCEK": [],
+        "ABD_EKONOMI":  [],
+        "TURKIYE":      [],
+        "PORTFOY_OZEL": {},
+    }
 
     for key, fn in [
         ("MAKRO_GERCEK", get_true_macro_news),
@@ -309,8 +212,9 @@ def get_daily_news_briefing() -> dict:
     ]:
         try:
             result[key] = fn()
+            _time.sleep(1)  # API rate limit
         except Exception as e:
-            print(f"[ERROR] {key} brifing: {e}")
+            logger.error("%s brifing hatası: %s", key, e)
 
     try:
         from core.database import SessionLocal
@@ -321,6 +225,7 @@ def get_daily_news_briefing() -> dict:
         }
         with SessionLocal() as db:
             summary = crud.get_portfolio_summary(db)
+
         for pos in summary["positions"]:
             if not pos["is_open"]:
                 continue
@@ -331,10 +236,10 @@ def get_daily_news_briefing() -> dict:
                 news = get_asset_news(pos["symbol"], at)
                 if news:
                     result["PORTFOY_OZEL"][pos["symbol"]] = news
-                time.sleep(0.2)
+                _time.sleep(1)
             except Exception as e:
-                print(f"[ERROR] portfoy haber {pos['symbol']}: {e}")
+                logger.debug("%s haber: %s", pos["symbol"], e)
     except Exception as e:
-        print(f"[ERROR] get_daily_news_briefing portfoy: {e}")
+        logger.error("Portföy brifing hatası: %s", e)
 
     return result
