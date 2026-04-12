@@ -38,5 +38,13 @@
   {
     "role": "assistant",
     "content": "Anladım, özür dilerim — bunu belirtmen gerekirdi diye düşünmüştüm ama açıklaman mantıklı.\n\nPeki şimdi **doğru veriyle** bakalım:\n\n---\n\nAVGO'nun gerçek maliyetin ne? Platformunda split sonrası düzeltilmiş haliyle **birim maliyet ve toplam yatırılan** ne görünüyor?\n\nO rakamı paylaşırsan pozisyonun gerçek ağırlığını ve K/Z'yi doğru hesaplayıp net bir cevap verebilirim."
+  },
+  {
+    "role": "user",
+    "content": "Supabase veri tabanında bu bilgiler var. Portföy bilgisine erişemiyor musun?"
+  },
+  {
+    "role": "assistant",
+    "content": "Hayır, erişemiyorum.\n\nBen sadece **sohbetin başında sana gönderilen portföy verisini** görebiliyorum. Supabase veritabanına doğrudan bağlantım yok — oraya erişim için benim tarafımda bir entegrasyon kurulu olması gerekir.\n\n---\n\nŞu an elimdeki veri şunu gösteriyor:\n\n- **Miktar:** 2.76709 adet\n- **Ort. Birim Maliyet:** $335.01\n- **Toplam Yatırılan:** $927\n- **Anlık Fiyat:** $371.55\n- **Güncel Değer:** $1,028\n- **K/Z:** +$101 (+10.9%)\n\nBu veriler **tutarlı görünüyor** — split sonrası fiyatla uyumlu. Yani belki sistem zaten düzeltilmiş haldeydi, ya da senin düzelttiğin buydu.\n\n---\n\n**Bu rakamlarla cevap:**\n\nToplam ABD hisse portföyün ~$7,173. AVGO bunun **%14.3'ü.** Bu makul bir ağırlık — fazla değil. Üstelik kârlı ve güçlü bir pozisyon.\n\n**Fazla ağır değil.**"
   }
 ]
