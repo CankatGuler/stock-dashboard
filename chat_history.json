@@ -46,5 +46,13 @@
   {
     "role": "assistant",
     "content": "Hayır, erişemiyorum.\n\nBen sadece **sohbetin başında sana gönderilen portföy verisini** görebiliyorum. Supabase veritabanına doğrudan bağlantım yok — oraya erişim için benim tarafımda bir entegrasyon kurulu olması gerekir.\n\n---\n\nŞu an elimdeki veri şunu gösteriyor:\n\n- **Miktar:** 2.76709 adet\n- **Ort. Birim Maliyet:** $335.01\n- **Toplam Yatırılan:** $927\n- **Anlık Fiyat:** $371.55\n- **Güncel Değer:** $1,028\n- **K/Z:** +$101 (+10.9%)\n\nBu veriler **tutarlı görünüyor** — split sonrası fiyatla uyumlu. Yani belki sistem zaten düzeltilmiş haldeydi, ya da senin düzelttiğin buydu.\n\n---\n\n**Bu rakamlarla cevap:**\n\nToplam ABD hisse portföyün ~$7,173. AVGO bunun **%14.3'ü.** Bu makul bir ağırlık — fazla değil. Üstelik kârlı ve güçlü bir pozisyon.\n\n**Fazla ağır değil.**"
+  },
+  {
+    "role": "user",
+    "content": "veritabanına erişimini düzelttim. Tekrar sormama gerek var mı yoksa kendin kontrol edebilir misin?"
+  },
+  {
+    "role": "assistant",
+    "content": "Maalesef **kendin kontrol edemiyorum.**\n\nVeritabanına doğrudan bağlantım yok — Supabase'e erişim için bu sohbetin başında bana veri gönderen sistemin (bot/backend) bağlantıyı kurması gerekiyor.\n\n---\n\nYani şu an için:\n\n- Eğer **backend yeniden başlatıldıysa** ve sohbet tekrar başlatılırsa, güncel veri başlangıçta bana iletilir\n- **Mevcut sohbet içinde** veritabanını sorgulayamam\n\n---\n\n**Ne yapabilirsin:**\n\nSohbeti yeniden başlat — sistem düzgün çalışıyorsa AVGO dahil tüm güncel portföy verisi başlangıçta bana iletilecek ve oradan devam ederiz."
   }
 ]
