@@ -180,15 +180,15 @@ def inject_system_message(text: str, label: str = "SİSTEM ALARMI") -> None:
 
 def _build_portfolio_context(usd_try: float) -> str:
     """
-    Supabase'den EN GÜNCEL portföy verisiyle direktör bağlamını hazırla.
-    Her çağrıda taze veri çekilir — statik/eski veri kullanılmaz.
+    Supabase'den taze portföy verisi çek.
+    TÜM matematik (ağırlık, K/Z oranı) Python'da hesaplanır.
+    Direktöre sadece hazır, yoruma kapalı sayılar gönderilir.
     """
     try:
         import yfinance as yf
         from core.database import SessionLocal
         from core import crud
 
-        # Supabase'den taze veri çek
         with SessionLocal() as db:
             summary = crud.get_portfolio_summary(db)
 
@@ -196,7 +196,7 @@ def _build_portfolio_context(usd_try: float) -> str:
         if not positions:
             return "Portföy boş veya yüklenemedi."
 
-        # Altın fiyatını önceden çek
+        # Altın fiyatı
         gold_usd = 0.0
         try:
             h = yf.Ticker("GC=F").history(period="2d")
@@ -204,9 +204,6 @@ def _build_portfolio_context(usd_try: float) -> str:
                 gold_usd = float(h["Close"].iloc[-1])
         except Exception:
             pass
-
-        lines = [f"MEVCUT PORTFÖY - CANLI VERİ (Supabase | USD/TRY: {usd_try:.2f}):"]
-        lines.append("(Bu veriler Supabase veritabanından anlık çekilmiştir)")
 
         ac_labels = {
             "us_equity": "ABD Hisse",
@@ -216,76 +213,109 @@ def _build_portfolio_context(usd_try: float) -> str:
             "cash":      "Nakit",
         }
 
-        # Varlık sınıfına göre grupla
-        class_groups: dict[str, list] = {}
+        # ── ADIM 1: Tüm anlık değerleri Python'da hesapla ─────────────────
+        enriched = []
         for p in positions:
-            ac = p.get("asset_class", "us_equity") or "us_equity"
-            class_groups.setdefault(ac, []).append(p)
+            tk   = p["symbol"]
+            shr  = float(p["quantity"])
+            avg  = float(p["avg_cost_usd"])
+            cur  = p.get("currency", "USD")
+            ac   = p.get("asset_class", "us_equity") or "us_equity"
+            cost_usd = shr * avg
 
-        total_cur  = 0.0
-        total_cost = 0.0
+            live_price_usd = avg  # fallback
+            try:
+                if tk in ("ALTIN_GRAM_TRY", "XAUTRY=X") and gold_usd > 0:
+                    live_price_usd = (gold_usd * usd_try / 31.1035) / usd_try
+                elif ac == "tefas":
+                    from data.tefas_client import get_fund_price
+                    price_tl = get_fund_price(tk)
+                    if price_tl:
+                        live_price_usd = price_tl / usd_try
+                else:
+                    h = yf.Ticker(tk).history(period="2d")
+                    if not h.empty:
+                        lp = float(h["Close"].iloc[-1])
+                        live_price_usd = lp / usd_try if cur == "TRY" else lp
+            except Exception:
+                pass
+
+            live_usd = shr * live_price_usd
+            pnl      = live_usd - cost_usd
+            pnl_pct  = pnl / cost_usd * 100 if cost_usd > 0 else 0
+
+            enriched.append({
+                "symbol":    tk,
+                "ac":        ac,
+                "shr":       shr,
+                "avg":       avg,
+                "cost_usd":  cost_usd,
+                "live_price": live_price_usd,
+                "live_usd":  live_usd,
+                "pnl":       pnl,
+                "pnl_pct":   pnl_pct,
+            })
+
+        # ── ADIM 2: Toplam ve kategori toplamlarını hesapla ───────────────
+        total_cur  = sum(p["live_usd"]  for p in enriched)
+        total_cost = sum(p["cost_usd"]  for p in enriched)
+        total_pnl  = total_cur - total_cost
+        total_pnl_pct = total_pnl / total_cost * 100 if total_cost > 0 else 0
+
+        cat_totals: dict[str, float] = {}
+        for p in enriched:
+            cat_totals[p["ac"]] = cat_totals.get(p["ac"], 0.0) + p["live_usd"]
+
+        # ── ADIM 3: Direktöre gidecek metni oluştur ───────────────────────
+        lines = [
+            f"MEVCUT PORTFÖY — CANLI VERİ (Supabase | USD/TRY: {usd_try:.2f})",
+            f"Toplam Portföy Değeri: ${total_cur:,.0f} | "
+            f"Toplam Yatırılan: ${total_cost:,.0f} | "
+            f"Net K/Z: ${total_pnl:+,.0f} ({total_pnl_pct:+.1f}%)",
+            "",
+            "NOT: Tüm ağırlıklar ve K/Z oranları Python tarafından hesaplanmıştır.",
+            "Matematiksel hesaplama YAPMA — aşağıdaki hazır verileri OKU ve YORUMLA.",
+            "",
+        ]
+
+        # Kategoriye göre grupla
+        class_groups: dict[str, list] = {}
+        for p in enriched:
+            class_groups.setdefault(p["ac"], []).append(p)
 
         for ac, pos_list in class_groups.items():
-            lines.append(f"\n── {ac_labels.get(ac, ac)} ──")
+            cat_total = cat_totals.get(ac, 0)
+            cat_pct   = cat_total / total_cur * 100 if total_cur > 0 else 0
+            lines.append(
+                f"── {ac_labels.get(ac, ac)}: "
+                f"Kategori Toplamı ${cat_total:,.0f} "
+                f"(Portföy Ağırlığı: %{cat_pct:.1f}) ──"
+            )
+
             for p in pos_list:
-                tk       = p["symbol"]
-                shr      = float(p["quantity"])
-                avg      = float(p["avg_cost_usd"])   # Supabase'de USD birim maliyet
-                cur      = p.get("currency", "USD")
-                cost_usd = shr * avg
+                sign       = "+" if p["pnl"] >= 0 else ""
+                cat_weight = p["live_usd"] / cat_total * 100 if cat_total > 0 else 0
+                tot_weight = p["live_usd"] / total_cur * 100 if total_cur > 0 else 0
 
-                # Anlık birim fiyat
-                live_price_usd = avg  # fallback
-                try:
-                    if tk in ("ALTIN_GRAM_TRY", "XAUTRY=X") and gold_usd > 0:
-                        live_tl        = gold_usd * usd_try / 31.1035
-                        live_price_usd = live_tl / usd_try
-                    elif ac == "tefas":
-                        from data.tefas_client import get_fund_price
-                        price_tl = get_fund_price(tk)
-                        if price_tl:
-                            live_price_usd = price_tl / usd_try
-                    else:
-                        h = yf.Ticker(tk).history(period="2d")
-                        if not h.empty:
-                            lp = float(h["Close"].iloc[-1])
-                            live_price_usd = lp / usd_try if cur == "TRY" else lp
-                except Exception:
-                    pass
-
-                live_usd = shr * live_price_usd
-                pnl      = live_usd - cost_usd
-                pnl_pct  = pnl / cost_usd * 100 if cost_usd > 0 else 0
-                sign     = "+" if pnl >= 0 else ""
-
-                total_cur  += live_usd
-                total_cost += cost_usd
-
-                # Kesin ve açık format — birim/toplam karışıklığı olmaz
                 lines.append(
-                    f"  {tk}: "
-                    f"Miktar: {shr:,g} adet | "
-                    f"Ort. Birim Maliyet: ${avg:,.2f} | "
-                    f"Toplam Yatırılan: ${cost_usd:,.0f} | "
-                    f"Anlık Birim Fiyat: ${live_price_usd:,.2f} | "
-                    f"Toplam Güncel Değer: ${live_usd:,.0f} | "
-                    f"K/Z: {sign}${pnl:,.0f} ({sign}{pnl_pct:.1f}%)"
+                    f"  {p['symbol']}: "
+                    f"Miktar: {p['shr']:,g} adet | "
+                    f"Ort. Birim Maliyet: ${p['avg']:,.2f} | "
+                    f"Toplam Yatırılan: ${p['cost_usd']:,.0f} | "
+                    f"Anlık Birim Fiyat: ${p['live_price']:,.2f} | "
+                    f"Varlık Değeri: ${p['live_usd']:,.0f} | "
+                    f"K/Z: {sign}${p['pnl']:,.0f} ({sign}{p['pnl_pct']:.1f}%) | "
+                    f"Kategori İçi Ağırlık: %{cat_weight:.1f} | "
+                    f"Toplam Portföy Ağırlığı: %{tot_weight:.1f}"
                 )
-
-        total_pnl     = total_cur - total_cost
-        total_pnl_pct = total_pnl / total_cost * 100 if total_cost > 0 else 0
-        lines.append(
-            f"\nPORTFÖY TOPLAMI: "
-            f"Güncel Değer: ${total_cur:,.0f} | "
-            f"Toplam Yatırılan: ${total_cost:,.0f} | "
-            f"Net K/Z: ${total_pnl:+,.0f} ({total_pnl_pct:+.1f}%)"
-        )
+            lines.append("")
 
         return "\n".join(lines)
 
     except Exception as e:
         logger.error("_build_portfolio_context hatası: %s", e)
         return f"Portföy alınamadı: {e}"
+
 
 
 
@@ -505,11 +535,15 @@ Nakit oranı yeterli mi? Konsantrasyon riski var mı?
 Asla sadece "Al" veya "Sat" deme. Mantık zincirini göster.
 </nihai_muhakeme>
 
-─── VERİ BİLİNCİ ───────────────────────────────────────────────────────────
-Sana sağlanan portföy verisi Supabase veritabanından, fiyat verisi yfinance'den
-anlık çekilmektedir. Bu bağlam (context) senin CANLI veri kaynağındır.
-"Erişimim yok", "Bağlantım yok", "Veritabanına ulaşamıyorum" DEME.
-Sunulan verilere %100 güvenerek analiz yap.
+─── VERİ BİLİNCİ & MATEMATİK KURALI ──────────────────────────────────────
+Sana sağlanan portföy verisi Supabase'den, fiyat verisi yfinance'den anlık çekilir.
+"Erişimim yok", "Bağlantım yok" DEME — bu bağlam senin CANLI veri kaynağındır.
+
+KESİN KURAL — MATEMATİK YAPMA:
+Her varlığın "Kategori İçi Ağırlık" ve "Toplam Portföy Ağırlığı" Python tarafından
+HAZIR hesaplanmış olarak sana verilmiştir. Sen bu hazır yüzdeleri OKU ve YORUMLA.
+Asla kendi başına toplam portföye veya kategori toplamına bölme — bu hata üretir.
+Örn: AVGO için "Toplam Portföy Ağırlığı: %X" yazıyorsa o değeri kullan, hesaplama.
 
 ─── ÜSLUP ──────────────────────────────────────────────────────────────────
 - Türkçe, temkinli, çok yönlü mentor üslubu.
@@ -528,7 +562,9 @@ Cankat'ın kişisel yatırım direktörüsün.
 TARİH/SAAT: {tr_time} | USD/TRY: {usd_try:.2f}
 
 VERİ BİLİNCİ: Sağlanan portföy verisi Supabase'den anlık çekilmektedir.
-"Erişimim yok" veya "Bağlantım yok" DEME — sunulan bağlam senin canlı veri kaynağındır.
+"Erişimim yok" DEME — bu bağlam senin canlı veri kaynağındır.
+MATEMATİK KURALI: Varlık ağırlıkları hazır verilmiştir ("Kategori İçi Ağırlık" ve
+"Toplam Portföy Ağırlığı"). Kendi başına hesaplama yapma, doğrudan bu değerleri kullan.
 
 KURALLAR: Türkçe, somut, sorumluluktan kaçma. Geçmiş konuşmaya atıfta bulunabilirsin.
 Telegram formatı için <b>bold</b> ve <i>italic</i> kullanabilirsin.
