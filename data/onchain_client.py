@@ -373,26 +373,27 @@ def get_crypto_onchain_data(symbol: str) -> dict:
         }
         signals.append(sig)
 
-    # ── Genel sinyal: en kötü sinyali baz al ──────────────────────────────────
+    # ── Genel sinyal: sadece dolu metriklerin sinyallerini say ───────────────
     if signals:
-        priority = {"red": 0, "amber": 1, "neutral": 2, "green": 3}
-        result["overall_signal"] = min(signals, key=lambda s: priority.get(s, 2))
+        priority       = {"red": 0, "amber": 1, "neutral": 2, "green": 3}
+        overall        = min(signals, key=lambda s: priority.get(s, 2))
+        result["overall_signal"] = overall
 
     # ── Özet metin ────────────────────────────────────────────────────────────
     filled = len(result["metrics"])
     if filled == 0:
-        result["error"]   = "Alphractal'dan veri alınamadı. API key'i kontrol et."
+        result["error"]   = "Alphractal'dan veri alınamadı. API key ve plan erişimini kontrol et."
         result["summary"] = "On-chain verisi mevcut değil."
     else:
-        green_count  = signals.count("green")
-        red_count    = signals.count("red")
-        amber_count  = signals.count("amber")
-        overall      = result["overall_signal"]
+        green_count = signals.count("green")
+        red_count   = signals.count("red")
+        amber_count = signals.count("amber")
+        overall     = result["overall_signal"]
 
         if overall == "green":
             durum = "olumlu — Birikim fırsatı sinyalleri var"
         elif overall == "red":
-            durum = "dikkatli — Aşırı ısınma veya satış baskısı var"
+            durum = "dikkatli — Yüksek değerleme veya satış baskısı"
         elif overall == "amber":
             durum = "nötr-dikkatli — Karma sinyaller"
         else:
@@ -400,8 +401,7 @@ def get_crypto_onchain_data(symbol: str) -> dict:
 
         result["summary"] = (
             f"{symbol.upper()} on-chain durumu {durum}. "
-            f"{filled} metrik analiz edildi: "
-            f"{green_count} yeşil, {amber_count} sarı, {red_count} kırmızı."
+            f"{filled} metrik: {green_count} yeşil, {amber_count} sarı, {red_count} kırmızı."
         )
 
     return result
