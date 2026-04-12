@@ -63,6 +63,7 @@ async def start_bot():
     _application.add_handler(CommandHandler("hisse",    cmd_hisse))
     _application.add_handler(CommandHandler("fon",      cmd_fon))
     _application.add_handler(CommandHandler("haber",    cmd_haber))
+    _application.add_handler(CommandHandler("onchain",  cmd_onchain))
     _application.add_handler(CommandHandler("tarama",   cmd_tarama))
     _application.add_handler(CommandHandler("durum",    cmd_durum))
     _application.add_handler(CommandHandler("onayla",   cmd_onayla))
@@ -188,6 +189,7 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "/makro turkiye — USD/TRY, BIST, TUR ETF\n"
         "/hisse AAPL — FMP ile temel analiz + F/K + direktör yorumu\n"
         "/fon IIH — TEFAS fon güncel fiyatı\n"
+        "/onchain BTC — On-chain metrikler (MVRV, SOPR, Net Flow)\n"
         "/haber — Portföy + makro haber brifingı\n"
         "/haber AAPL — Tek hisse haberleri\n"
         "/tarama — Portföy sağlık taraması\n\n"
@@ -1207,6 +1209,112 @@ async def cmd_fon(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ {fon_kodu} fiyatı alınamadı: {e}")
 
 
+async def cmd_onchain(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """
+    Kripto on-chain veri özeti — Alphractal API.
+    Kullanım: /onchain <SEMBOL>
+    Örnek: /onchain BTC
+    Örnek: /onchain ETH
+    """
+    args = ctx.args
+    if not args:
+        await update.message.reply_text(
+            "📝 <b>Kullanım:</b>\n"
+            "/onchain SEMBOL\n\n"
+            "<b>Örnekler:</b>\n"
+            "/onchain BTC — Bitcoin on-chain özeti\n"
+            "/onchain ETH — Ethereum on-chain özeti\n\n"
+            "<b>Metrikler:</b>\n"
+            "MVRV Z-Score, NUPL, STH-SOPR, Exchange Net Flow,\n"
+            "Long/Short Oranı, NVT Signal, Aktif Adres, Funding Rate",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    symbol = args[0].upper().replace("-USD", "").replace("USD", "")
+    await update.message.reply_text(f"⏳ {symbol} on-chain verileri çekiliyor...")
+
+    try:
+        from data.onchain_client import get_crypto_onchain_data
+        loop   = asyncio.get_running_loop()
+        result = await loop.run_in_executor(None, get_crypto_onchain_data, symbol)
+
+        if result.get("error"):
+            await update.message.reply_text(
+                f"❌ {symbol} on-chain verisi alınamadı:\n{result['error']}",
+                parse_mode=ParseMode.HTML,
+            )
+            return
+
+        metrics = result.get("metrics", {})
+        if not metrics:
+            await update.message.reply_text(
+                f"📭 {symbol} için on-chain veri bulunamadı.\n"
+                f"Alphractal bu sembolü desteklemiyor olabilir.",
+                parse_mode=ParseMode.HTML,
+            )
+            return
+
+        # Sinyal → emoji
+        sig_e = {"green": "🟢", "amber": "🟡", "red": "🔴", "neutral": "⚪"}
+        overall_e = sig_e.get(result["overall_signal"], "⚪")
+
+        lines = [
+            f"⛓ <b>{symbol} — On-Chain Özeti</b>",
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━",
+            f"{overall_e} <b>Genel Durum:</b> {result['summary']}",
+            "",
+            "📊 <b>Metrikler:</b>",
+        ]
+
+        # Metrik gösterim sırası
+        metric_labels = {
+            "mvrv_zscore":      ("MVRV Z-Score",      ""),
+            "nupl":             ("NUPL",               ""),
+            "sth_sopr":         ("STH-SOPR",           ""),
+            "exchange_netflow": ("Exchange Net Flow",  " BTC"),
+            "long_short_ratio": ("Long/Short Oranı",   "x"),
+            "nvt":              ("NVT Signal",         ""),
+            "active_addresses": ("Aktif Adres",        ""),
+            "funding_rate":     ("Funding Rate",       "%"),
+        }
+
+        for key, (label, unit) in metric_labels.items():
+            m = metrics.get(key)
+            if not m:
+                continue
+            val  = m["value"]
+            sig  = m["signal"]
+            note = m["note"]
+            emoji = sig_e.get(sig, "⚪")
+
+            # Değer formatı
+            if key == "active_addresses":
+                val_str = f"~{int(val/1000)}K"
+            elif key == "exchange_netflow":
+                val_str = f"{'+' if val>=0 else ''}{val:,.0f} BTC"
+            elif key == "funding_rate":
+                val_str = f"%{val:.4f}/8s"
+            elif isinstance(val, float):
+                val_str = f"{val:.2f}{unit}"
+            else:
+                val_str = f"{val}{unit}"
+
+            lines.append(f"  {emoji} <b>{label}:</b> {val_str}")
+            lines.append(f"      <i>{note}</i>")
+
+        lines.append("")
+        lines.append("<i>Kaynak: Alphractal API | Günlük veri</i>")
+
+        mesaj = "\n".join(lines)
+        for chunk in [mesaj[i:i+4000] for i in range(0, len(mesaj), 4000)]:
+            await update.message.reply_text(chunk, parse_mode=ParseMode.HTML)
+
+    except Exception as e:
+        logger.error("cmd_onchain hatası: %s", e)
+        await update.message.reply_text(f"❌ On-chain veri alınamadı: {e}")
+
+
 async def cmd_haber(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """
     Kategorize haber brifingı.
@@ -1362,6 +1470,49 @@ async def cmd_haber(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(chunk, parse_mode=ParseMode.HTML)
     else:
         await update.message.reply_text("📭 Portföy özel haber bulunamadı.")
+
+    # ── Portföydeki kripto varlıklar için on-chain özeti ──────────────────
+    try:
+        from core.database import SessionLocal
+        from core import crud
+        from data.onchain_client import get_crypto_onchain_data
+
+        with SessionLocal() as db:
+            summary = crud.get_portfolio_summary(db)
+
+        crypto_positions = [
+            p["symbol"] for p in summary["positions"]
+            if p["is_open"] and p.get("asset_class") == "crypto"
+        ]
+
+        if crypto_positions:
+            lines = ["⛓ <b>Kripto On-Chain Durumu</b>", "━" * 28, ""]
+            sig_e = {"green": "🟢", "amber": "🟡", "red": "🔴", "neutral": "⚪"}
+
+            for sym in crypto_positions[:3]:  # Max 3 kripto
+                clean = sym.replace("-USD", "").replace("USD", "")
+                data  = await loop.run_in_executor(None, get_crypto_onchain_data, clean)
+
+                if data.get("error") or not data["metrics"]:
+                    continue
+
+                overall_e = sig_e.get(data["overall_signal"], "⚪")
+                lines.append(f"{overall_e} <b>{clean}:</b> {data['summary']}")
+
+                # En kritik 2 metriği göster
+                for key in ["mvrv_zscore", "exchange_netflow"]:
+                    m = data["metrics"].get(key)
+                    if m:
+                        e = sig_e.get(m["signal"], "⚪")
+                        lines.append(f"  {e} {m['note']}")
+                lines.append("")
+
+            if len(lines) > 3:
+                mesaj = "\n".join(lines)
+                for chunk in [mesaj[i:i+4000] for i in range(0, len(mesaj), 4000)]:
+                    await update.message.reply_text(chunk, parse_mode=ParseMode.HTML)
+    except Exception as e:
+        logger.debug("On-chain brifing hatası: %s", e)
 
 
 async def cmd_tetikle(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
