@@ -177,10 +177,15 @@ def get_asset_news(symbol: str, asset_type: str) -> list[dict]:
         )
 
     elif asset_type == "TR_FUND":
+        # TEFAS fon kodlarının tam adlarını bulmak için daha geniş arama
         query = (
-            f"Türkiye yatırım fonu {symbol} hakkında son haberleri ara. "
-            f"TEFAS fon performansı, fon yöneticisi kararları, "
-            f"piyasa gelişmeleri. Son 7 günden 5 haber."
+            f"Türkiye TEFAS yatırım fonu {symbol} hakkında haberleri ara. "
+            f"'{symbol}' fon kodu ile işlem gören Türk yatırım fonu. "
+            f"BIST Borsa İstanbul fon piyasası, fon performansı, "
+            f"portföy yönetimi, Türkiye sermaye piyasaları. "
+            f"Son 30 günden ilgili 5 haber veya analiz bul. "
+            f"Eğer {symbol} fon koduna özel haber yoksa, "
+            f"genel Türkiye yatırım fonu ve TEFAS haberleri getir."
         )
 
     else:
