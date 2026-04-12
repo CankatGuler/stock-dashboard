@@ -22,7 +22,8 @@ from dotenv import load_dotenv
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-FMP_BASE  = "https://financialmodelingprep.com/api/v3"
+FMP_BASE_V3     = "https://financialmodelingprep.com/api/v3"
+FMP_BASE_STABLE = "https://financialmodelingprep.com/stable"
 _TIMEOUT  = 12
 _MAX_NEWS = 5
 
@@ -102,7 +103,7 @@ def _contains_any(text: str, keywords: list) -> bool:
     return any(kw.lower() in text_lower for kw in keywords)
 
 
-def _fmp_get(endpoint: str, params: dict = None) -> list:
+def _fmp_get(endpoint: str, params: dict = None, base: str = None) -> list:
     key = _fmp_key()
     if not key:
         print("[ERROR] FMP_API_KEY eksik — haber çekilemiyor")
@@ -111,7 +112,8 @@ def _fmp_get(endpoint: str, params: dict = None) -> list:
         p = {"apikey": key, "limit": 30}
         if params:
             p.update(params)
-        resp = requests.get(f"{FMP_BASE}/{endpoint}", params=p, timeout=_TIMEOUT)
+        base_url = base or FMP_BASE_STABLE
+        resp = requests.get(f"{base_url}/{endpoint}", params=p, timeout=_TIMEOUT)
         if resp.status_code == 429:
             print(f"[ERROR] FMP rate limit aşıldı")
             return []
@@ -129,15 +131,17 @@ def _fmp_get(endpoint: str, params: dict = None) -> list:
 
 
 def _fmp_to_news(raw_list: list) -> list:
-    """FMP ham verisini standart formata çevir."""
+    """FMP ham verisini standart formata çevir. v3 ve stable endpoint uyumlu."""
     result = []
     for item in raw_list:
         result.append({
             "title":   item.get("title", ""),
-            "summary": _clean_html(item.get("text", "") or item.get("summary", "")),
-            "url":     item.get("url", ""),
-            "date":    item.get("publishedDate", ""),
-            "source":  item.get("site", "FMP"),
+            "summary": _clean_html(
+                item.get("text", "") or item.get("snippet", "") or item.get("summary", "")
+            ),
+            "url":     item.get("url", "") or item.get("link", ""),
+            "date":    item.get("publishedDate", "") or item.get("date", "") or item.get("publishedAt", ""),
+            "source":  item.get("site", "") or item.get("publisher", {}).get("name", "FMP"),
         })
     return result
 
@@ -200,7 +204,9 @@ def get_true_macro_news() -> list:
 def get_us_economy_news() -> list:
     """ISM, PMI, NFP, CPI, Fed, faiz kararı haberleri."""
     try:
-        raw      = _fmp_get("stock_market_news")
+        raw = _fmp_get("news/general-latest", {"page": 0, "limit": 30})
+        if not raw:
+            raw = _fmp_get("stock_market_news", {"limit": 30}, base=FMP_BASE_V3)
         news     = _fmp_to_news(raw)
         filtered = _apply_filters(news, required_keywords=US_ECONOMY_KEYWORDS)
         print(f"[INFO] ABD ekonomi: {len(filtered)} haber (ham: {len(news)})")
@@ -246,13 +252,17 @@ def get_asset_news(symbol: str, asset_type: str) -> list:
 
     try:
         if asset_type == "US_STOCK":
-            raw  = _fmp_get("stock_news", {"tickers": symbol.upper(), "limit": 20})
+            raw  = _fmp_get("news/stock-latest", {"tickers": symbol.upper(), "limit": 20})
+            if not raw:
+                raw = _fmp_get("stock_news", {"tickers": symbol.upper(), "limit": 20}, base=FMP_BASE_V3)
             news = _fmp_to_news(raw)
             print(f"[INFO] {symbol} US_STOCK ham: {len(raw)}")
 
         elif asset_type == "CRYPTO":
             clean = symbol.upper().replace("-USD", "").replace("USD", "")
-            raw   = _fmp_get("crypto_news", {"symbol": f"{clean}USD", "limit": 20})
+            raw   = _fmp_get("news/crypto-latest", {"symbol": f"{clean}USD", "limit": 20})
+            if not raw:
+                raw = _fmp_get("crypto_news", {"symbol": f"{clean}USD", "limit": 20}, base=FMP_BASE_V3)
             if not raw:
                 # Fallback: genel haberlerden filtrele
                 all_raw = _fmp_get("stock_market_news")
