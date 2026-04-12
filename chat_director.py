@@ -382,15 +382,46 @@ def _build_memory_context() -> str:
         return ""
 
 
-def ask_director(user_message: str) -> str:
+def _get_recent_news_context() -> str:
+    """Son haberleri ve on-chain verileri direktöre bağlam olarak hazırla."""
+    ctx_parts = []
+    try:
+        from core.database import SessionLocal
+        from core import crud
+        with SessionLocal() as db:
+            summary = crud.get_portfolio_summary(db)
+        crypto_pos = [p for p in summary["positions"]
+                      if p["is_open"] and p.get("asset_class") == "crypto"]
+        if crypto_pos:
+            from data.onchain_client import get_crypto_onchain_data
+            btc_data = get_crypto_onchain_data("BTC")
+            if btc_data.get("metrics"):
+                m = btc_data["metrics"]
+                lines = ["ON-CHAIN DURUMU (BTC):"]
+                for key, label in [("mvrv_zscore","MVRV Z-Score"),("nupl","NUPL"),("sth_sopr","STH-SOPR")]:
+                    if key in m:
+                        lines.append(f"  {label}: {m[key]['value']} — {m[key]['note']}")
+                lines.append(f"  Genel: {btc_data['summary']}")
+                ctx_parts.append("\n".join(lines))
+    except Exception as e:
+        logger.debug("On-chain baglam: %s", e)
+    try:
+        from data.news_client import get_global_macro_news
+        news = get_global_macro_news()
+        if news:
+            lines = ["GÜNCEL MAKRO HABERLER (son 3):"]
+            for n in news[:3]:
+                lines.append(f"  • {n.get('title','')[:100]} [{n.get('source','')}]")
+            ctx_parts.append("\n".join(lines))
+    except Exception as e:
+        logger.debug("Haber baglam: %s", e)
+    return "\n\n".join(ctx_parts) if ctx_parts else ""
+
+
+def ask_director(user_message: str, deep_analysis: bool = False) -> str:
     """
     Kullanıcının mesajına direktörden yanıt al.
-
-    Bu fonksiyon şunları yapar:
-      1. Konuşma geçmişini yükler (bağlam sürekliliği)
-      2. Portföy ve hafıza bağlamını hazırlar
-      3. Claude API'ye gönderir
-      4. Yanıtı kaydeder ve döndürür
+    deep_analysis=True: /sor komutuyla tetiklenir, XML düşünce odaları kullanır.
     """
     import anthropic
 
@@ -398,83 +429,117 @@ def ask_director(user_message: str) -> str:
     if not api_key:
         return "❌ API anahtarı eksik."
 
-    # USD/TRY kurunu çek
     try:
         from strategy_data import fetch_usd_try_rate
         usd_try = fetch_usd_try_rate()
     except Exception:
-        usd_try = 44.0  # Fallback
+        usd_try = 44.0
 
-    # Bağlamları hazırla
-    portfolio_ctx = _build_portfolio_context(usd_try)
-    memory_ctx    = _build_memory_context()
-    tr_time       = (datetime.now(timezone.utc) +
-                     timedelta(hours=3)).strftime("%d %B %Y, %H:%M")
-
-    # Mesajda geçen ticker'lar için anlık fiyat çek
+    portfolio_ctx    = _build_portfolio_context(usd_try)
+    memory_ctx       = _build_memory_context()
+    tr_time          = (datetime.now(timezone.utc) + timedelta(hours=3)).strftime("%d %B %Y, %H:%M")
     detected_tickers = _extract_tickers_from_message(user_message)
     live_price_ctx   = _fetch_live_prices(detected_tickers)
 
-    # ── Sistem Promptu ──────────────────────────────────────────────────────
-    system_prompt = f"""Sen deneyimli bir portföy strateji direktörüsün. \
-Kullanıcının (Cankat) kişisel yatırım direktörüsün.
+    news_onchain_ctx = ""
+    if deep_analysis:
+        try:
+            news_onchain_ctx = _get_recent_news_context()
+        except Exception as e:
+            logger.debug("Derin analiz baglam: %s", e)
 
-GÖREV: Sorularını portföy bağlamında, dürüst ve somut biçimde yanıtla. \
-Gereksiz laf kalabalığı yapma. "Araştırın" veya "uzmana danışın" gibi \
-sorumluluktan kaçan yanıtlar verme — sen zaten o uzmanısın.
+    if deep_analysis:
+        system_prompt = f"""Sen bir Strateji Mentörüsün — yatırım botu değil.
+Cankat'ın kişisel baş yatırım direktörü ve risk yönetimi danışmanısın.
 
 {portfolio_ctx}
 
 {memory_ctx}
 {live_price_ctx}
 
-TARİH/SAAT: {tr_time} (Türkiye)
-USD/TRY: {usd_try:.2f}
+{news_onchain_ctx}
 
-KURALLAR:
-- Türkçe yanıt ver.
-- Somut ol: "IREN'i %20 azalt" gibi, "riski değerlendirin" gibi değil.
-- Geçmiş konuşmaya atıfta bulunabilirsin — sohbet geçmişi sende var.
-- Kullanıcı makale veya haber paylaşırsa, portföye etkisini analiz et.
-- Emin olmadığın konularda bunu açıkça söyle.
-- Fiyat sorulan hisseler için yukarıdaki "ANLIK FİYAT VERİSİ" bölümünü kullan.
-- Yanıtını Telegram'da okunabilir şekilde formatla (HTML değil, düz metin tercih et, \
-  ama <b>bold</b> ve <i>italic</i> için HTML kullanabilirsin).
+TARİH/SAAT: {tr_time} | USD/TRY: {usd_try:.2f}
+
+─── DÜŞÜNCE ODALARI SİSTEMİ ───────────────────────────────────────────────
+Her soruyu şu XML etiketleriyle adım adım analiz et:
+
+<makro_analiz>
+Küresel atmosfere bak: DXY, VIX, tahvil faizleri, jeopolitik riskler.
+Güncel haberler piyasayı destekliyor mu, sabote mi ediyor?
+"Veriler X diyor ama haberler Y riski taşıyor" formatında yaz.
+</makro_analiz>
+
+<mikro_analiz>
+İlgili varlığın temel verilerini değerlendir.
+Hisse ise: F/K, büyüme, insider. Kripto ise: MVRV, SOPR, on-chain.
+Emtia/fon ise: Sektör dinamikleri, talep/arz dengesi.
+</mikro_analiz>
+
+<uyumsuzluk_analizi>
+KRİTİK ADIM: Veriler ile haberler/makro arasında ÇATIŞMA var mı?
+ÖRNEK: "On-chain MVRV dip bölgesinde (alım sinyali) AMA DXY güçleniyor
+ve jeopolitik gerilim tırmanıyor (risk-off) → Koruma moduna geç."
+Çatışma varsa: korumacı öner. Uyum varsa: sinyali güçlü say.
+</uyumsuzluk_analizi>
+
+<risk_degerlendirmesi>
+Portföydeki mevcut durumu kontrol et:
+Nakit oranı yeterli mi? Konsantrasyon riski var mı?
+</risk_degerlendirmesi>
+
+<nihai_muhakeme>
+"Evet ama..." veya "Hayır çünkü..." formatında konuş.
+Asla sadece "Al" veya "Sat" deme. Mantık zincirini göster.
+</nihai_muhakeme>
+
+─── ÜSLUP ──────────────────────────────────────────────────────────────────
+- Türkçe, temkinli, çok yönlü mentor üslubu.
+- Balık vermek yerine balık tutmayı öğret.
+- Telegram formatı: başlıklar için <b>bold</b>.
+- 400-600 kelime arası yanıt.
+"""
+    else:
+        system_prompt = f"""Sen deneyimli bir portföy strateji direktörüsün.
+Cankat'ın kişisel yatırım direktörüsün.
+
+{portfolio_ctx}
+{memory_ctx}
+{live_price_ctx}
+
+TARİH/SAAT: {tr_time} | USD/TRY: {usd_try:.2f}
+
+KURALLAR: Türkçe, somut, sorumluluktan kaçma. Geçmiş konuşmaya atıfta bulunabilirsin.
+Telegram formatı için <b>bold</b> ve <i>italic</i> kullanabilirsin.
 """
 
-    # Konuşma geçmişini yükle
     history = _load_history()
-
-    # Mevcut mesajı geçmişe ekle
     history.append({"role": "user", "content": user_message})
 
-    # Claude'a gönder — 529 overloaded için 3 deneme
-    client = anthropic.Anthropic(api_key=api_key)
+    client     = anthropic.Anthropic(api_key=api_key)
     last_error = None
+    max_tokens = 2500 if deep_analysis else 1500
 
     for attempt in range(3):
         try:
             response = client.messages.create(
                 model="claude-sonnet-4-6",
-                max_tokens=1500,
+                max_tokens=max_tokens,
                 system=system_prompt,
                 messages=history[-MAX_HISTORY_TURNS * 2:],
             )
             answer = response.content[0].text.strip()
-
             history.append({"role": "assistant", "content": answer})
             _save_history(history)
-            logger.info("Direktör yanıtladı (%d karakter).", len(answer))
+            logger.info("Direktör yanıtladı (%d karakter, derin=%s).", len(answer), deep_analysis)
             return answer
 
         except anthropic.APIError as e:
             last_error = e
-            error_str = str(e)
-            # 529 overloaded — kısa bekle ve tekrar dene
-            if "529" in error_str or "overloaded" in error_str.lower():
+            if "529" in str(e) or "overloaded" in str(e).lower():
                 if attempt < 2:
-                    wait = (attempt + 1) * 3  # 3s, 6s
-                    logger.warning("Claude API aşırı yüklü, %ds sonra tekrar deneniyor (deneme %d/3)...", wait, attempt + 1)
+                    wait = (attempt + 1) * 3
+                    logger.warning("Claude API yüklü, %ds bekleniyor...", wait)
                     import time as _time
                     _time.sleep(wait)
                     continue
@@ -485,7 +550,6 @@ KURALLAR:
             logger.error("Beklenmeyen hata: %s", e)
             break
 
-    # Tüm denemeler başarısız
     if last_error and ("529" in str(last_error) or "overloaded" in str(last_error).lower()):
         return "⚠️ Claude API şu an yoğun. 1-2 dakika sonra tekrar dene."
     return f"⚠️ Direktör yanıt veremedi: {last_error}"

@@ -64,6 +64,7 @@ async def start_bot():
     _application.add_handler(CommandHandler("fon",      cmd_fon))
     _application.add_handler(CommandHandler("haber",    cmd_haber))
     _application.add_handler(CommandHandler("onchain",  cmd_onchain))
+    _application.add_handler(CommandHandler("sor",      cmd_sor))
     _application.add_handler(CommandHandler("tarama",   cmd_tarama))
     _application.add_handler(CommandHandler("durum",    cmd_durum))
     _application.add_handler(CommandHandler("onayla",   cmd_onayla))
@@ -190,6 +191,7 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "/hisse AAPL — FMP ile temel analiz + F/K + direktör yorumu\n"
         "/fon IIH — TEFAS fon güncel fiyatı\n"
         "/onchain BTC — On-chain metrikler (MVRV, SOPR, Net Flow)\n"
+        "/sor BTC almalı mıyım? — Derin strateji analizi (makro+mikro+risk)\n"
         "/haber — Portföy + makro haber brifingı\n"
         "/haber AAPL — Tek hisse haberleri\n"
         "/tarama — Portföy sağlık taraması\n\n"
@@ -1207,6 +1209,56 @@ async def cmd_fon(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         await update.message.reply_text(f"❌ {fon_kodu} fiyatı alınamadı: {e}")
+
+
+async def cmd_sor(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """
+    Derin strateji analizi — XML düşünce odaları sistemi.
+    Makro + mikro + uyumsuzluk + risk değerlendirmesi yapar.
+
+    Kullanım: /sor <soru>
+    Örnek: /sor BTC almalı mıyım?
+    Örnek: /sor PLTR portföyde fazla mı ağır?
+    Örnek: /sor Bugün piyasa nasıl görünüyor?
+    """
+    args = ctx.args
+    if not args:
+        await update.message.reply_text(
+            "📝 <b>Kullanım:</b>\n"
+            "/sor <b>sorun</b>\n\n"
+            "<b>Örnekler:</b>\n"
+            "/sor BTC almalı mıyım?\n"
+            "/sor PLTR portföyde fazla mı ağır?\n"
+            "/sor Bugün piyasa nasıl görünüyor?\n\n"
+            "<i>Direktör makro, mikro ve uyumsuzluk analizini birlikte yaparak "
+            "sana mantık zincirini gösterir. Normal mesajdan daha derin ve "
+            "kapsamlı bir analiz sunar (~30-60 saniye sürebilir).</i>",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    soru = " ".join(args)
+    await update.message.reply_text(
+        f"🔍 <b>Derin analiz başlatılıyor...</b>\n"
+        f"<i>Soru: {soru[:100]}</i>\n\n"
+        f"<i>Makro + mikro + uyumsuzluk + risk değerlendirmesi yapılıyor. "
+        f"30-60 saniye sürebilir...</i>",
+        parse_mode=ParseMode.HTML,
+    )
+
+    try:
+        from chat_director import ask_director
+        loop     = asyncio.get_running_loop()
+        response = await loop.run_in_executor(
+            None,
+            lambda: ask_director(soru, deep_analysis=True)
+        )
+        for chunk in [response[i:i+4000] for i in range(0, len(response), 4000)]:
+            await update.message.reply_text(chunk, parse_mode=ParseMode.HTML)
+
+    except Exception as e:
+        logger.error("cmd_sor hatası: %s", e)
+        await update.message.reply_text(f"❌ Analiz yapılamadı: {e}")
 
 
 async def cmd_onchain(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
