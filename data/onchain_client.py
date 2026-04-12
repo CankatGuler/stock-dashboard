@@ -373,10 +373,24 @@ def get_crypto_onchain_data(symbol: str) -> dict:
         }
         signals.append(sig)
 
-    # ── Genel sinyal: sadece dolu metriklerin sinyallerini say ───────────────
+    # ── Genel sinyal: ağırlıklı çoğunluk ────────────────────────────────────
     if signals:
-        priority       = {"red": 0, "amber": 1, "neutral": 2, "green": 3}
-        overall        = min(signals, key=lambda s: priority.get(s, 2))
+        counts   = {"green": signals.count("green"), "amber": signals.count("amber"),
+                    "red": signals.count("red"), "neutral": signals.count("neutral")}
+        total    = len(signals)
+        red_pct  = counts["red"]   / total
+        grn_pct  = counts["green"] / total
+
+        if red_pct >= 0.5:
+            overall = "red"       # Çoğunluk kırmızı → dikkatli
+        elif red_pct >= 0.34:
+            overall = "amber"     # 1/3'ten fazla kırmızı → temkinli
+        elif grn_pct >= 0.5:
+            overall = "green"     # Çoğunluk yeşil → olumlu
+        elif counts["amber"] > counts["green"]:
+            overall = "amber"
+        else:
+            overall = "neutral"
         result["overall_signal"] = overall
 
     # ── Özet metin ────────────────────────────────────────────────────────────
