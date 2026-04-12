@@ -217,7 +217,7 @@ async def cmd_portfoy(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         from core.database import SessionLocal
         from core import crud
         import yfinance as yf
-        from data.strategy_data import fetch_usd_try_rate
+        from strategy_data import fetch_usd_try_rate
 
         usd_try = fetch_usd_try_rate()
 
@@ -347,7 +347,7 @@ async def cmd_portfoy_ekle(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
         await update.message.reply_text(f"⏳ {ticker} ekleniyor...")
 
-        from data.strategy_data import fetch_usd_try_rate
+        from strategy_data import fetch_usd_try_rate
         from core.database import SessionLocal
         from core import crud
 
@@ -464,7 +464,7 @@ async def cmd_portfoy_sil(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             return
 
         # Kar/Zarar hesapla
-        from data.strategy_data import fetch_usd_try_rate
+        from strategy_data import fetch_usd_try_rate
         usd_try  = fetch_usd_try_rate()
 
         maliyet_toplam  = adet * avg_cost
@@ -477,7 +477,7 @@ async def cmd_portfoy_sil(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         kar_sign  = "+" if kar_zarar >= 0 else ""
 
         # Supabase'e satış yaz
-        from data.strategy_data import fetch_usd_try_rate
+        from strategy_data import fetch_usd_try_rate
         usd_try = fetch_usd_try_rate()
 
         def _full_sell():
@@ -551,7 +551,7 @@ async def cmd_portfoy_guncelle(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         # Guncelleme: mevcut pozisyonu sil, yeni fiyatla tekrar ekle
         from core.database import SessionLocal
         from core import crud
-        from data.strategy_data import fetch_usd_try_rate
+        from strategy_data import fetch_usd_try_rate
 
         usd_try = fetch_usd_try_rate()
 
@@ -600,7 +600,7 @@ async def cmd_portfoy_detay(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     try:
         from core.database import SessionLocal
         from core import crud
-        from data.strategy_data import fetch_usd_try_rate
+        from strategy_data import fetch_usd_try_rate
         import yfinance as yf
 
         usd_try = fetch_usd_try_rate()
@@ -828,7 +828,7 @@ async def cmd_portfoy_azalt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        from data.strategy_data import fetch_usd_try_rate
+        from strategy_data import fetch_usd_try_rate
         from core.database import SessionLocal
         from core import crud
 
@@ -1060,7 +1060,7 @@ async def cmd_hisse(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     try:
         from data.fmp_client import get_full_analysis
         from chat_director import _build_portfolio_context, ask_director
-        from data.strategy_data import fetch_usd_try_rate
+        from strategy_data import fetch_usd_try_rate
 
         loop   = asyncio.get_running_loop()
         data   = await loop.run_in_executor(None, get_full_analysis, ticker)
@@ -1251,7 +1251,7 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 _build_portfolio_context, _build_memory_context,
                 _load_history, _save_history, MAX_HISTORY_TURNS
             )
-            from data.strategy_data import fetch_usd_try_rate
+            from strategy_data import fetch_usd_try_rate
 
             # Görseli indir
             if message.photo:
