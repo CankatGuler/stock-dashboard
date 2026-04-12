@@ -1253,6 +1253,24 @@ async def cmd_sor(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             None,
             lambda: ask_director(soru, deep_analysis=True)
         )
+
+        # XML düşünce etiketlerini Telegram için temiz başlıklara dönüştür
+        import re
+        tag_map = {
+            "makro_analiz":        "🌍 <b>Makro Analiz</b>",
+            "mikro_analiz":        "🔬 <b>Mikro Analiz</b>",
+            "uyumsuzluk_analizi":  "⚡ <b>Uyumsuzluk Analizi</b>",
+            "risk_degerlendirmesi":"🛡️ <b>Risk Değerlendirmesi</b>",
+            "nihai_muhakeme":      "🎯 <b>Nihai Muhakeme</b>",
+        }
+        for tag, header in tag_map.items():
+            response = re.sub(rf"<{tag}>\s*", f"\n\n{header}\n", response)
+            response = re.sub(rf"\s*</{tag}>", "", response)
+
+        # Kalan bilinmeyen XML etiketlerini temizle
+        response = re.sub(r"<(?!b>|/b>|i>|/i>|b |i )[^>]+>", "", response)
+        response = response.strip()
+
         for chunk in [response[i:i+4000] for i in range(0, len(response), 4000)]:
             await update.message.reply_text(chunk, parse_mode=ParseMode.HTML)
 
