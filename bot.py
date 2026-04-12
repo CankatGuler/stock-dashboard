@@ -536,45 +536,51 @@ async def cmd_portfoy_sil(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def cmd_portfoy_guncelle(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """
-    Mevcut pozisyonu güncelle (adet ve maliyet).
-    Kullanım: /guncelle <TICKER> <YENİ_ADET> <YENİ_MALİYET>
-    Örnek: /guncelle AVGO 3 1350
+    Mevcut pozisyonu güncelle (adet ve BİRİM maliyet).
+    Kullanım: /guncelle <TICKER> <YENİ_ADET> <BİRİM_MALİYET>
+    Örnek: /guncelle AVGO 2.767 335
+    → 2.767 adet × $335 birim maliyet = $927 toplam yatırılan
     """
     args = ctx.args
     if not args or len(args) < 3:
         await update.message.reply_text(
-            "Kullanım: /guncelle TICKER YENİ_ADET YENİ_MALİYET\n"
-            "Örnek: /guncelle AVGO 3 1350"
+            "📝 <b>Kullanım:</b>\n"
+            "/guncelle TICKER YENİ_ADET BİRİM_MALİYET\n\n"
+            "<b>Örnek:</b>\n"
+            "/guncelle AVGO 2.767 335\n"
+            "→ 2.767 adet × $335 birim maliyet = $927 toplam\n\n"
+            "<i>Not: Maliyet = birim başına ödediğin fiyat (toplam değil)</i>",
+            parse_mode=ParseMode.HTML,
         )
         return
 
     try:
         ticker   = args[0].upper()
-        shares   = float(args[1])
-        avg_cost = float(args[2])
+        shares   = float(args[1].replace(",", "."))
+        avg_cost = float(args[2].replace(",", "."))  # BİRİM maliyet
+        total    = shares * avg_cost
 
         await update.message.reply_text(f"⏳ {ticker} güncelleniyor...")
 
-        # Guncelleme: mevcut pozisyonu sil, yeni fiyatla tekrar ekle
         from core.database import SessionLocal
         from core import crud
-        from strategy_data import fetch_usd_try_rate
-
-        usd_try = fetch_usd_try_rate()
 
         def _update():
             with SessionLocal() as db:
-                pos = db.query(crud.Portfolio if False else __import__("core.models", fromlist=["Portfolio"]).Portfolio).filter_by(asset_symbol=ticker).first()
-                if pos:
-                    pos.total_quantity   = shares
-                    pos.average_cost     = avg_cost
-                    pos.average_cost_usd = avg_cost  # USD varsayım
-                    from datetime import datetime, timezone
-                    pos.last_updated = datetime.now(timezone.utc)
-                    db.commit()
+                pos = db.query(
+                    __import__("core.models", fromlist=["Portfolio"]).Portfolio
+                ).filter_by(asset_symbol=ticker).first()
+                if not pos:
+                    raise ValueError(f"{ticker} portföyde bulunamadı.")
+                pos.total_quantity   = shares
+                pos.average_cost     = avg_cost
+                pos.average_cost_usd = avg_cost
+                from datetime import datetime, timezone
+                pos.last_updated = datetime.now(timezone.utc)
+                db.commit()
                 crud.log_event(
                     db=db, source="TELEGRAM_BOT", event_type="PORTFOLIO_UPDATE",
-                    message=f"GÜNCELLEME: {ticker} → {shares:g} adet @ {avg_cost}",
+                    message=f"GÜNCELLEME: {ticker} → {shares:g} adet @ ${avg_cost:.4f} birim",
                     severity="INFO", asset_symbol=ticker,
                 )
 
@@ -582,16 +588,17 @@ async def cmd_portfoy_guncelle(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await loop.run_in_executor(None, _update)
 
         await update.message.reply_text(
-            f"✅ <b>{ticker}</b> güncellendi\n"
-            f"  Yeni adet: {shares:,g}\n"
-            f"  Yeni maliyet: {avg_cost:,.4f}",
+            f"✅ <b>{ticker}</b> güncellendi\n\n"
+            f"  Miktar: {shares:,g} adet\n"
+            f"  Ort. Birim Maliyet: ${avg_cost:,.4f}\n"
+            f"  Toplam Yatırılan: ${total:,.2f}",
             parse_mode=ParseMode.HTML,
         )
-    except ValueError:
-        await update.message.reply_text("❌ Sayı formatı hatalı.")
+
+    except ValueError as e:
+        await update.message.reply_text(f"❌ {e}")
     except Exception as e:
         await update.message.reply_text(f"❌ Hata: {e}")
-
 
 async def cmd_portfoy_detay(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """

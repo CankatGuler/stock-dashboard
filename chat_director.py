@@ -231,36 +231,42 @@ def _build_portfolio_context(usd_try: float) -> str:
                 cost_usd = shr * avg / usd_try if cur == "TRY" else shr * avg
 
                 # Anlık fiyat
-                live_usd = cost_usd  # fallback
+                # Anlık birim fiyat
+                live_price_usd = avg  # fallback: maliyet birim fiyatı
                 try:
                     if tk in ("ALTIN_GRAM_TRY", "XAUTRY=X") and gold_usd > 0:
-                        live_tl  = gold_usd * usd_try / 31.1035
-                        live_usd = shr * live_tl / usd_try
+                        live_tl        = gold_usd * usd_try / 31.1035
+                        live_price_usd = live_tl / usd_try
                     elif ac == "tefas":
                         from data.turkey_fetcher import fetch_tefas_fund
                         fd = fetch_tefas_fund(tk)
                         if fd and fd.get("price", 0) > 0:
-                            live_usd = shr * float(fd["price"]) / usd_try
+                            live_price_usd = float(fd["price"]) / usd_try
                     else:
                         h = yf.Ticker(tk).history(period="2d")
                         if not h.empty:
                             lp = float(h["Close"].iloc[-1])
-                            live_usd = shr * lp / usd_try if cur == "TRY" else shr * lp
+                            live_price_usd = lp / usd_try if cur == "TRY" else lp
                 except Exception:
                     pass
 
-                pnl     = live_usd - cost_usd
-                pnl_pct = pnl / cost_usd * 100 if cost_usd > 0 else 0
-                sign    = "+" if pnl >= 0 else ""
+                live_usd = shr * live_price_usd
+                pnl      = live_usd - cost_usd
+                pnl_pct  = pnl / cost_usd * 100 if cost_usd > 0 else 0
+                sign     = "+" if pnl >= 0 else ""
 
                 total_cur  += live_usd
                 total_cost += cost_usd
 
+                # Açık ve kesin format — direktör birim/toplam karıştırmasın
                 lines.append(
-                    f"  {tk}: {shr:,g} adet | "
-                    f"maliyet ${cost_usd:,.0f} | "
-                    f"güncel ${live_usd:,.0f} | "
-                    f"K/Z {sign}${pnl:,.0f} ({sign}{pnl_pct:.1f}%)"
+                    f"  {tk}: "
+                    f"Miktar: {shr:,g} adet | "
+                    f"Ort. Birim Maliyet: ${avg:,.2f} | "
+                    f"Toplam Yatırılan: ${cost_usd:,.0f} | "
+                    f"Anlık Birim Fiyat: ${live_price_usd:,.2f} | "
+                    f"Toplam Güncel Değer: ${live_usd:,.0f} | "
+                    f"K/Z: {sign}${pnl:,.0f} ({sign}{pnl_pct:.1f}%)"
                 )
 
         # Genel toplam
