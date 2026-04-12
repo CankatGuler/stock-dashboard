@@ -327,17 +327,17 @@ def get_crypto_onchain_data(symbol: str) -> dict:
         }
         signals.append(sig)
 
-    # NVT
+    # NVT Signal (NVTAdj90) — 90 günlük hareketli ortalama bazlı
     nvt = get_nvt(asset)
     if nvt is not None:
-        if nvt >= 65:
-            sig, note = "red",     "Yüksek — Fiyat on-chain aktivitesinden kopuk"
-        elif nvt >= 45:
-            sig, note = "amber",   "Orta-yüksek — İzle"
-        elif nvt <= 20:
-            sig, note = "green",   "Düşük — Ağ yoğun kullanılıyor"
+        if nvt >= 150:
+            sig, note = "red",     "Aşırı yüksek — Fiyat on-chain aktivitesinden kopuk, balon riski"
+        elif nvt >= 100:
+            sig, note = "amber",   "Yüksek — Dikkat, spekülasyon arttı"
+        elif nvt >= 50:
+            sig, note = "neutral", "Normal aralık — Sağlıklı"
         else:
-            sig, note = "neutral", "Normal aralık"
+            sig, note = "green",   "Düşük — Ağ yoğun kullanılıyor, fiyat destekli"
         result["metrics"]["nvt"] = {"value": round(nvt, 1), "signal": sig, "note": note}
         signals.append(sig)
 
