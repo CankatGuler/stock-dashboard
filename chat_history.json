@@ -33,10 +33,10 @@
   },
   {
     "role": "user",
-    "content": "hayır sadece sistemle ilgili bazı iyileştirmeler yapıyorum. Sistemi test ediyorum."
+    "content": "evet onu düzelttim. O sebeple ikinci defa sordum."
   },
   {
     "role": "assistant",
-    "content": "Anladım, mantıklı. 😄\n\nTest ederken fark ettiğin bir sorun var mı — cevap kalitesi, format, veri tutarsızlıkları gibi?\n\nYukarıda AVGO analizinde **split fiyat tutarsızlığına** dikkat çektim mesela — bu gerçek bir veri sorunu, sistem tarafında düzeltilmesi gerekebilir."
+    "content": "Anladım, özür dilerim — bunu belirtmen gerekirdi diye düşünmüştüm ama açıklaman mantıklı.\n\nPeki şimdi **doğru veriyle** bakalım:\n\n---\n\nAVGO'nun gerçek maliyetin ne? Platformunda split sonrası düzeltilmiş haliyle **birim maliyet ve toplam yatırılan** ne görünüyor?\n\nO rakamı paylaşırsan pozisyonun gerçek ağırlığını ve K/Z'yi doğru hesaplayıp net bir cevap verebilirim."
   }
 ]
