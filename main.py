@@ -649,6 +649,53 @@ async def test_database():
         return {"status": "error", "message": str(e)}
 
 
+@app.get("/api/fix-tefas-costs")
+async def fix_tefas_costs():
+    """
+    TEK SEFERLIK: TEFAS fonlarının average_cost_usd değerlerini düzelt.
+    TL olarak kaydedilmiş değerleri USD'ye çevirir.
+    Çalıştırdıktan sonra bu endpoint'i main.py'den kaldır.
+    """
+    try:
+        from core.database import SessionLocal
+        from core.models import Portfolio
+        from strategy_data import fetch_usd_try_rate
+
+        usd_try = fetch_usd_try_rate()
+        results = []
+
+        with SessionLocal() as db:
+            tefas = db.query(Portfolio).filter_by(asset_class="tefas").all()
+            if not tefas:
+                return {"status": "ok", "message": "TEFAS pozisyonu bulunamadı", "fixed": []}
+
+            for pos in tefas:
+                eski_usd = pos.average_cost_usd
+                yeni_usd = pos.average_cost / usd_try  # TL → USD
+
+                results.append({
+                    "symbol":        pos.asset_symbol,
+                    "average_cost_tl":      round(pos.average_cost, 4),
+                    "average_cost_usd_eski": round(eski_usd, 4),
+                    "average_cost_usd_yeni": round(yeni_usd, 4),
+                    "miktar":        pos.total_quantity,
+                })
+
+                pos.average_cost_usd = yeni_usd
+
+            db.commit()
+
+        return {
+            "status":   "ok",
+            "usd_try":  usd_try,
+            "fixed":    results,
+            "message":  f"{len(results)} TEFAS pozisyonu düzeltildi.",
+        }
+
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
 @app.get("/api/alphractal-test")
 async def test_alphractal():
     """Alphractal API bağlantı testi."""
