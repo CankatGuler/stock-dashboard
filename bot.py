@@ -448,7 +448,7 @@ async def cmd_portfoy_sil(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             return
 
         adet     = float(mevcut["quantity"])
-        avg_cost = float(mevcut["average_cost_usd"])
+        avg_cost = float(mevcut["average_cost_usd"])  # USD birim maliyet
         currency = mevcut["currency"]
 
         # Satış fiyatı belirtilmediyse anlık fiyat çek
@@ -470,64 +470,91 @@ async def cmd_portfoy_sil(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # Kar/Zarar hesapla
-        from strategy_data import fetch_usd_try_rate
-        usd_try  = fetch_usd_try_rate()
-
-        maliyet_toplam  = adet * avg_cost
-        satis_toplam    = adet * satis_fiyat
-        kar_zarar       = satis_toplam - maliyet_toplam
-        kar_zarar_pct   = (kar_zarar / maliyet_toplam * 100) if maliyet_toplam > 0 else 0
-        kar_zarar_tl    = kar_zarar * usd_try
-
-        kar_emoji = "🟢" if kar_zarar >= 0 else "🔴"
-        kar_sign  = "+" if kar_zarar >= 0 else ""
-
-        # Supabase'e satış yaz
         from strategy_data import fetch_usd_try_rate
         usd_try = fetch_usd_try_rate()
 
+        # TRY varlıklar için fiyatları normalize et
+        if currency == "TRY":
+            satis_fiyat_try = satis_fiyat          # kullanıcı TRY girdi
+            satis_fiyat_usd = satis_fiyat / usd_try
+            avg_cost_try    = avg_cost * usd_try    # gösterim için
+        else:
+            satis_fiyat_try = satis_fiyat * usd_try
+            satis_fiyat_usd = satis_fiyat
+            avg_cost_try    = avg_cost * usd_try
+
+        # Kar/Zarar — TRY varlıklar için TRY bazında hesapla
+        if currency == "TRY":
+            maliyet_toplam_try = adet * avg_cost_try
+            satis_toplam_try   = adet * satis_fiyat_try
+            kar_zarar_try      = satis_toplam_try - maliyet_toplam_try
+            kar_zarar_usd      = kar_zarar_try / usd_try
+            kar_zarar_pct      = kar_zarar_try / maliyet_toplam_try * 100 if maliyet_toplam_try > 0 else 0
+        else:
+            maliyet_toplam_usd = adet * avg_cost
+            satis_toplam_usd   = adet * satis_fiyat_usd
+            kar_zarar_usd      = satis_toplam_usd - maliyet_toplam_usd
+            kar_zarar_try      = kar_zarar_usd * usd_try
+            kar_zarar_pct      = kar_zarar_usd / maliyet_toplam_usd * 100 if maliyet_toplam_usd > 0 else 0
+
+        kar_emoji = "🟢" if kar_zarar_usd >= 0 else "🔴"
+        kar_sign  = "+" if kar_zarar_usd >= 0 else ""
+
+        # Supabase'e satış yaz — her zaman USD normalize edilmiş fiyatla
         def _full_sell():
             with SessionLocal() as db:
                 txn, pnl = crud.sell_asset(
                     db           = db,
                     symbol       = ticker,
                     quantity     = adet,
-                    price        = satis_fiyat,
-                    currency     = currency,
-                    usd_try_rate = usd_try if currency == "TRY" else 1.0,
+                    price        = satis_fiyat_usd,
+                    currency     = "USD",
+                    usd_try_rate = 1.0,
                 )
+                para_birimi = "TRY" if currency == "TRY" else "USD"
+                gosterim_fiyat = satis_fiyat_try if currency == "TRY" else satis_fiyat_usd
                 crud.log_event(
                     db           = db,
                     source       = "TELEGRAM_BOT",
                     event_type   = "PORTFOLIO_SELL",
-                    message      = f"TAM SATIŞ: {adet:g}x {ticker} @ {satis_fiyat} | P&L: {pnl:+.2f} USD",
+                    message      = (
+                        f"TAM SATIŞ: {adet:g}x {ticker} @ "
+                        f"{'₺' if currency == 'TRY' else '$'}{gosterim_fiyat:,.4f} | "
+                        f"P&L: {kar_zarar_try:+,.2f} TL / {kar_zarar_usd:+,.2f} USD"
+                    ),
                     severity     = "INFO",
                     asset_symbol = ticker,
-                    metric_value = pnl,
+                    metric_value = kar_zarar_usd,
                 )
                 return pnl
 
-        realized_pnl = await loop.run_in_executor(None, _full_sell)
+        await loop.run_in_executor(None, _full_sell)
 
-        maliyet_toplam = adet * avg_cost
-        satis_toplam   = adet * satis_fiyat
-        kar_zarar_tl   = realized_pnl * usd_try
-        kar_emoji = "🟢" if realized_pnl >= 0 else "🔴"
-        kar_sign  = "+" if realized_pnl >= 0 else ""
-        kar_pct   = (realized_pnl / maliyet_toplam * 100) if maliyet_toplam > 0 else 0
-
-        mesaj = (
-            f"{kar_emoji} <b>{ticker} — TAM SATIŞ</b>\n\n"
-            f"📊 <b>Satış Özeti:</b>\n"
-            f"  Adet:          {adet:,g}\n"
-            f"  Alış fiyatı:   ${avg_cost:,.2f}\n"
-            f"  Satış fiyatı:  ${satis_fiyat:,.2f}\n\n"
-            f"💰 <b>Gerçekleşen Kar/Zarar:</b>\n"
-            f"  <b>{kar_sign}${realized_pnl:,.2f} USD ({kar_sign}{kar_pct:.1f}%)</b>\n"
-            f"  TL karşılığı: {kar_sign}₺{abs(kar_zarar_tl):,.0f}\n\n"
-            f"✅ {ticker} portföyden çıkarıldı."
-        )
+        # Gösterim — TRY varlıklar için TRY fiyat göster
+        if currency == "TRY":
+            mesaj = (
+                f"{kar_emoji} <b>{ticker} — TAM SATIŞ</b>\n\n"
+                f"📊 <b>Satış Özeti:</b>\n"
+                f"  Adet:          {adet:,g}\n"
+                f"  Alış fiyatı:   ₺{avg_cost_try:,.4f}\n"
+                f"  Satış fiyatı:  ₺{satis_fiyat_try:,.4f}\n\n"
+                f"💰 <b>Gerçekleşen Kar/Zarar:</b>\n"
+                f"  <b>{kar_sign}₺{abs(kar_zarar_try):,.2f} TL ({kar_sign}{kar_zarar_pct:.1f}%)</b>\n"
+                f"  USD karşılığı: {kar_sign}${abs(kar_zarar_usd):,.2f}\n\n"
+                f"✅ {ticker} portföyden çıkarıldı."
+            )
+        else:
+            mesaj = (
+                f"{kar_emoji} <b>{ticker} — TAM SATIŞ</b>\n\n"
+                f"📊 <b>Satış Özeti:</b>\n"
+                f"  Adet:          {adet:,g}\n"
+                f"  Alış fiyatı:   ${avg_cost:,.2f}\n"
+                f"  Satış fiyatı:  ${satis_fiyat_usd:,.2f}\n\n"
+                f"💰 <b>Gerçekleşen Kar/Zarar:</b>\n"
+                f"  <b>{kar_sign}${abs(kar_zarar_usd):,.2f} USD ({kar_sign}{kar_zarar_pct:.1f}%)</b>\n"
+                f"  TL karşılığı: {kar_sign}₺{abs(kar_zarar_try):,.0f}\n\n"
+                f"✅ {ticker} portföyden çıkarıldı."
+            )
         await update.message.reply_text(mesaj, parse_mode=ParseMode.HTML)
 
     except Exception as e:
@@ -536,11 +563,145 @@ async def cmd_portfoy_sil(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def cmd_portfoy_guncelle(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """
-    Mevcut pozisyonu güncelle (adet ve BİRİM maliyet).
-    Kullanım: /guncelle <TICKER> <YENİ_ADET> <BİRİM_MALİYET>
-    Örnek: /guncelle AVGO 2.767 335
-    → 2.767 adet × $335 birim maliyet = $927 toplam yatırılan
+    Pozisyon güncelle veya P&L düzelt.
+
+    Kullanım:
+      /guncelle <TICKER> <ADET> <BİRİM_MALİYET>   — adet ve maliyet güncelle
+      /guncelle PNL <TICKER> <PNL_USD>             — realized P&L manuel düzelt
+
+    Örnekler:
+      /guncelle AVGO 2.767 335
+      /guncelle PNL NNF -421.37
     """
+    args = ctx.args
+    if not args:
+        await update.message.reply_text(
+            "📝 <b>Kullanım:</b>\n\n"
+            "<b>Pozisyon güncelle:</b>\n"
+            "/guncelle TICKER ADET BİRİM_MALİYET\n"
+            "Örnek: /guncelle AVGO 2.767 335\n\n"
+            "<b>P&L düzelt:</b>\n"
+            "/guncelle PNL TICKER PNL_USD\n"
+            "Örnek: /guncelle PNL NNF -421.37\n"
+            "<i>(Negatif = zarar, pozitif = kar)</i>",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    # ── P&L düzeltme modu ────────────────────────────────────────────────
+    if args[0].upper() == "PNL":
+        if len(args) < 3:
+            await update.message.reply_text(
+                "📝 <b>Kullanım:</b> /guncelle PNL TICKER PNL_USD\n"
+                "Örnek: /guncelle PNL NNF -421.37",
+                parse_mode=ParseMode.HTML,
+            )
+            return
+
+        ticker  = args[1].upper()
+        try:
+            pnl_usd = float(args[2].replace("$", "").replace(",", ""))
+        except ValueError:
+            await update.message.reply_text("❌ Geçersiz P&L değeri. Örnek: -421.37")
+            return
+
+        try:
+            from core.database import SessionLocal
+            from core import crud
+            from strategy_data import fetch_usd_try_rate
+
+            usd_try = fetch_usd_try_rate()
+
+            def _update_pnl():
+                with SessionLocal() as db:
+                    from core.models import Portfolio
+                    pos = db.query(Portfolio).filter_by(asset_symbol=ticker).first()
+                    if not pos:
+                        raise ValueError(f"{ticker} portföyde bulunamadı.")
+                    eski_pnl = pos.realized_pnl_usd
+                    pos.realized_pnl_usd = pnl_usd
+                    db.commit()
+                    crud.log_event(
+                        db=db, source="TELEGRAM_BOT", event_type="PNL_CORRECTION",
+                        message=f"P&L DÜZELTMESİ: {ticker} | Eski: ${eski_pnl:+.2f} → Yeni: ${pnl_usd:+.2f}",
+                        severity="INFO", asset_symbol=ticker, metric_value=pnl_usd,
+                    )
+                    return eski_pnl
+
+            loop    = asyncio.get_running_loop()
+            eski    = await loop.run_in_executor(None, _update_pnl)
+            pnl_tl  = pnl_usd * usd_try
+            emoji   = "🟢" if pnl_usd >= 0 else "🔴"
+            sign    = "+" if pnl_usd >= 0 else ""
+
+            await update.message.reply_text(
+                f"{emoji} <b>{ticker} — P&L Düzeltildi</b>\n\n"
+                f"  Eski P&L: ${eski:+.2f} USD\n"
+                f"  Yeni P&L: <b>{sign}${pnl_usd:,.2f} USD</b>\n"
+                f"  TL karşılığı: {sign}₺{abs(pnl_tl):,.2f}",
+                parse_mode=ParseMode.HTML,
+            )
+
+        except ValueError as e:
+            await update.message.reply_text(f"❌ {e}")
+        except Exception as e:
+            await update.message.reply_text(f"❌ Hata: {e}")
+        return
+
+    # ── Normal güncelleme modu ────────────────────────────────────────────
+    if len(args) < 3:
+        await update.message.reply_text(
+            "📝 <b>Kullanım:</b> /guncelle TICKER ADET BİRİM_MALİYET\n"
+            "Örnek: /guncelle AVGO 2.767 335",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    try:
+        ticker   = args[0].upper()
+        shares   = float(args[1].replace(",", "."))
+        avg_cost = float(args[2].replace(",", "."))
+        total    = shares * avg_cost
+
+        await update.message.reply_text(f"⏳ {ticker} güncelleniyor...")
+
+        from core.database import SessionLocal
+        from core import crud
+
+        def _update():
+            with SessionLocal() as db:
+                pos = db.query(
+                    __import__("core.models", fromlist=["Portfolio"]).Portfolio
+                ).filter_by(asset_symbol=ticker).first()
+                if not pos:
+                    raise ValueError(f"{ticker} portföyde bulunamadı.")
+                pos.total_quantity   = shares
+                pos.average_cost     = avg_cost
+                pos.average_cost_usd = avg_cost
+                from datetime import datetime, timezone
+                pos.last_updated = datetime.now(timezone.utc)
+                db.commit()
+                crud.log_event(
+                    db=db, source="TELEGRAM_BOT", event_type="PORTFOLIO_UPDATE",
+                    message=f"GÜNCELLEME: {ticker} → {shares:g} adet @ ${avg_cost:.4f} birim",
+                    severity="INFO", asset_symbol=ticker,
+                )
+
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, _update)
+
+        await update.message.reply_text(
+            f"✅ <b>{ticker}</b> güncellendi\n\n"
+            f"  Miktar: {shares:,g} adet\n"
+            f"  Ort. Birim Maliyet: ${avg_cost:,.4f}\n"
+            f"  Toplam Yatırılan: ${total:,.2f}",
+            parse_mode=ParseMode.HTML,
+        )
+
+    except ValueError as e:
+        await update.message.reply_text(f"❌ {e}")
+    except Exception as e:
+        await update.message.reply_text(f"❌ Hata: {e}")
     args = ctx.args
     if not args or len(args) < 3:
         await update.message.reply_text(
