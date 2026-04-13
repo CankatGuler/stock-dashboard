@@ -667,34 +667,54 @@ async def cmd_portfoy_guncelle(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
         from core.database import SessionLocal
         from core import crud
+        from strategy_data import fetch_usd_try_rate
 
         def _update():
             with SessionLocal() as db:
-                pos = db.query(
-                    __import__("core.models", fromlist=["Portfolio"]).Portfolio
-                ).filter_by(asset_symbol=ticker).first()
+                from core.models import Portfolio
+                pos = db.query(Portfolio).filter_by(asset_symbol=ticker).first()
                 if not pos:
                     raise ValueError(f"{ticker} portföyde bulunamadı.")
+
+                currency = pos.currency  # Mevcut para birimi
+                usd_try  = fetch_usd_try_rate()
+
+                # TRY varlıklar için USD'ye çevir
+                if currency == "TRY":
+                    avg_cost_usd = avg_cost / usd_try
+                else:
+                    avg_cost_usd = avg_cost
+
                 pos.total_quantity   = shares
-                pos.average_cost     = avg_cost
-                pos.average_cost_usd = avg_cost
+                pos.average_cost     = avg_cost      # Orijinal para birimi
+                pos.average_cost_usd = avg_cost_usd  # USD normalize
                 from datetime import datetime, timezone
                 pos.last_updated = datetime.now(timezone.utc)
                 db.commit()
                 crud.log_event(
                     db=db, source="TELEGRAM_BOT", event_type="PORTFOLIO_UPDATE",
-                    message=f"GÜNCELLEME: {ticker} → {shares:g} adet @ ${avg_cost:.4f} birim",
+                    message=(
+                        f"GÜNCELLEME: {ticker} → {shares:g} adet @ "
+                        f"{'₺' if currency == 'TRY' else '$'}{avg_cost:.4f} "
+                        f"(≈${avg_cost_usd:.4f})"
+                    ),
                     severity="INFO", asset_symbol=ticker,
                 )
+                return currency, avg_cost_usd, fetch_usd_try_rate()
 
         loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, _update)
+        currency, avg_usd, usd_try = await loop.run_in_executor(None, _update)
+
+        para = "₺" if currency == "TRY" else "$"
+        toplam_usd = shares * avg_usd
 
         await update.message.reply_text(
             f"✅ <b>{ticker}</b> güncellendi\n\n"
             f"  Miktar: {shares:,g} adet\n"
-            f"  Ort. Birim Maliyet: ${avg_cost:,.4f}\n"
-            f"  Toplam Yatırılan: ${total:,.2f}",
+            f"  Ort. Birim Maliyet: {para}{avg_cost:,.4f}"
+            f"{f' (≈${avg_usd:,.4f})' if currency == 'TRY' else ''}\n"
+            f"  Toplam Yatırılan: {para}{total:,.2f}"
+            f"{f' (≈${toplam_usd:,.2f})' if currency == 'TRY' else ''}",
             parse_mode=ParseMode.HTML,
         )
 
