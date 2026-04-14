@@ -178,7 +178,93 @@ def inject_system_message(text: str, label: str = "SİSTEM ALARMI") -> None:
 
 # ─── Portföy Bağlamı ─────────────────────────────────────────────────────────
 
-def _build_portfolio_context(usd_try: float) -> str:
+def _fetch_price_with_fallback(tk: str, ac: str, cur: str,
+                               gold_usd: float, usd_try: float) -> tuple[float, bool]:
+    """
+    Anlık fiyatı çek. yfinance başarısız olursa Claude web_search ile dene.
+    Returns: (fiyat_usd, başarılı_mı)
+    """
+    import yfinance as yf
+
+    # ── 1. Altın gram TRY ─────────────────────────────────────────────────
+    if tk in ("ALTIN_GRAM_TRY", "XAUTRY=X") and gold_usd > 0:
+        return (gold_usd * usd_try / 31.1035) / usd_try, True
+
+    # ── 2. TEFAS fonu ─────────────────────────────────────────────────────
+    if ac == "tefas":
+        try:
+            from data.tefas_client import get_fund_price
+            price_tl = get_fund_price(tk)
+            if price_tl:
+                return price_tl / usd_try, True
+        except Exception:
+            pass
+        return 0.0, False
+
+    # ── 3. yfinance ───────────────────────────────────────────────────────
+    try:
+        h = yf.Ticker(tk).history(period="2d")
+        if not h.empty:
+            lp = float(h["Close"].iloc[-1])
+            return (lp / usd_try if cur == "TRY" else lp), True
+    except Exception:
+        pass
+
+    # ── 4. Web search fallback (Claude API) ───────────────────────────────
+    try:
+        import os, requests, re, json
+        api_key = os.getenv("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            return 0.0, False
+
+        resp = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json={
+                "model": "claude-haiku-4-5-20251001",
+                "max_tokens": 200,
+                "tools": [{"type": "web_search_20250305", "name": "web_search"}],
+                "messages": [{
+                    "role": "user",
+                    "content": (
+                        f"What is the current stock price of {tk} in USD? "
+                        f"Reply ONLY with a JSON: {{\"price\": <number>}}. "
+                        f"No text, no explanation."
+                    )
+                }],
+            },
+            timeout=20,
+        )
+
+        if resp.status_code != 200:
+            return 0.0, False
+
+        data = resp.json()
+        text_blocks = [b["text"] for b in data.get("content", [])
+                       if b.get("type") == "text" and b.get("text")]
+        if not text_blocks:
+            return 0.0, False
+
+        text = text_blocks[-1].strip()
+        # JSON parse
+        text = re.sub(r"```json\s*|\s*```", "", text).strip()
+        match = re.search(r'"price"\s*:\s*([\d.]+)', text)
+        if match:
+            price = float(match.group(1))
+            logger.info("Web search fiyat: %s = $%.4f", tk, price)
+            return price, True
+
+    except Exception as e:
+        logger.debug("Web search fiyat fallback hatası [%s]: %s", tk, e)
+
+    return 0.0, False
+
+
+
     """
     Supabase'den taze portföy verisi çek.
     TÜM matematik (ağırlık, K/Z oranı) Python'da hesaplanır.
@@ -223,37 +309,27 @@ def _build_portfolio_context(usd_try: float) -> str:
             ac   = p.get("asset_class", "us_equity") or "us_equity"
             cost_usd = shr * avg
 
-            live_price_usd = avg  # fallback
-            try:
-                if tk in ("ALTIN_GRAM_TRY", "XAUTRY=X") and gold_usd > 0:
-                    live_price_usd = (gold_usd * usd_try / 31.1035) / usd_try
-                elif ac == "tefas":
-                    from data.tefas_client import get_fund_price
-                    price_tl = get_fund_price(tk)
-                    if price_tl:
-                        live_price_usd = price_tl / usd_try
-                else:
-                    h = yf.Ticker(tk).history(period="2d")
-                    if not h.empty:
-                        lp = float(h["Close"].iloc[-1])
-                        live_price_usd = lp / usd_try if cur == "TRY" else lp
-            except Exception:
-                pass
+            live_price_usd, price_ok = _fetch_price_with_fallback(
+                tk, ac, cur, gold_usd, usd_try
+            )
+            if not price_ok:
+                live_price_usd = avg  # son çare fallback
 
             live_usd = shr * live_price_usd
             pnl      = live_usd - cost_usd
             pnl_pct  = pnl / cost_usd * 100 if cost_usd > 0 else 0
 
             enriched.append({
-                "symbol":    tk,
-                "ac":        ac,
-                "shr":       shr,
-                "avg":       avg,
-                "cost_usd":  cost_usd,
+                "symbol":     tk,
+                "ac":         ac,
+                "shr":        shr,
+                "avg":        avg,
+                "cost_usd":   cost_usd,
                 "live_price": live_price_usd,
-                "live_usd":  live_usd,
-                "pnl":       pnl,
-                "pnl_pct":   pnl_pct,
+                "live_usd":   live_usd,
+                "pnl":        pnl,
+                "pnl_pct":    pnl_pct,
+                "price_ok":   price_ok,
             })
 
         # ── ADIM 2: Toplam ve kategori toplamlarını hesapla ───────────────
@@ -297,16 +373,24 @@ def _build_portfolio_context(usd_try: float) -> str:
                 cat_weight = p["live_usd"] / cat_total * 100 if cat_total > 0 else 0
                 tot_weight = p["live_usd"] / total_cur * 100 if total_cur > 0 else 0
 
+                if p["price_ok"]:
+                    kz_str = (
+                        f"K/Z: {sign}${p['pnl']:,.0f} ({sign}{p['pnl_pct']:.1f}%) | "
+                        f"Kategori İçi Ağırlık: %{cat_weight:.1f} | "
+                        f"Toplam Portföy Ağırlığı: %{tot_weight:.1f}"
+                    )
+                    fiyat_str = f"Anlık Birim Fiyat: ${p['live_price']:,.2f} | Varlık Değeri: ${p['live_usd']:,.0f}"
+                else:
+                    kz_str    = "K/Z: [Anlık fiyat alınamadı — K/Z yorumu yapma]"
+                    fiyat_str = f"Anlık Birim Fiyat: [Alınamadı] | Varlık Değeri: [Bilinmiyor]"
+
                 lines.append(
                     f"  {p['symbol']}: "
                     f"Miktar: {p['shr']:,g} adet | "
                     f"Ort. Birim Maliyet: ${p['avg']:,.2f} | "
                     f"Toplam Yatırılan: ${p['cost_usd']:,.0f} | "
-                    f"Anlık Birim Fiyat: ${p['live_price']:,.2f} | "
-                    f"Varlık Değeri: ${p['live_usd']:,.0f} | "
-                    f"K/Z: {sign}${p['pnl']:,.0f} ({sign}{p['pnl_pct']:.1f}%) | "
-                    f"Kategori İçi Ağırlık: %{cat_weight:.1f} | "
-                    f"Toplam Portföy Ağırlığı: %{tot_weight:.1f}"
+                    f"{fiyat_str} | "
+                    f"{kz_str}"
                 )
             lines.append("")
 
@@ -546,10 +630,15 @@ gibi değerlendirme. O listede olmayan hiçbir varlığı analize dahil etme.
 Geçmiş konuşmalar referans için kullanılabilir ama portföy durumu için değil.
 
 KESİN KURAL — MATEMATİK YAPMA:
-Her varlığın "Kategori İçi Ağırlık" ve "Toplam Portföy Ağırlığı" Python tarafından
-HAZIR hesaplanmış olarak sana verilmiştir. Sen bu hazır yüzdeleri OKU ve YORUMLA.
-Asla kendi başına toplam portföye veya kategori toplamına bölme — bu hata üretir.
-Örn: AVGO için "Toplam Portföy Ağırlığı: %X" yazıyorsa o değeri kullan, hesaplama.
+Her varlığın K/Z Yüzdesi, Kategori İçi Ağırlık ve Toplam Portföy Ağırlığı
+Baş Muhasebeci (Python) tarafından kuruşu kuruşuna hesaplanmış ve sana hazır verilmiştir.
+KESİNLİKLE kendi kendine oran hesaplaması, toplama, çıkarma veya bölme YAPMA.
+Yalnızca sana hazır verilen yüzdeleri ve değerleri OKU ve stratejik olarak YORUMLA.
+Bir varlık için "K/Z: [Anlık fiyat alınamadı]" yazıyorsa o varlık için K/Z yorumu YAPMA.
+
+K/Z KURALI:
+Bir varlık için "K/Z: [Anlık fiyat alınamadı]" yazıyorsa o varlık için kesinlikle
+K/Z yorumu yapma. Sadece maliyet bilgisini ver, güncel değeri bilinmiyor de.
 
 ─── ÜSLUP ──────────────────────────────────────────────────────────────────
 - Türkçe, temkinli, çok yönlü mentor üslubu.
