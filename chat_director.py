@@ -530,6 +530,15 @@ def _build_memory_context() -> str:
         return ""
 
 
+def _build_tefas_context() -> str:
+    """Portföydeki TEFAS fonlarının içerik profillerini döndür."""
+    try:
+        from memory.knowledge_library import get_all_tefas_profiles_text
+        return get_all_tefas_profiles_text()
+    except Exception:
+        return ""
+
+
 def _get_recent_news_context() -> str:
     """Son haberleri ve on-chain verileri direktöre bağlam olarak hazırla."""
     ctx_parts = []
@@ -585,6 +594,7 @@ def ask_director(user_message: str, deep_analysis: bool = False) -> str:
 
     portfolio_ctx    = _build_portfolio_context(usd_try)
     memory_ctx       = _build_memory_context()
+    tefas_ctx        = _build_tefas_context()
     tr_time          = (datetime.now(timezone.utc) + timedelta(hours=3)).strftime("%d %B %Y, %H:%M")
     detected_tickers = _extract_tickers_from_message(user_message)
     live_price_ctx   = _fetch_live_prices(detected_tickers)
@@ -604,6 +614,8 @@ Cankat'ın kişisel baş yatırım direktörü ve risk yönetimi danışmanısı
 
 {memory_ctx}
 {live_price_ctx}
+
+{tefas_ctx}
 
 {news_onchain_ctx}
 
@@ -682,6 +694,8 @@ Cankat'ın kişisel yatırım direktörüsün.
 {portfolio_ctx}
 {memory_ctx}
 {live_price_ctx}
+
+{tefas_ctx}
 
 TARİH/SAAT: {tr_time} | USD/TRY: {usd_try:.2f}
 

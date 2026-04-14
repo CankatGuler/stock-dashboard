@@ -1073,6 +1073,120 @@ def search_terms(query: str) -> list[dict]:
     return results
 
 
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TEFAS FON PROFİLLERİ — Portföydeki aktif fonların içerik bilgisi
+# Manuel olarak girilmiştir. Direktör bu profilleri bağlam olarak kullanır.
+# ══════════════════════════════════════════════════════════════════════════════
+
+TEFAS_FUND_PROFILES = {
+    "IIH": {
+        "tam_ad":    "İstanbul Portföy Üçüncü Hisse Senedi Fonu (Hisse Senedi Yoğun Fon)",
+        "strateji":  "BIST hisse senetleri ağırlıklı aktif yönetilen Türk hisse fonu.",
+        "kompozisyon": "%93 BIST Hisse Senedi, %7 diğer",
+        "risk":      "Yüksek — Türk borsasına tam maruz kalım",
+        "yorum":     (
+            "Türk hisse piyasasına direkt yatırım sağlar. BIST'in genel "
+            "seyriyle güçlü korelasyon taşır. TL bazlı olduğundan kur riski "
+            "portföyü etkiler. Enflasyon ortamında gerçek getiriyi takip et."
+        ),
+    },
+    "AOY": {
+        "tam_ad":    "Ak Portföy Alternatif Enerji Yabancı Hisse Senedi Fonu",
+        "strateji":  "Yenilenebilir ve alternatif enerji sektörüne odaklı yabancı hisse fonu.",
+        "kompozisyon": "%94 Yabancı Hisse Senedi (güneş, rüzgar, hidrojen, pil teknolojisi)",
+        "risk":      "Orta-Yüksek — tematik/sektör konsantrasyonu",
+        "top_holdings": [
+            "First Solar Inc %16.78",
+            "Vestas Wind Systems A/S %15.50",
+            "Nextpower Inc %9.59",
+            "GE Vernova Inc %4.46",
+        ],
+        "yorum":     (
+            "Temiz enerji temasına maruz kalım sağlar. First Solar ve Vestas "
+            "ağırlıkları nedeniyle güneş/rüzgar politikalarına duyarlı. "
+            "USD bazlı yabancı hisseler içerdiğinden kur avantajı olabilir. "
+            "Tematik fon olduğu için volatilite yüksektir."
+        ),
+    },
+    "TTE": {
+        "tam_ad":    "BIST Teknoloji Ağırlık Sınırlamalı Endeksi Hisse Senedi (TL) Fonu",
+        "strateji":  "Türk teknoloji şirketlerine endeks takip eden fon.",
+        "kompozisyon": "%97 BIST Hisse Senedi (teknoloji ağırlıklı)",
+        "risk":      "Yüksek — Türk teknoloji sektörü konsantrasyonu",
+        "top_holdings": [
+            "ASELS (Aselsan) %18",
+            "ODINE %13",
+            "MIATK %7",
+        ],
+        "yorum":     (
+            "Türk savunma ve teknoloji sektörüne maruz kalım. ASELS ağırlığı "
+            "nedeniyle savunma bütçesi ve ihracat haberlerine duyarlı. "
+            "TL bazlı olup BIST Teknoloji Endeksi'ni takip eder."
+        ),
+    },
+    "URA": {
+        "tam_ad":    "Ata Portföy Enerji Değişken Fon",
+        "strateji":  "Nükleer, yenilenebilir ve temiz enerji odaklı karma fon.",
+        "kompozisyon": "%64 Yabancı Hisse (uranyum, nükleer, SMR), %25 BIST Hisse (elektrik), %11 diğer",
+        "karsilastirma_olcutu": "%65 Solactive Global Uranium & Nuclear Components TR Index + %35 BIST Elektrik Getiri Endeksi",
+        "risk":      "Yüksek — nükleer enerji sektörü ve SMR tematik maruziyeti",
+        "yorum":     (
+            "Uranyum madenciliği ve nükleer enerji hikayesine maruz kalım sağlar. "
+            "SMR (Küçük Modüler Reaktör) geliştiren şirketlere yatırım yapması "
+            "uzun vadeli nükleer rönesans temasıyla örtüşür. Global ve yerli karma "
+            "yapısıyla çeşitlilik sunar. Volatil sektör — sabır gerektiren uzun vadeli yatırım."
+        ),
+    },
+    "TI1": {
+        "tam_ad":    "İş Portföy Para Piyasası (TL) Fonu",
+        "strateji":  "Kısa vadeli, düşük riskli para piyasası fonu. Nakit alternatifi.",
+        "kompozisyon": "%39 Mevduat (TL), %34 Ters-Repo, %15 Devlet Tahvili, %12 diğer",
+        "vade":      "Maksimum 184 gün — likidite odaklı",
+        "risk":      "Düşük — anapara korumalı değil ama düşük volatilite",
+        "yorum":     (
+            "Portföydeki nakit karşılığı görevi görür. Faiz oranlarıyla paralel "
+            "getiri sağlar. TCMB faiz kararlarına duyarlı. Enflasyon üzerinde "
+            "reel getiri için faizin enflasyonu aşması gerekir. "
+            "Yüksek faiz ortamında cazip, faiz indirim dönemlerinde getirisi düşer."
+        ),
+    },
+    "TSI": {
+        "tam_ad":    "İş Portföy Maksimum Hesap Kısa Vadeli Borçlanma Araçları (TL) Fonu",
+        "strateji":  "Kısa vadeli borçlanma araçları odaklı, nakit yönetimi fonu.",
+        "kompozisyon": "%40 Devlet Tahvili, %20 Özel Sektör Tahvili, %14 Finansman Bonosu, %9 Mevduat TL, %6 Ters-Repo, %11 diğer",
+        "vade":      "25–90 gün ağırlıklı ortalama vade",
+        "risk":      "Çok Düşük — en likit ve en güvenli segment",
+        "yorum":     (
+            "TI1'e kıyasla daha kısa vadeli ve daha güvenli. "
+            "Portföyün acil likit kasası olarak kullanılabilir. "
+            "Özel sektör tahvil bileşeni ek kredi riski taşır ama getiriyi artırır. "
+            "Faiz indirim sürecinde TI1 ve TSI'dan çıkıp hisse ağırlığı artırmak değerlendirilebilir."
+        ),
+    },
+}
+
+
+def get_tefas_fund_profile(fund_code: str) -> dict | None:
+    """TEFAS fon profilini döndür."""
+    return TEFAS_FUND_PROFILES.get(fund_code.upper())
+
+
+def get_all_tefas_profiles_text() -> str:
+    """
+    Direktör için tüm TEFAS fon profillerini okunabilir metin olarak döndür.
+    """
+    lines = ["PORTFÖYDEKI TEFAS FON PROFİLLERİ:"]
+    for code, p in TEFAS_FUND_PROFILES.items():
+        lines.append(f"\n{code} — {p['tam_ad']}")
+        lines.append(f"  Strateji: {p['strateji']}")
+        lines.append(f"  Kompozisyon: {p['kompozisyon']}")
+        lines.append(f"  Risk: {p['risk']}")
+        if "top_holdings" in p:
+            lines.append(f"  Öne Çıkan Hisseler: {', '.join(p['top_holdings'])}")
+        lines.append(f"  Direktör Notu: {p['yorum']}")
+    return "\n".join(lines)
+
 def get_term_by_id(term_id: str) -> dict | None:
     for t in TERMS:
         if t["id"] == term_id:
