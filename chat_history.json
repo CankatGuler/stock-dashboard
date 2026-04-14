@@ -106,5 +106,13 @@
   {
     "role": "assistant",
     "content": "Haklı bir soru — atlamamın sebebi şu:\n\nPortföy verisinde TEFAS fonları veya TL bazlı varlıklara ait bir kayıt göremiyorum. Elimdeki veriler ağırlıklı olarak ABD hisseleri, kripto ve altın gram pozisyonlarından oluşuyor.\n\n---\n\n**İki ihtimal var:**\n\n**1. TEFAS pozisyonların portföy veritabanına henüz eklenmemiş**\nEğer TEFAS fonlarını sisteme eklediysen ama veri bana iletilmiyorsa, backend tarafında bir sorun olabilir.\n\n**2. TEFAS fonların gerçekten yok**\nBu durumda genel bir TL varlık analizi yapabilirim — hangi fon kategorilerinin mevcut ortamda öne çıkabileceğini konuşabiliriz.\n\n---\n\n**Sana sorum şu:**\n\nTEFAS'ta aktif pozisyonların var mı? Varsa hangi fonlar — hisse senedi fonu mu, borçlanma aracı fonu mu, serbest fon mu, altın fonu mu?\n\nBunu netleştirirsen hem mevcut koşulların TL varlıklara etkisini hem de senin spesifik pozisyonlarını değerlendirebilirim."
+  },
+  {
+    "role": "user",
+    "content": "Senin veri tabanına erişip portföyümü görmen lazım bunu düzelteceğim."
+  },
+  {
+    "role": "assistant",
+    "content": "Anladım, teşekkürler.\n\nDüzeltince tekrar başlat — TEFAS fonların da dahil olduğu tam portföy verisiyle çok daha kapsamlı bir analiz yapabiliriz.\n\nO zamana kadar aklında tutmak istediğin bir şey varsa buradayım."
   }
 ]
