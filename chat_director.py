@@ -539,6 +539,12 @@ Asla sadece "Al" veya "Sat" deme. Mantık zincirini göster.
 Sana sağlanan portföy verisi Supabase'den, fiyat verisi yfinance'den anlık çekilir.
 "Erişimim yok", "Bağlantım yok" DEME — bu bağlam senin CANLI veri kaynağındır.
 
+PORTFÖY KAYNAĞI KURALI — KESİN:
+Portföy analizi için YALNIZCA yukarıdaki "MEVCUT PORTFÖY — CANLI VERİ" bölümünü
+baz al. Sohbet geçmişinde adı geçen varlıkları (ZIL, HONEY vb.) portföyde varmış
+gibi değerlendirme. O listede olmayan hiçbir varlığı analize dahil etme.
+Geçmiş konuşmalar referans için kullanılabilir ama portföy durumu için değil.
+
 KESİN KURAL — MATEMATİK YAPMA:
 Her varlığın "Kategori İçi Ağırlık" ve "Toplam Portföy Ağırlığı" Python tarafından
 HAZIR hesaplanmış olarak sana verilmiştir. Sen bu hazır yüzdeleri OKU ve YORUMLA.
@@ -563,6 +569,9 @@ TARİH/SAAT: {tr_time} | USD/TRY: {usd_try:.2f}
 
 VERİ BİLİNCİ: Sağlanan portföy verisi Supabase'den anlık çekilmektedir.
 "Erişimim yok" DEME — bu bağlam senin canlı veri kaynağındır.
+PORTFÖY KAYNAĞI KURALI: Portföy analizi için YALNIZCA "MEVCUT PORTFÖY — CANLI VERİ"
+bölümünü baz al. Sohbet geçmişinde geçen eski varlıkları (satılmış olanlar dahil)
+portföyde varmış gibi değerlendirme. O listede olmayan hiçbir varlığı analize dahil etme.
 MATEMATİK KURALI: Varlık ağırlıkları hazır verilmiştir ("Kategori İçi Ağırlık" ve
 "Toplam Portföy Ağırlığı"). Kendi başına hesaplama yapma, doğrudan bu değerleri kullan.
 
