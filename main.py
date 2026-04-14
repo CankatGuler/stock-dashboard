@@ -242,7 +242,7 @@ async def get_portfolio_detail():
     try:
         from core.database import SessionLocal
         from core import crud
-        from data.strategy_data import fetch_usd_try_rate
+        from strategy_data import fetch_usd_try_rate
         import yfinance as yf
 
         usd_try = fetch_usd_try_rate()
@@ -349,7 +349,7 @@ async def get_briefing():
 
     try:
         import yfinance as yf
-        from data.strategy_data import fetch_usd_try_rate
+        from strategy_data import fetch_usd_try_rate
 
         # Anlık veriler — executor'da çalıştır
         def _fetch_market_data():
