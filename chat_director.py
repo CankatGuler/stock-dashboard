@@ -379,10 +379,32 @@ def _fetch_price_with_fallback(tk: str, ac: str, cur: str,
                         f"Kategori İçi Ağırlık: %{cat_weight:.1f} | "
                         f"Toplam Portföy Ağırlığı: %{tot_weight:.1f}"
                     )
-                    fiyat_str = f"Anlık Birim Fiyat: ${p['live_price']:,.2f} | Varlık Değeri: ${p['live_usd']:,.0f}"
+                    if p["ac"] == "tefas":
+                        # TEFAS için TL değerini de göster
+                        live_tl = p["live_usd"] * usd_try
+                        cost_tl = p["cost_usd"] * usd_try
+                        fiyat_str = (
+                            f"Anlık Birim Fiyat: ₺{p['live_price'] * usd_try:,.4f} "
+                            f"(${p['live_price']:,.4f}) | "
+                            f"Varlık Değeri: ₺{live_tl:,.0f} (${p['live_usd']:,.0f})"
+                        )
+                    else:
+                        fiyat_str = (
+                            f"Anlık Birim Fiyat: ${p['live_price']:,.2f} | "
+                            f"Varlık Değeri: ${p['live_usd']:,.0f}"
+                        )
                 else:
-                    kz_str    = "K/Z: [Anlık fiyat alınamadı — K/Z yorumu yapma]"
-                    fiyat_str = f"Anlık Birim Fiyat: [Alınamadı] | Varlık Değeri: [Bilinmiyor]"
+                    # Fiyat alınamadı ama pozisyonu yine de göster
+                    cost_tl = p["cost_usd"] * usd_try
+                    if p["ac"] == "tefas":
+                        avg_tl = p["avg"] * usd_try
+                        fiyat_str = (
+                            f"Anlık Birim Fiyat: [Çekilemedi] | "
+                            f"Toplam Yatırılan: ₺{cost_tl:,.0f} (${p['cost_usd']:,.0f})"
+                        )
+                    else:
+                        fiyat_str = f"Anlık Birim Fiyat: [Çekilemedi] | Varlık Değeri: [Bilinmiyor]"
+                    kz_str = "K/Z: [Fiyat çekilemedi — K/Z yorumu yapma, pozisyon mevcut]"
 
                 lines.append(
                     f"  {p['symbol']}: "
@@ -629,6 +651,13 @@ baz al. Sohbet geçmişinde adı geçen varlıkları (ZIL, HONEY vb.) portföyde
 gibi değerlendirme. O listede olmayan hiçbir varlığı analize dahil etme.
 Geçmiş konuşmalar referans için kullanılabilir ama portföy durumu için değil.
 
+TEFAS FONU YORUMU:
+"TEFAS Fonu" kategorisindeki varlıklar (IIH, AOY, TTE, URA, TI1, TSI vb.)
+Türk yatırım fonlarıdır. Portföy listesinde görüyorsan kesinlikle VAR demektir.
+"TEFAS fonlarına ait veri göremiyorum" DEME — listede yazıyorsa oradadır.
+Fon içeriğini bilemezsin ama: toplam TL değerini yorumla, portföy ağırlığını söyle,
+kullanıcı sorarsa "/fon [KOD]" komutunu öner.
+
 KESİN KURAL — MATEMATİK YAPMA:
 Her varlığın K/Z Yüzdesi, Kategori İçi Ağırlık ve Toplam Portföy Ağırlığı
 Baş Muhasebeci (Python) tarafından kuruşu kuruşuna hesaplanmış ve sana hazır verilmiştir.
@@ -661,6 +690,8 @@ VERİ BİLİNCİ: Sağlanan portföy verisi Supabase'den anlık çekilmektedir.
 PORTFÖY KAYNAĞI KURALI: Portföy analizi için YALNIZCA "MEVCUT PORTFÖY — CANLI VERİ"
 bölümünü baz al. Sohbet geçmişinde geçen eski varlıkları (satılmış olanlar dahil)
 portföyde varmış gibi değerlendirme. O listede olmayan hiçbir varlığı analize dahil etme.
+TEFAS FONU KURALI: "TEFAS Fonu" kategorisinde görünen varlıklar (IIH, AOY, TTE vb.)
+listede varsa portföyde kesinlikle VAR demektir. "Göremiyorum" DEME.
 MATEMATİK KURALI: Varlık ağırlıkları hazır verilmiştir ("Kategori İçi Ağırlık" ve
 "Toplam Portföy Ağırlığı"). Kendi başına hesaplama yapma, doğrudan bu değerleri kullan.
 
