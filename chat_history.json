@@ -146,5 +146,13 @@
   {
     "role": "assistant",
     "content": "Mesajın yarım kaldı — devam eder misin?\n\n\"Bu sayfaya d...\" diye bitmiş, muhtemelen şunu sormak istedin:\n\n**Bu sayfaya da mı gönderilecek, yoksa ayrı bir kanal mı düşünüyorsun?**\n\nDevam et, dinliyorum."
+  },
+  {
+    "role": "user",
+    "content": "Rapor ve uyarılar bu sayfaya düşecek, sen de buradan gösttergelerin analizini yapabilirsin."
+  },
+  {
+    "role": "assistant",
+    "content": "Mükemmel kurgu — bu sistemi birlikte çok verimli kullanabiliriz.\n\nŞöyle çalışır:\n\n---\n\n**📊 HAFTALIK İZLEME RAPORU**\nHer hafta göstergeler buraya düşer, ben de:\n- Eşik değerlere ne kadar yaklaşıldığını değerlendiririm\n- Trend yönünü okur, önceki haftayla karşılaştırırım\n- Portföye etkisini somutlaştırırım\n\n---\n\n**🚨 ALARM GELDİĞİNDE**\nEşik aşılınca sen buraya bildir veya sistem otomatik düşürsün — ben de:\n- Hangi analogla örtüştüğünü söylerim\n- Portföyde hangi aksiyonun tetiklenmesi gerektiğini belirtirim\n- \"Erken sinyal mi, gerçek kırılma mı?\" ayrımını yaparım\n\n---\n\n**Bir öneri:**\n\nRapor formatını şimdiden standartlaştıralım. Aşağıdaki yapıyı kullanırsan analiz çok daha hızlı ve tutarlı olur:\n\n```\n📅 TARİH\n\n🏦 TAHVİL & LİKİDİTE\n• UST 10Y: %X.XX (önceki: %X.XX)\n• 2Y-10Y Spread: XX bps\n• TGA Bakiyesi: $XXXB\n• Fed RRP: $XXXB\n\n📊 BÜYÜME\n• ISM Manufacturing: XX.X\n• ISM Services: XX.X\n• Jobless Claims: XXXk\n• GDPNow: %X.X\n\n😨 PİYASA STRES\n• VIX: XX.X\n• HY Spread: XXXbps\n• S&P 500 / 200 GHO: Üzerinde / Altında\n\n🌍 MAKRO\n• Önemli gelişme varsa buraya\n```\n\n---\n\nSistemi kurduğunda ilk rapor gelsin — başlayalım."
   }
 ]
