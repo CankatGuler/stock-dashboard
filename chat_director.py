@@ -539,6 +539,164 @@ def _build_tefas_context() -> str:
         return ""
 
 
+def _build_portfolio_context(usd_try: float) -> str:
+    """
+    Supabase'den taze portföy verisi çek.
+    TÜM matematik (ağırlık, K/Z oranı) Python'da hesaplanır.
+    Direktöre sadece hazır, yoruma kapalı sayılar gönderilir.
+    """
+    try:
+        import yfinance as yf
+        from core.database import SessionLocal
+        from core import crud
+
+        with SessionLocal() as db:
+            summary = crud.get_portfolio_summary(db)
+
+        positions = [p for p in summary["positions"] if p["is_open"] and p["quantity"] > 0]
+        if not positions:
+            return "Portföy boş veya yüklenemedi."
+
+        # Altın fiyatı
+        gold_usd = 0.0
+        try:
+            h = yf.Ticker("GC=F").history(period="2d")
+            if not h.empty:
+                gold_usd = float(h["Close"].iloc[-1])
+        except Exception:
+            pass
+
+        ac_labels = {
+            "us_equity": "ABD Hisse",
+            "crypto":    "Kripto",
+            "commodity": "Emtia",
+            "tefas":     "TEFAS Fonu",
+            "cash":      "Nakit",
+        }
+
+        # ── ADIM 1: Tüm anlık değerleri Python'da hesapla ─────────────────
+        enriched = []
+        for p in positions:
+            tk       = p["symbol"]
+            shr      = float(p["quantity"])
+            avg      = float(p["avg_cost_usd"])
+            cur      = p.get("currency", "USD")
+            ac       = p.get("asset_class", "us_equity") or "us_equity"
+            cost_usd = shr * avg
+
+            live_price_usd, price_ok = _fetch_price_with_fallback(
+                tk, ac, cur, gold_usd, usd_try
+            )
+            if not price_ok:
+                live_price_usd = avg  # son çare fallback
+
+            live_usd = shr * live_price_usd
+            pnl      = live_usd - cost_usd
+            pnl_pct  = pnl / cost_usd * 100 if cost_usd > 0 else 0
+
+            enriched.append({
+                "symbol":     tk,
+                "ac":         ac,
+                "shr":        shr,
+                "avg":        avg,
+                "cost_usd":   cost_usd,
+                "live_price": live_price_usd,
+                "live_usd":   live_usd,
+                "pnl":        pnl,
+                "pnl_pct":    pnl_pct,
+                "price_ok":   price_ok,
+            })
+
+        # ── ADIM 2: Toplam ve kategori toplamlarını hesapla ───────────────
+        total_cur  = sum(p["live_usd"]  for p in enriched)
+        total_cost = sum(p["cost_usd"]  for p in enriched)
+        total_pnl  = total_cur - total_cost
+        total_pnl_pct = total_pnl / total_cost * 100 if total_cost > 0 else 0
+
+        cat_totals: dict[str, float] = {}
+        for p in enriched:
+            cat_totals[p["ac"]] = cat_totals.get(p["ac"], 0.0) + p["live_usd"]
+
+        # ── ADIM 3: Direktöre gidecek metni oluştur ───────────────────────
+        lines = [
+            f"MEVCUT PORTFÖY — CANLI VERİ (Supabase | USD/TRY: {usd_try:.2f})",
+            f"Toplam Portföy Değeri: ${total_cur:,.0f} | "
+            f"Toplam Yatırılan: ${total_cost:,.0f} | "
+            f"Net K/Z: ${total_pnl:+,.0f} ({total_pnl_pct:+.1f}%)",
+            "",
+            "NOT: Tüm ağırlıklar ve K/Z oranları Python tarafından hesaplanmıştır.",
+            "Matematiksel hesaplama YAPMA — aşağıdaki hazır verileri OKU ve YORUMLA.",
+            "",
+        ]
+
+        # Kategoriye göre grupla
+        class_groups: dict[str, list] = {}
+        for p in enriched:
+            class_groups.setdefault(p["ac"], []).append(p)
+
+        for ac, pos_list in class_groups.items():
+            cat_total = cat_totals.get(ac, 0)
+            cat_pct   = cat_total / total_cur * 100 if total_cur > 0 else 0
+            lines.append(
+                f"── {ac_labels.get(ac, ac)}: "
+                f"Kategori Toplamı ${cat_total:,.0f} "
+                f"(Portföy Ağırlığı: %{cat_pct:.1f}) ──"
+            )
+
+            for p in pos_list:
+                sign       = "+" if p["pnl"] >= 0 else ""
+                cat_weight = p["live_usd"] / cat_total * 100 if cat_total > 0 else 0
+                tot_weight = p["live_usd"] / total_cur * 100 if total_cur > 0 else 0
+
+                if p["price_ok"]:
+                    kz_str = (
+                        f"K/Z: {sign}${p['pnl']:,.0f} ({sign}{p['pnl_pct']:.1f}%) | "
+                        f"Kategori İçi Ağırlık: %{cat_weight:.1f} | "
+                        f"Toplam Portföy Ağırlığı: %{tot_weight:.1f}"
+                    )
+                    if p["ac"] == "tefas":
+                        live_tl = p["live_usd"] * usd_try
+                        fiyat_str = (
+                            f"Anlık Birim Fiyat: ₺{p['live_price'] * usd_try:,.4f} "
+                            f"(${p['live_price']:,.4f}) | "
+                            f"Varlık Değeri: ₺{live_tl:,.0f} (${p['live_usd']:,.0f})"
+                        )
+                    else:
+                        fiyat_str = (
+                            f"Anlık Birim Fiyat: ${p['live_price']:,.2f} | "
+                            f"Varlık Değeri: ${p['live_usd']:,.0f}"
+                        )
+                else:
+                    if p["ac"] == "tefas":
+                        avg_tl    = p["avg"] * usd_try
+                        cost_tl   = p["cost_usd"] * usd_try
+                        fiyat_str = (
+                            f"Anlık Birim Fiyat: [Çekilemedi] | "
+                            f"Toplam Yatırılan: ₺{cost_tl:,.0f} (${p['cost_usd']:,.0f})"
+                        )
+                    else:
+                        fiyat_str = "Anlık Birim Fiyat: [Çekilemedi] | Varlık Değeri: [Bilinmiyor]"
+                    kz_str = "K/Z: [Fiyat çekilemedi — K/Z yorumu yapma, pozisyon mevcut]"
+
+                lines.append(
+                    f"  {p['symbol']}: "
+                    f"Miktar: {p['shr']:,g} adet | "
+                    f"Ort. Birim Maliyet: ${p['avg']:,.2f} | "
+                    f"Toplam Yatırılan: ${p['cost_usd']:,.0f} | "
+                    f"{fiyat_str} | "
+                    f"{kz_str}"
+                )
+            lines.append("")
+
+        return "\n".join(lines)
+
+    except Exception as e:
+        logger.error("_build_portfolio_context hatası: %s", e)
+        return f"Portföy alınamadı: {e}"
+
+
+
+
 def _get_recent_news_context() -> str:
     """Son haberleri ve on-chain verileri direktöre bağlam olarak hazırla."""
     ctx_parts = []
