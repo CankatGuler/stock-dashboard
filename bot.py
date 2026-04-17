@@ -61,15 +61,6 @@ def _safe_html(text: str) -> str:
 
 
 async def start_bot():
-
-    # Kalan tüm < > karakterlerini escape et
-    text = text.replace("<", "&lt;").replace(">", "&gt;")
-
-    # Korunan etiketleri geri yükle
-    for tag, placeholder in allowed.items():
-        text = text.replace(placeholder, tag)
-
-    return text
     """Bot'u başlat ve handler'ları kaydet."""
     global _application
 
