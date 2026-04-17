@@ -181,16 +181,19 @@ def inject_system_message(text: str, label: str = "SİSTEM ALARMI") -> None:
 def _fetch_price_with_fallback(tk: str, ac: str, cur: str,
                                gold_usd: float, usd_try: float) -> tuple[float, bool]:
     """
-    Anlık fiyatı çek. yfinance başarısız olursa Claude web_search ile dene.
+    Anlık fiyatı çek ve doğrula.
+    Adım 1: yfinance ile fiyat çek
+    Adım 2: web search ile çapraz kontrol
+    Fark %3'ten fazlaysa web search fiyatını kullan (daha güvenilir).
     Returns: (fiyat_usd, başarılı_mı)
     """
     import yfinance as yf
 
-    # ── 1. Altın gram TRY ─────────────────────────────────────────────────
+    # ── Altın gram TRY ────────────────────────────────────────────────────
     if tk in ("ALTIN_GRAM_TRY", "XAUTRY=X") and gold_usd > 0:
         return (gold_usd * usd_try / 31.1035) / usd_try, True
 
-    # ── 2. TEFAS fonu ─────────────────────────────────────────────────────
+    # ── TEFAS fonu ────────────────────────────────────────────────────────
     if ac == "tefas":
         try:
             from data.tefas_client import get_fund_price
@@ -201,39 +204,73 @@ def _fetch_price_with_fallback(tk: str, ac: str, cur: str,
             pass
         return 0.0, False
 
-    # ── 3. yfinance ───────────────────────────────────────────────────────
+    # ── Adım 1: yfinance ──────────────────────────────────────────────────
+    yf_price = None
     try:
         h = yf.Ticker(tk).history(period="2d")
         if not h.empty:
             lp = float(h["Close"].iloc[-1])
-            return (lp / usd_try if cur == "TRY" else lp), True
+            yf_price = lp / usd_try if cur == "TRY" else lp
     except Exception:
         pass
 
-    # ── 4. Web search fallback (Claude API) ───────────────────────────────
+    # ── Adım 2: web search ile doğrula ───────────────────────────────────
+    ws_price = _fetch_price_web_search(tk)
+
+    # Her ikisi de başarısız
+    if yf_price is None and ws_price is None:
+        logger.warning("Fiyat alınamadı: %s (yfinance ve web search başarısız)", tk)
+        return 0.0, False
+
+    # Sadece biri başarılı
+    if yf_price is None:
+        logger.info("%s: yfinance başarısız, web search kullanılıyor: $%.4f", tk, ws_price)
+        return ws_price, True
+
+    if ws_price is None:
+        logger.info("%s: web search başarısız, yfinance kullanılıyor: $%.4f", tk, yf_price)
+        return yf_price, True
+
+    # İkisi de başarılı — fark kontrolü
+    fark_pct = abs(yf_price - ws_price) / ws_price * 100
+    if fark_pct > 3.0:
+        logger.warning(
+            "%s: Fiyat uyumsuzluğu! yfinance=$%.4f | web=$%.4f | fark=%%%.1f → web search kullanılıyor",
+            tk, yf_price, ws_price, fark_pct
+        )
+        return ws_price, True
+    else:
+        logger.info("%s: Fiyat doğrulandı: $%.4f (fark: %%%.2f)", tk, yf_price, fark_pct)
+        return yf_price, True
+
+
+def _fetch_price_web_search(tk: str) -> float | None:
+    """
+    Claude web_search ile hisse fiyatını çek.
+    Returns: fiyat (float) veya None
+    """
     try:
-        import os, requests, re, json
+        import os, requests, re
         api_key = os.getenv("ANTHROPIC_API_KEY", "")
         if not api_key:
-            return 0.0, False
+            return None
 
         resp = requests.post(
             "https://api.anthropic.com/v1/messages",
             headers={
-                "x-api-key": api_key,
+                "x-api-key":         api_key,
                 "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
+                "content-type":      "application/json",
             },
             json={
-                "model": "claude-haiku-4-5-20251001",
-                "max_tokens": 200,
-                "tools": [{"type": "web_search_20250305", "name": "web_search"}],
-                "messages": [{
-                    "role": "user",
+                "model":      "claude-haiku-4-5-20251001",
+                "max_tokens": 150,
+                "tools":      [{"type": "web_search_20250305", "name": "web_search"}],
+                "messages":   [{
+                    "role":    "user",
                     "content": (
-                        f"What is the current stock price of {tk} in USD? "
-                        f"Reply ONLY with a JSON: {{\"price\": <number>}}. "
-                        f"No text, no explanation."
+                        f"Current stock price of {tk} in USD right now? "
+                        f"Reply ONLY with JSON: {{\"price\": <number>}}. No text."
                     )
                 }],
             },
@@ -241,27 +278,25 @@ def _fetch_price_with_fallback(tk: str, ac: str, cur: str,
         )
 
         if resp.status_code != 200:
-            return 0.0, False
+            return None
 
         data = resp.json()
         text_blocks = [b["text"] for b in data.get("content", [])
                        if b.get("type") == "text" and b.get("text")]
         if not text_blocks:
-            return 0.0, False
+            return None
 
         text = text_blocks[-1].strip()
-        # JSON parse
         text = re.sub(r"```json\s*|\s*```", "", text).strip()
         match = re.search(r'"price"\s*:\s*([\d.]+)', text)
         if match:
             price = float(match.group(1))
-            logger.info("Web search fiyat: %s = $%.4f", tk, price)
-            return price, True
-
+            if price > 0:
+                return price
     except Exception as e:
-        logger.debug("Web search fiyat fallback hatası [%s]: %s", tk, e)
+        logger.debug("Web search fiyat hatası [%s]: %s", tk, e)
 
-    return 0.0, False
+    return None
 
 
 
@@ -828,12 +863,13 @@ Türk yatırım fonlarıdır. Portföy listesinde görüyorsan kesinlikle VAR de
 Fon içeriğini bilemezsin ama: toplam TL değerini yorumla, portföy ağırlığını söyle,
 kullanıcı sorarsa "/fon [KOD]" komutunu öner.
 
-KESİN KURAL — MATEMATİK YAPMA:
-Her varlığın K/Z Yüzdesi, Kategori İçi Ağırlık ve Toplam Portföy Ağırlığı
-Baş Muhasebeci (Python) tarafından kuruşu kuruşuna hesaplanmış ve sana hazır verilmiştir.
-KESİNLİKLE kendi kendine oran hesaplaması, toplama, çıkarma veya bölme YAPMA.
-Yalnızca sana hazır verilen yüzdeleri ve değerleri OKU ve stratejik olarak YORUMLA.
-Bir varlık için "K/Z: [Anlık fiyat alınamadı]" yazıyorsa o varlık için K/Z yorumu YAPMA.
+KESİN KURAL — MATEMATİK VE GEÇMİŞ VERİ YASAĞI:
+Her varlığın K/Z Yüzdesi yukarıdaki "MEVCUT PORTFÖY" bölümünde HAZIR verilmiştir.
+KESİNLİKLE kendi kendine hesaplama yapma. Sohbet geçmişinde geçen HİÇBİR yüzde,
+fiyat veya K/Z rakamını kullanma — o veriler eskimiş olabilir.
+SADECE yukarıdaki portföy bölümündeki güncel rakamları kullan.
+Örnek: Geçmişte "IREN -%91" yazmışsa bunu unutu; portföy bölümündeki güncel değeri kullan.
+Bir varlık için "K/Z: [Fiyat çekilemedi]" yazıyorsa o varlık için K/Z yorumu YAPMA.
 
 K/Z KURALI:
 Bir varlık için "K/Z: [Anlık fiyat alınamadı]" yazıyorsa o varlık için kesinlikle
@@ -864,8 +900,9 @@ bölümünü baz al. Sohbet geçmişinde geçen eski varlıkları (satılmış o
 portföyde varmış gibi değerlendirme. O listede olmayan hiçbir varlığı analize dahil etme.
 TEFAS FONU KURALI: "TEFAS Fonu" kategorisinde görünen varlıklar (IIH, AOY, TTE vb.)
 listede varsa portföyde kesinlikle VAR demektir. "Göremiyorum" DEME.
-MATEMATİK KURALI: Varlık ağırlıkları hazır verilmiştir ("Kategori İçi Ağırlık" ve
-"Toplam Portföy Ağırlığı"). Kendi başına hesaplama yapma, doğrudan bu değerleri kullan.
+MATEMATİK KURALI: Varlık ağırlıkları ve K/Z oranları "MEVCUT PORTFÖY" bölümünde
+hazır verilmiştir. Kendi başına hesaplama yapma. Sohbet geçmişindeki eski fiyat ve
+K/Z rakamlarını kullanma — sadece yukarıdaki güncel portföy verisini kullan.
 
 KURALLAR: Türkçe, somut, sorumluluktan kaçma. Geçmiş konuşmaya atıfta bulunabilirsin.
 Telegram formatı için <b>bold</b> ve <i>italic</i> kullanabilirsin.
