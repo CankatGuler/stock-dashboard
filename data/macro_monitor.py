@@ -66,33 +66,40 @@ def _ws(prompt: str, max_tokens: int = 200) -> str | None:
         return None
 
 
-def _parse_json_value(text: str, key: str):
+def _parse_json_value(text: str, key: str = "value") -> float | None:
     """JSON veya düz metinden sayısal değer çıkar."""
     if not text:
         return None
-    # Önce JSON dene
-    clean = re.sub(r"```json\s*|\s*```", "", text).strip()
-    match = re.search(rf'"{key}"\s*:\s*([\d.\-]+)', clean)
-    if match:
+
+    # 1. JSON dene
+    clean = re.sub(r"```json|```", "", text).strip()
+    m = re.search(rf'"{key}"\s*:\s*([\d.\-]+)', clean)
+    if m:
         try:
-            return float(match.group(1))
+            return float(m.group(1))
         except ValueError:
             pass
-    # Düz metinden sayı çıkar
-    patterns = [
-        r'\$?([\d,]+\.?\d*)\s*(?:billion|B\b)',
-        r'([\d,]+\.?\d*)\s*(?:basis points|bps)',
-        r'([\d,]+\.?\d*)\s*(?:%|percent)',
-        r'([\d,]+\.?\d+)',
-    ]
-    for pat in patterns:
-        for m in re.findall(pat, text, re.IGNORECASE):
-            try:
-                val = float(str(m).replace(',', ''))
-                if 0 < val < 100000:
-                    return val
-            except ValueError:
-                continue
+
+    # 2. Bold markdown: **295 basis points**, **849.4 billion**
+    bold = re.search(r'\*\*([\d,]+\.?\d*)\s*(?:basis points|bps|billion|B|percent|%)\b', text, re.IGNORECASE)
+    if bold:
+        return float(bold.group(1).replace(',', ''))
+
+    # 3. "X billion" veya "X.X billion dollars"
+    bill = re.search(r'([\d,]+\.?\d*)\s*billion', text, re.IGNORECASE)
+    if bill:
+        return float(bill.group(1).replace(',', ''))
+
+    # 4. "XXX basis points"
+    bps = re.search(r'([\d,]+\.?\d*)\s*basis points', text, re.IGNORECASE)
+    if bps:
+        return float(bps.group(1).replace(',', ''))
+
+    # 5. "X.X%" veya "X.X percent"
+    pct = re.search(r'([\d]+\.?\d*)\s*(?:%|percent)', text, re.IGNORECASE)
+    if pct:
+        return float(pct.group(1))
+
     return None
 
 
@@ -219,9 +226,9 @@ def fetch_tga() -> dict:
 
 def fetch_rrp() -> dict:
     text = _ws(
-        "Search: Federal Reserve overnight reverse repo RRP 2025 2026 current balance. "
-        "What is the current daily Fed RRP usage in billions? "
-        "Note: RRP has declined significantly from 2023 peaks, now much lower."
+        "What is the Federal Reserve overnight reverse repo RRP usage today in 2026? "
+        "Give me the current amount in billions of dollars. "
+        "It should be much lower than 2023 peak of $2.5 trillion."
     )
     val = _parse_json_value(text, "value")
     return {"key": "rrp", "value": val, "prev": None, "date": "",
