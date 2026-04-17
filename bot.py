@@ -1114,12 +1114,46 @@ async def cmd_portfoy_azalt(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def cmd_makro(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """
-    Makro göstergeleri — VIX, yield curve, DXY, altın, petrol, bakır, endeksler.
-    Kullanım: /makro
-    Opsiyonel filtre: /makro faiz | /makro emtia | /makro piyasa
+    Makro göstergeleri.
+    Kullanım:
+      /makro              — VIX, yield curve, DXY, emtia (mevcut)
+      /makro monitor      — Haftalık makro rapor (UST 10Y, ISM, VIX, HY Spread vb.)
+      /makro alarm        — Eşik alarmlarını kontrol et
     """
-    args    = ctx.args
-    filtre  = args[0].lower() if args else None
+    args   = ctx.args
+    filtre = args[0].lower() if args else None
+
+    # ── Yeni: monitor modu ────────────────────────────────────────────────
+    if filtre in ("monitor", "rapor", "haftalık", "weekly"):
+        await update.message.reply_text("⏳ Makro göstergeler çekiliyor (~30 saniye)...")
+        try:
+            from data.macro_monitor import fetch_all_macro_indicators, format_weekly_report
+            loop = asyncio.get_running_loop()
+            indicators = await loop.run_in_executor(None, fetch_all_macro_indicators)
+            mesaj = format_weekly_report(indicators)
+            for chunk in [mesaj[i:i+4000] for i in range(0, len(mesaj), 4000)]:
+                await update.message.reply_text(chunk, parse_mode=ParseMode.HTML)
+        except Exception as e:
+            await update.message.reply_text(f"❌ Hata: {e}")
+        return
+
+    if filtre in ("alarm", "check", "kontrol"):
+        await update.message.reply_text("⏳ Alarm eşikleri kontrol ediliyor...")
+        try:
+            from data.macro_monitor import (
+                fetch_all_macro_indicators, check_alarms, format_alarm_message
+            )
+            loop = asyncio.get_running_loop()
+            indicators = await loop.run_in_executor(None, fetch_all_macro_indicators)
+            alarms = check_alarms(indicators)
+            if alarms:
+                mesaj = format_alarm_message(alarms)
+                await update.message.reply_text(mesaj, parse_mode=ParseMode.HTML)
+            else:
+                await update.message.reply_text("✅ Tüm makro göstergeler normal sınırlarda.")
+        except Exception as e:
+            await update.message.reply_text(f"❌ Hata: {e}")
+        return
 
     await update.message.reply_text("⏳ Makro veriler çekiliyor...")
 

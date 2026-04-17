@@ -148,6 +148,27 @@ def _schedule_jobs():
         name="Haftalık Hisse Taraması",
     )
 
+    # Makro haftalık rapor: Her Pazartesi 08:00 TR
+    scheduler.add_job(
+        _run_macro_weekly_report,
+        trigger="cron",
+        day_of_week="mon",
+        hour=8,
+        minute=0,
+        id="macro_weekly",
+        name="Haftalık Makro Rapor",
+    )
+
+    # Makro alarm kontrolü: Her 6 saatte bir
+    scheduler.add_job(
+        _run_macro_alarm_check,
+        trigger="interval",
+        hours=6,
+        id="macro_alarm",
+        name="Makro Alarm Kontrolü",
+        misfire_grace_time=600,
+    )
+
 
 async def _run_in_executor(fn, *args):
     """
@@ -191,6 +212,44 @@ async def _run_portfolio_scanner():
     from data.portfolio_scanner import run as run_scanner
     logger.info("Hisse taraması başlatılıyor...")
     await _run_in_executor(run_scanner)
+
+
+async def _run_macro_weekly_report():
+    """Haftalık makro raporu çek ve Telegram'a gönder."""
+    try:
+        from data.macro_monitor import fetch_all_macro_indicators, format_weekly_report
+        from bot import send_alarm
+
+        logger.info("Haftalık makro rapor hazırlanıyor...")
+        loop = asyncio.get_running_loop()
+        indicators = await loop.run_in_executor(None, fetch_all_macro_indicators)
+        mesaj = format_weekly_report(indicators)
+        await send_alarm(mesaj)
+        logger.info("Haftalık makro rapor gönderildi.")
+    except Exception as e:
+        logger.error("Makro haftalık rapor hatası: %s", e)
+
+
+async def _run_macro_alarm_check():
+    """Makro eşik alarmlarını kontrol et, tetiklenirse Telegram'a gönder."""
+    try:
+        from data.macro_monitor import (
+            fetch_all_macro_indicators, check_alarms, format_alarm_message
+        )
+        from bot import send_alarm
+
+        loop = asyncio.get_running_loop()
+        indicators = await loop.run_in_executor(None, fetch_all_macro_indicators)
+        alarms = check_alarms(indicators)
+
+        if alarms:
+            mesaj = format_alarm_message(alarms)
+            await send_alarm(mesaj)
+            logger.info("Makro alarm gönderildi: %d alarm", len(alarms))
+        else:
+            logger.info("Makro alarm kontrolü: sorun yok.")
+    except Exception as e:
+        logger.error("Makro alarm kontrol hatası: %s", e)
 
 
 # Eski _run_sync — bot.py'deki cmd_tetikle hâlâ kullanıyor, koru
