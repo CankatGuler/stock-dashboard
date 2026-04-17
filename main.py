@@ -713,7 +713,7 @@ async def test_database():
 @app.get("/api/macro-debug")
 async def macro_debug():
     """TGA, RRP ve HY Spread web search ham sonuçlarını göster."""
-    import os, requests, re
+    import os, requests, asyncio
     api_key = os.getenv("ANTHROPIC_API_KEY", "")
 
     def _ws_raw(prompt):
@@ -733,11 +733,14 @@ async def macro_debug():
         except Exception as e:
             return str(e)
 
-    return {
-        "rrp_raw":      _ws_raw("What is the latest Federal Reserve overnight reverse repo RRP balance in billions of dollars?"),
-        "hy_raw":       _ws_raw("What is the current US high yield credit spread OAS in basis points?"),
-        "tga_raw":      _ws_raw("What is the current US Treasury General Account TGA balance in billions?"),
-    }
+    import time as _t
+    rrp = _ws_raw("Search: Federal Reserve overnight reverse repo RRP 2026 current balance billions.")
+    _t.sleep(3)
+    hy  = _ws_raw("Search: ICE BofA US High Yield OAS spread April 2026 basis points current.")
+    _t.sleep(3)
+    tga = _ws_raw("Search: US Treasury General Account TGA balance April 2026 billions.")
+
+    return {"rrp_raw": rrp, "hy_raw": hy, "tga_raw": tga}
 
 
 @app.get("/api/alphractal-test")

@@ -209,9 +209,8 @@ def fetch_gdpnow() -> dict:
 
 def fetch_tga() -> dict:
     text = _ws(
-        "Search for the current US Treasury General Account TGA balance. "
-        "What is the TGA balance today in billions of dollars? "
-        "Give me just the number in billions."
+        "Search: US Treasury General Account TGA balance April 2026. "
+        "Current TGA cash balance in billions of dollars."
     )
     val = _parse_json_value(text, "value")
     return {"key": "tga", "value": val, "prev": None, "date": "",
@@ -220,8 +219,9 @@ def fetch_tga() -> dict:
 
 def fetch_rrp() -> dict:
     text = _ws(
-        "Search for the Federal Reserve overnight reverse repo facility RRP balance. "
-        "What is the latest daily RRP usage amount in billions of dollars?"
+        "Search: Federal Reserve overnight reverse repo RRP 2025 2026 current balance. "
+        "What is the current daily Fed RRP usage in billions? "
+        "Note: RRP has declined significantly from 2023 peaks, now much lower."
     )
     val = _parse_json_value(text, "value")
     return {"key": "rrp", "value": val, "prev": None, "date": "",
@@ -231,9 +231,8 @@ def fetch_rrp() -> dict:
 def fetch_hy_spread() -> dict:
     """HY Spread — ICE BofA OAS spread web search."""
     text = _ws(
-        "Search for the current ICE BofA US High Yield OAS spread or "
-        "high yield credit spread in basis points. "
-        "What is the current high yield spread in bps?"
+        "Search: ICE BofA US High Yield Option Adjusted Spread April 2026 basis points. "
+        "Current HY credit spread OAS value."
     )
     val = _parse_json_value(text, "value")
     # HY spread genellikle 200-800 bps aralığında olur
@@ -280,7 +279,7 @@ def fetch_all_macro_indicators() -> dict:
     for key, fn in ws_fetchers:
         try:
             indicators[key] = fn()
-            time.sleep(0.5)
+            time.sleep(2)
         except Exception as e:
             logger.warning("[%s] hatası: %s", key, e)
             indicators[key] = {"key": key, "value": None}
