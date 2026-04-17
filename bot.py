@@ -1130,9 +1130,10 @@ async def cmd_makro(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             from data.macro_monitor import fetch_all_macro_indicators, format_weekly_report
             loop = asyncio.get_running_loop()
             indicators = await loop.run_in_executor(None, fetch_all_macro_indicators)
-            mesaj = format_weekly_report(indicators)
-            for chunk in [mesaj[i:i+4000] for i in range(0, len(mesaj), 4000)]:
-                await update.message.reply_text(chunk, parse_mode=ParseMode.HTML)
+            parca1, parca2 = format_weekly_report(indicators)
+            await update.message.reply_text(parca1, parse_mode=ParseMode.HTML)
+            if parca2:
+                await update.message.reply_text(parca2, parse_mode=ParseMode.HTML)
         except Exception as e:
             await update.message.reply_text(f"❌ Hata: {e}")
         return

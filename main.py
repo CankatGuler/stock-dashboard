@@ -223,8 +223,10 @@ async def _run_macro_weekly_report():
         logger.info("Haftalık makro rapor hazırlanıyor...")
         loop = asyncio.get_running_loop()
         indicators = await loop.run_in_executor(None, fetch_all_macro_indicators)
-        mesaj = format_weekly_report(indicators)
-        await send_alarm(mesaj)
+        parca1, parca2 = format_weekly_report(indicators)
+        await send_alarm(parca1)
+        if parca2:
+            await send_alarm(parca2)
         logger.info("Haftalık makro rapor gönderildi.")
     except Exception as e:
         logger.error("Makro haftalık rapor hatası: %s", e)
