@@ -67,16 +67,32 @@ def _ws(prompt: str, max_tokens: int = 200) -> str | None:
 
 
 def _parse_json_value(text: str, key: str):
-    """JSON metninden değer çıkar."""
+    """JSON veya düz metinden sayısal değer çıkar."""
     if not text:
         return None
-    text = re.sub(r"```json\s*|\s*```", "", text).strip()
-    match = re.search(rf'"{key}"\s*:\s*([\d.\-]+)', text)
+    # Önce JSON dene
+    clean = re.sub(r"```json\s*|\s*```", "", text).strip()
+    match = re.search(rf'"{key}"\s*:\s*([\d.\-]+)', clean)
     if match:
         try:
             return float(match.group(1))
         except ValueError:
             pass
+    # Düz metinden sayı çıkar
+    patterns = [
+        r'\$?([\d,]+\.?\d*)\s*(?:billion|B\b)',
+        r'([\d,]+\.?\d*)\s*(?:basis points|bps)',
+        r'([\d,]+\.?\d*)\s*(?:%|percent)',
+        r'([\d,]+\.?\d+)',
+    ]
+    for pat in patterns:
+        for m in re.findall(pat, text, re.IGNORECASE):
+            try:
+                val = float(str(m).replace(',', ''))
+                if 0 < val < 100000:
+                    return val
+            except ValueError:
+                continue
     return None
 
 
@@ -193,8 +209,9 @@ def fetch_gdpnow() -> dict:
 
 def fetch_tga() -> dict:
     text = _ws(
-        "What is the current US Treasury General Account (TGA) balance in billions of dollars? "
-        'Reply ONLY with JSON: {"value": <billions>, "date": "YYYY-MM-DD"}'
+        "Search for the current US Treasury General Account TGA balance. "
+        "What is the TGA balance today in billions of dollars? "
+        "Give me just the number in billions."
     )
     val = _parse_json_value(text, "value")
     return {"key": "tga", "value": val, "prev": None, "date": "",
@@ -203,8 +220,8 @@ def fetch_tga() -> dict:
 
 def fetch_rrp() -> dict:
     text = _ws(
-        "What is the current Federal Reserve overnight reverse repo (RRP) balance in billions? "
-        'Reply ONLY with JSON: {"value": <billions>, "date": "YYYY-MM-DD"}'
+        "Search for the Federal Reserve overnight reverse repo facility RRP balance. "
+        "What is the latest daily RRP usage amount in billions of dollars?"
     )
     val = _parse_json_value(text, "value")
     return {"key": "rrp", "value": val, "prev": None, "date": "",
@@ -212,21 +229,16 @@ def fetch_rrp() -> dict:
 
 
 def fetch_hy_spread() -> dict:
-    """HY Spread — yfinance ile HYG/LQD farkı veya web search."""
-    try:
-        hyg = _yf_latest("HYG")
-        lqd = _yf_latest("LQD")
-        if hyg and lqd:
-            # Yaklaşık spread hesabı (ETF fiyat farkı değil yield farkı lazım)
-            pass
-    except Exception:
-        pass
-    # Web search daha güvenilir
+    """HY Spread — ICE BofA OAS spread web search."""
     text = _ws(
-        "What is the current ICE BofA US High Yield Option-Adjusted Spread in basis points? "
-        'Reply ONLY with JSON: {"value": <basis_points>}'
+        "Search for the current ICE BofA US High Yield OAS spread or "
+        "high yield credit spread in basis points. "
+        "What is the current high yield spread in bps?"
     )
     val = _parse_json_value(text, "value")
+    # HY spread genellikle 200-800 bps aralığında olur
+    if val and (val < 100 or val > 2000):
+        val = None  # Mantıksız değer, temizle
     return {"key": "hy_spread", "value": val, "prev": None, "date": "",
             "label": "HY Spread", "unit": "bps"}
 
