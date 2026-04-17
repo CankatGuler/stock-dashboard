@@ -710,6 +710,36 @@ async def test_database():
         return {"status": "error", "message": str(e)}
 
 
+@app.get("/api/macro-debug")
+async def macro_debug():
+    """TGA, RRP ve HY Spread web search ham sonuçlarını göster."""
+    import os, requests, re
+    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+
+    def _ws_raw(prompt):
+        try:
+            resp = requests.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={"x-api-key": api_key, "anthropic-version": "2023-06-01",
+                         "content-type": "application/json"},
+                json={"model": "claude-haiku-4-5-20251001", "max_tokens": 200,
+                      "tools": [{"type": "web_search_20250305", "name": "web_search"}],
+                      "messages": [{"role": "user", "content": prompt}]},
+                timeout=25,
+            )
+            content = resp.json().get("content", [])
+            texts = [b["text"] for b in content if b.get("type") == "text"]
+            return texts[-1] if texts else f"HTTP {resp.status_code} / boş"
+        except Exception as e:
+            return str(e)
+
+    return {
+        "rrp_raw":      _ws_raw("What is the latest Federal Reserve overnight reverse repo RRP balance in billions of dollars?"),
+        "hy_raw":       _ws_raw("What is the current US high yield credit spread OAS in basis points?"),
+        "tga_raw":      _ws_raw("What is the current US Treasury General Account TGA balance in billions?"),
+    }
+
+
 @app.get("/api/alphractal-test")
 async def test_alphractal():
     """Alphractal API bağlantı testi."""
