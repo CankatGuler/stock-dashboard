@@ -36,7 +36,40 @@ _application: Application | None = None
 
 # ─── Bot Başlatma / Durdurma ──────────────────────────────────────────────────
 
+def _safe_html(text: str) -> str:
+    """
+    Direktör yanıtını Telegram HTML parser için güvenli hale getir.
+    İzin verilen etiketler: <b>, </b>, <i>, </i>
+    Diğer tüm < > karakterlerini escape et.
+    """
+    # İzin verilen etiketleri geçici olarak koru
+    allowed = {
+        "<b>": "\x00B1\x00", "</b>": "\x00B2\x00",
+        "<i>": "\x00I1\x00", "</i>": "\x00I2\x00",
+    }
+    for tag, placeholder in allowed.items():
+        text = text.replace(tag, placeholder)
+
+    # Kalan tüm < > karakterlerini escape et
+    text = text.replace("<", "&lt;").replace(">", "&gt;")
+
+    # Korunan etiketleri geri yükle
+    for tag, placeholder in allowed.items():
+        text = text.replace(placeholder, tag)
+
+    return text
+
+
 async def start_bot():
+
+    # Kalan tüm < > karakterlerini escape et
+    text = text.replace("<", "&lt;").replace(">", "&gt;")
+
+    # Korunan etiketleri geri yükle
+    for tag, placeholder in allowed.items():
+        text = text.replace(placeholder, tag)
+
+    return text
     """Bot'u başlat ve handler'ları kaydet."""
     global _application
 
@@ -65,6 +98,7 @@ async def start_bot():
     _application.add_handler(CommandHandler("haber",    cmd_haber))
     _application.add_handler(CommandHandler("onchain",  cmd_onchain))
     _application.add_handler(CommandHandler("sor",      cmd_sor))
+    _application.add_handler(CommandHandler("temizle",  cmd_temizle))
     _application.add_handler(CommandHandler("tarama",   cmd_tarama))
     _application.add_handler(CommandHandler("durum",    cmd_durum))
     _application.add_handler(CommandHandler("onayla",   cmd_onayla))
@@ -1397,6 +1431,24 @@ async def cmd_fon(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         await update.message.reply_text(f"❌ {fon_kodu} fiyatı alınamadı: {e}")
+
+
+async def cmd_temizle(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """
+    Direktörün sohbet geçmişini temizle.
+    Direktör eski konuşmaları unutur, taze portföy verisiyle yeniden başlar.
+    """
+    try:
+        from chat_director import _save_history
+        _save_history([])
+        await update.message.reply_text(
+            "🧹 <b>Sohbet geçmişi temizlendi.</b>\n\n"
+            "Direktör artık eski konuşmaları hatırlamıyor.\n"
+            "Portföy verisi her mesajda Supabase'den taze çekilmeye devam edecek.",
+            parse_mode=ParseMode.HTML,
+        )
+    except Exception as e:
+        await update.message.reply_text(f"❌ Hata: {e}")
 
 
 async def cmd_sor(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
