@@ -1,14 +1,6 @@
 [
   {
     "role": "assistant",
-    "content": "Anladım, özür dilerim — bunu belirtmen gerekirdi diye düşünmüştüm ama açıklaman mantıklı.\n\nPeki şimdi **doğru veriyle** bakalım:\n\n---\n\nAVGO'nun gerçek maliyetin ne? Platformunda split sonrası düzeltilmiş haliyle **birim maliyet ve toplam yatırılan** ne görünüyor?\n\nO rakamı paylaşırsan pozisyonun gerçek ağırlığını ve K/Z'yi doğru hesaplayıp net bir cevap verebilirim."
-  },
-  {
-    "role": "user",
-    "content": "Supabase veri tabanında bu bilgiler var. Portföy bilgisine erişemiyor musun?"
-  },
-  {
-    "role": "assistant",
     "content": "Hayır, erişemiyorum.\n\nBen sadece **sohbetin başında sana gönderilen portföy verisini** görebiliyorum. Supabase veritabanına doğrudan bağlantım yok — oraya erişim için benim tarafımda bir entegrasyon kurulu olması gerekir.\n\n---\n\nŞu an elimdeki veri şunu gösteriyor:\n\n- **Miktar:** 2.76709 adet\n- **Ort. Birim Maliyet:** $335.01\n- **Toplam Yatırılan:** $927\n- **Anlık Fiyat:** $371.55\n- **Güncel Değer:** $1,028\n- **K/Z:** +$101 (+10.9%)\n\nBu veriler **tutarlı görünüyor** — split sonrası fiyatla uyumlu. Yani belki sistem zaten düzeltilmiş haldeydi, ya da senin düzelttiğin buydu.\n\n---\n\n**Bu rakamlarla cevap:**\n\nToplam ABD hisse portföyün ~$7,173. AVGO bunun **%14.3'ü.** Bu makul bir ağırlık — fazla değil. Üstelik kârlı ve güçlü bir pozisyon.\n\n**Fazla ağır değil.**"
   },
   {
@@ -158,5 +150,13 @@
   {
     "role": "assistant",
     "content": "Selam! Tabii, sor bakalım."
+  },
+  {
+    "role": "user",
+    "content": "Portföyümdeki tefas fonlarını ve bu fonların içeriklerini görebiliyor olman lazım. Görebiliyor musun?"
+  },
+  {
+    "role": "assistant",
+    "content": "Evet, görüyorum. Sohbetin başında bana iletilen TEFAS fon profilleri şunlar:\n\n---\n\n**Portföyündeki TEFAS Fonları:**\n\n- **IIH** — İstanbul Portföy Üçüncü Hisse Senedi Fonu\n- **AOY** — Ak Portföy Alternatif Enerji Yabancı Hisse Senedi Fonu\n- **TTE** — BIST Teknoloji Ağırlık Sınırlamalı Endeksi Hisse Senedi Fonu\n- **URA** — Ata Portföy Enerji Değişken Fon\n- **TI1** — İş Portföy Para Piyasası (TL) Fonu\n- **TSI** — İş Portföy Maksimum Hesap Kısa Vadeli Borçlanma Araçları Fonu\n\n---\n\nAncak şunu belirtmeliyim:\n\nFon **profillerini ve kompozisyonlarını** görüyorum — yani her fonun stratejisi, içeriği, risk seviyesi ve öne çıkan hisseleri elimde var.\n\nFakat **pozisyon detaylarını** — kaç adet aldığın, ortalama maliyetin, güncel değerin, kâr/zarar durumun — **göremiyorum.** Bu veriler Supabase'den çekilemiди diye sohbetin başında hata mesajı geldi.\n\nPortföy verisi düzeltilince bu fonları da tam analizle değerlendirebiliriz. Şu an için fon profilleri üzerinden konuşabiliriz — ne sormak istiyorsun?"
   }
 ]
