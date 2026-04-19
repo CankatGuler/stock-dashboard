@@ -903,22 +903,21 @@ async def cmd_portfoy_detay(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 avg  = float(p.get("avg_cost", 0))
                 cur  = p.get("currency", "USD")
 
-                # Maliyet (USD)
-                cost_usd = shr * avg / usd_try if cur == "TRY" else shr * avg
+                # Maliyet (USD) — TEFAS için avg_cost_usd direkt kullan
+                cost_usd = shr * avg  # avg zaten USD cinsinden (Supabase'de normalize edilmiş)
 
                 # Anlık fiyat çek
                 live_price = 0.0
                 try:
                     if tk in ("ALTIN_GRAM_TRY", "XAUTRY=X") and gold_usd > 0:
-                        live_price = gold_usd * usd_try / 31.1035  # TL/gram
+                        live_price  = gold_usd * usd_try / 31.1035  # TL/gram
                         cur_val_usd = shr * live_price / usd_try
                     elif ac == "tefas":
-                        # TEFAS için fetch_tefas_fund kullan
-                        from data.turkey_fetcher import fetch_tefas_fund
-                        fd = fetch_tefas_fund(tk)
-                        if fd and fd.get("price", 0) > 0:
-                            live_price  = float(fd["price"])
-                            cur_val_usd = shr * live_price / usd_try
+                        from data.tefas_client import get_fund_price
+                        price_tl = get_fund_price(tk)
+                        if price_tl and price_tl > 0:
+                            live_price  = price_tl          # TL fiyatı
+                            cur_val_usd = shr * price_tl / usd_try
                         else:
                             cur_val_usd = cost_usd
                     else:
@@ -938,19 +937,32 @@ async def cmd_portfoy_detay(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 ac_cur_total  += cur_val_usd
                 ac_cost_total += cost_usd
 
-                # Fiyat formatı
-                if cur == "TRY" and live_price > 0:
-                    price_str = f"₺{live_price:,.4f}"
+                # Fiyat ve değer formatı
+                if ac == "tefas" and live_price > 0:
+                    # TEFAS: TL fiyatı göster
+                    avg_tl      = avg * usd_try      # USD maliyeti → TL
+                    cur_val_tl  = cur_val_usd * usd_try
+                    cost_tl     = cost_usd * usd_try
+                    pnl_tl      = cur_val_tl - cost_tl
+                    pnl_tl_pct  = pnl_tl / cost_tl * 100 if cost_tl > 0 else 0
+                    pnl_e       = "🟢" if pnl_tl >= 0 else "🔴"
+                    pos_lines.append(
+                        f"  • <b>{tk}</b>: {shr:,g} × ₺{live_price:,.4f} = "
+                        f"₺{cur_val_tl:,.0f} (${cur_val_usd:,.0f}) "
+                        f"{pnl_e} ({pnl_tl_pct:+.1f}%)"
+                    )
                 elif live_price > 0:
-                    price_str = f"${live_price:,.2f}"
+                    price_str = f"₺{live_price:,.4f}" if cur == "TRY" else f"${live_price:,.2f}"
+                    pos_lines.append(
+                        f"  • <b>{tk}</b>: {shr:,g} × {price_str} = "
+                        f"${cur_val_usd:,.0f} "
+                        f"{pnl_e} ({pnl_pct:+.1f}%)"
+                    )
                 else:
-                    price_str = "—"
-
-                pos_lines.append(
-                    f"  • <b>{tk}</b>: {shr:,g} × {price_str} = "
-                    f"${cur_val_usd:,.0f} "
-                    f"{pnl_e} ({pnl_pct:+.1f}%)"
-                )
+                    pos_lines.append(
+                        f"  • <b>{tk}</b>: {shr:,g} × — = "
+                        f"${cur_val_usd:,.0f} (fiyat alınamadı)"
+                    )
 
             # Sınıf başlığı — toplam + K/Z
             ac_pnl     = ac_cur_total - ac_cost_total
