@@ -927,6 +927,25 @@ Telegram formatı için <b>bold</b> ve <i>italic</i> kullanabilirsin.
             history.append({"role": "assistant", "content": answer})
             _save_history(history)
             logger.info("Direktör yanıtladı (%d karakter, derin=%s).", len(answer), deep_analysis)
+
+            # ── Karar Günlüğü Hook ────────────────────────────────────────
+            # Direktörün yanıtını arka planda analiz et.
+            # Bu işlem asenkron değil ama try/except ile izole edilmiş —
+            # hata verirse direktörün yanıtı zaten kullanıcıya gönderilmiş.
+            try:
+                from memory.decision_logger import log_decision
+                trigger = "sor" if deep_analysis else "sohbet"
+                # Ayrı thread'de çalıştır, yanıtı geciktirmesin
+                import threading
+                threading.Thread(
+                    target=log_decision,
+                    args=(answer, user_message, trigger),
+                    daemon=True
+                ).start()
+            except Exception as _log_err:
+                logger.warning("Karar günlüğü başlatılamadı: %s", _log_err)
+            # ─────────────────────────────────────────────────────────────
+
             return answer
 
         except anthropic.APIError as e:

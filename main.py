@@ -169,6 +169,27 @@ def _schedule_jobs():
         misfire_grace_time=600,
     )
 
+    # Retry kuyruğu temizleme: Her saat başı
+    scheduler.add_job(
+        _run_retry_queue_flush,
+        trigger="interval",
+        hours=1,
+        id="retry_flush",
+        name="Karar Günlüğü Retry Kuyruğu",
+        misfire_grace_time=300,
+    )
+
+    # Post-mortem değerlendirme: Her Pazar 10:00 TR
+    scheduler.add_job(
+        _run_postmortem,
+        trigger="cron",
+        day_of_week="sun",
+        hour=10,
+        minute=0,
+        id="postmortem",
+        name="Direktör Post-Mortem Değerlendirmesi",
+    )
+
 
 async def _run_in_executor(fn, *args):
     """
@@ -252,6 +273,117 @@ async def _run_macro_alarm_check():
             logger.info("Makro alarm kontrolü: sorun yok.")
     except Exception as e:
         logger.error("Makro alarm kontrol hatası: %s", e)
+
+
+async def _run_retry_queue_flush():
+    """Başarısız karar kayıtlarını tekrar Supabase'e yazmayı dene."""
+    try:
+        from memory.decision_logger import flush_retry_queue
+        loop = asyncio.get_running_loop()
+        count = await loop.run_in_executor(None, flush_retry_queue)
+        if count > 0:
+            logger.info("Retry kuyruğundan %d karar kaydı yazıldı.", count)
+    except Exception as e:
+        logger.error("Retry queue flush hatası: %s", e)
+
+
+async def _run_postmortem():
+    """
+    90 günden eski, henüz değerlendirilmemiş kararları post-mortem analizi yap.
+    Her Pazar 10:00'da çalışır.
+    """
+    try:
+        from sqlalchemy import text
+        from core.database import SessionLocal
+        from strategy_data import fetch_usd_try_rate
+        import yfinance as yf
+
+        logger.info("Post-mortem değerlendirmesi başlıyor...")
+
+        with SessionLocal() as db:
+            # 90 günden eski, değerlendirilmemiş kararları çek
+            rows = db.execute(text("""
+                SELECT id, asset_symbol, recommendation, price_at_decision, created_at
+                FROM director_decisions
+                WHERE is_evaluated = FALSE
+                  AND created_at < NOW() - INTERVAL '90 days'
+                  AND price_at_decision IS NOT NULL
+                LIMIT 20
+            """)).fetchall()
+
+        if not rows:
+            logger.info("Post-mortem: değerlendirilecek karar yok.")
+            return
+
+        from bot import send_alarm
+        results_summary = []
+
+        for row in rows:
+            decision_id    = row[0]
+            asset_symbol   = row[1]
+            recommendation = row[2]
+            price_at_dec   = row[3]
+
+            # Güncel fiyatı çek
+            current_price = None
+            try:
+                h = yf.Ticker(asset_symbol).history(period="2d")
+                if not h.empty:
+                    current_price = float(h["Close"].iloc[-1])
+            except Exception:
+                pass
+
+            if current_price is None:
+                continue
+
+            # Getiri hesapla
+            return_pct = (current_price - price_at_dec) / price_at_dec * 100
+
+            # Sonuç değerlendir
+            buy_signals  = {"al", "artir", "gir"}
+            sell_signals = {"sat", "azalt", "çık"}
+
+            if recommendation in buy_signals:
+                outcome = "dogru" if return_pct > 3 else ("yanlis" if return_pct < -3 else "notr")
+            elif recommendation in sell_signals:
+                outcome = "dogru" if return_pct < -3 else ("yanlis" if return_pct > 3 else "notr")
+            else:
+                outcome = "notr"
+
+            # Supabase'i güncelle
+            with SessionLocal() as db:
+                db.execute(text("""
+                    UPDATE director_decisions SET
+                        evaluation_date     = CURRENT_DATE,
+                        price_at_evaluation = :current_price,
+                        actual_return_pct   = :return_pct,
+                        outcome             = :outcome,
+                        is_evaluated        = TRUE
+                    WHERE id = :id
+                """), {
+                    "current_price": round(current_price, 4),
+                    "return_pct":    round(return_pct, 2),
+                    "outcome":       outcome,
+                    "id":            str(decision_id),
+                })
+                db.commit()
+
+            emoji = "✅" if outcome == "dogru" else ("❌" if outcome == "yanlis" else "➖")
+            results_summary.append(
+                f"{emoji} {asset_symbol}: {recommendation} → %{return_pct:+.1f} ({outcome})"
+            )
+
+        if results_summary:
+            mesaj = (
+                "📋 <b>Direktör Post-Mortem Raporu</b>\n\n"
+                + "\n".join(results_summary)
+                + f"\n\n<i>{len(results_summary)} karar değerlendirildi.</i>"
+            )
+            await send_alarm(mesaj)
+            logger.info("Post-mortem tamamlandı: %d karar değerlendirildi.", len(results_summary))
+
+    except Exception as e:
+        logger.error("Post-mortem hatası: %s", e)
 
 
 # Eski _run_sync — bot.py'deki cmd_tetikle hâlâ kullanıyor, koru

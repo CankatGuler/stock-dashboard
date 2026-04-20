@@ -138,11 +138,8 @@ def create_tables() -> None:
     """
     Tüm tabloları veritabanında oluştur (yoksa).
     main.py lifespan başlangıcında çağrılır.
-
-    NOT: Mevcut tablolara dokunmaz, sadece eksikleri ekler.
-    Production'da Alembic migration kullanmayı düşünün.
     """
-    from core.models import Base as ModelBase  # noqa: F401 — tabloların kayıtlı olması için
+    from core.models import Base as ModelBase  # noqa: F401
 
     try:
         ModelBase.metadata.create_all(bind=engine)
@@ -150,6 +147,38 @@ def create_tables() -> None:
     except Exception as e:
         logger.error("❌ Tablo oluşturma hatası: %s", e)
         raise
+
+    # director_decisions tablosunu raw SQL ile oluştur
+    # (SQLAlchemy ORM dışında, migration gerektirmeden)
+    try:
+        from sqlalchemy import text
+        with SessionLocal() as db:
+            db.execute(text("""
+                CREATE TABLE IF NOT EXISTS director_decisions (
+                    id                    UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+                    created_at            TIMESTAMPTZ DEFAULT NOW(),
+                    asset_symbol          TEXT NOT NULL,
+                    asset_class           TEXT,
+                    trigger_type          TEXT,
+                    question_summary      TEXT,
+                    recommendation        TEXT,
+                    confidence            TEXT,
+                    reasoning_summary     TEXT,
+                    price_at_decision     FLOAT,
+                    portfolio_weight_pct  FLOAT,
+                    vix_at_decision       FLOAT,
+                    evaluation_date       DATE,
+                    price_at_evaluation   FLOAT,
+                    actual_return_pct     FLOAT,
+                    outcome               TEXT,
+                    postmortem_note       TEXT,
+                    is_evaluated          BOOLEAN DEFAULT FALSE
+                );
+            """))
+            db.commit()
+        logger.info("✅ director_decisions tablosu hazır.")
+    except Exception as e:
+        logger.warning("director_decisions tablo oluşturma: %s", e)
 
 
 def check_connection() -> bool:
