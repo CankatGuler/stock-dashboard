@@ -178,16 +178,27 @@ def inject_system_message(text: str, label: str = "SİSTEM ALARMI") -> None:
 
 # ─── Portföy Bağlamı ─────────────────────────────────────────────────────────
 
-def _fetch_price_with_fallback(tk: str, ac: str, cur: str,
-                               gold_usd: float, usd_try: float) -> tuple[float, bool]:
+# ── Fiyat önbelleği (aynı oturumda tekrar web search yapmayı önler) ──────────
+_price_cache: dict[str, tuple[float, float]] = {}  # {ticker: (price, timestamp)}
+_CACHE_TTL = 1800  # 30 dakika
+
+def _fetch_price_fast(tk: str, ac: str, cur: str,
+                      gold_usd: float, usd_try: float,
+                      avg_cost_usd: float = 0.0) -> tuple[float, bool]:
     """
-    Anlık fiyatı çek ve doğrula.
-    Adım 1: yfinance ile fiyat çek
-    Adım 2: web search ile çapraz kontrol
-    Fark %3'ten fazlaysa web search fiyatını kullan (daha güvenilir).
-    Returns: (fiyat_usd, başarılı_mı)
+    Akıllı fiyat çekimi — yfinance önce, şüpheli durumda web search doğrulaması.
+
+    Strateji:
+    1. Önbellekte taze veri varsa onu kullan (30 dak TTL)
+    2. yfinance ile fiyat çek
+    3. Fiyat ortalama maliyetten %30'dan fazla sapıyorsa şüpheli say
+    4. Şüpheli fiyatlar için web search doğrulaması yap
+    5. Doğrulanmış fiyatı önbelleğe al
+
+    Bu yaklaşım: hız (çoğu pozisyon sadece yfinance) + doğruluk (şüpheli olanlar kontrol edilir)
     """
     import yfinance as yf
+    import time as _time
 
     # ── Altın gram TRY ────────────────────────────────────────────────────
     if tk in ("ALTIN_GRAM_TRY", "XAUTRY=X") and gold_usd > 0:
@@ -204,7 +215,15 @@ def _fetch_price_with_fallback(tk: str, ac: str, cur: str,
             pass
         return 0.0, False
 
-    # ── Adım 1: yfinance ──────────────────────────────────────────────────
+    # ── Önbellek kontrolü ─────────────────────────────────────────────────
+    now = _time.time()
+    if tk in _price_cache:
+        cached_price, cached_time = _price_cache[tk]
+        if now - cached_time < _CACHE_TTL:
+            logger.debug("%s: önbellekten fiyat kullanıldı: $%.4f", tk, cached_price)
+            return cached_price, True
+
+    # ── yfinance ──────────────────────────────────────────────────────────
     yf_price = None
     try:
         h = yf.Ticker(tk).history(period="2d")
@@ -214,34 +233,102 @@ def _fetch_price_with_fallback(tk: str, ac: str, cur: str,
     except Exception:
         pass
 
-    # ── Adım 2: web search ile doğrula ───────────────────────────────────
-    ws_price = _fetch_price_web_search(tk)
+    # ── Şüpheli fiyat tespiti ─────────────────────────────────────────────
+    # yfinance fiyatı ortalama maliyetten %30'dan fazla sapıyorsa
+    # stale data veya split/hata olabilir → web search ile doğrula
+    needs_verification = False
+    if yf_price and avg_cost_usd > 0:
+        sapma = abs(yf_price - avg_cost_usd) / avg_cost_usd * 100
+        if sapma > 30:
+            needs_verification = True
+            logger.info(
+                "%s: Şüpheli fiyat! yfinance=$%.4f | maliyet=$%.4f | sapma=%%%.1f → web search başlatılıyor",
+                tk, yf_price, avg_cost_usd, sapma
+            )
 
-    # Her ikisi de başarısız
-    if yf_price is None and ws_price is None:
-        logger.warning("Fiyat alınamadı: %s (yfinance ve web search başarısız)", tk)
-        return 0.0, False
-
-    # Sadece biri başarılı
     if yf_price is None:
-        logger.info("%s: yfinance başarısız, web search kullanılıyor: $%.4f", tk, ws_price)
-        return ws_price, True
+        needs_verification = True  # yfinance başarısız, web search dene
+        logger.warning("%s: yfinance başarısız, web search deneniyor", tk)
 
-    if ws_price is None:
-        logger.info("%s: web search başarısız, yfinance kullanılıyor: $%.4f", tk, yf_price)
+    # ── Web search doğrulaması (sadece şüpheli durumda) ───────────────────
+    if needs_verification:
+        ws_price = _fetch_price_web_search(tk)
+        if ws_price:
+            # Web search başarılı — bunu kullan
+            _price_cache[tk] = (ws_price, now)
+            return ws_price, True
+        elif yf_price:
+            # Web search başarısız ama yfinance var — yfinance'i kullan
+            logger.warning("%s: Web search de başarısız, yfinance kullanılıyor", tk)
+            _price_cache[tk] = (yf_price, now)
+            return yf_price, True
+        else:
+            return 0.0, False
+
+    # ── Normal durum: yfinance yeterli ────────────────────────────────────
+    if yf_price:
+        _price_cache[tk] = (yf_price, now)
         return yf_price, True
 
-    # İkisi de başarılı — fark kontrolü
+    return 0.0, False
+
+
+def _fetch_price_with_fallback(tk: str, ac: str, cur: str,
+                               gold_usd: float, usd_try: float) -> tuple[float, bool]:
+    """
+    Doğrulamalı fiyat çekimi — yfinance + web search çapraz kontrol.
+    Tek bir varlık için kullanılır (/hisse komutu gibi bireysel sorgular).
+    Portföy bağlamı için DEĞİL — onun için _fetch_price_fast kullanılır.
+
+    Returns: (fiyat_usd, başarılı_mı)
+    """
+    import yfinance as yf
+
+    # Altın gram TRY
+    if tk in ("ALTIN_GRAM_TRY", "XAUTRY=X") and gold_usd > 0:
+        return (gold_usd * usd_try / 31.1035) / usd_try, True
+
+    # TEFAS fonu
+    if ac == "tefas":
+        try:
+            from data.tefas_client import get_fund_price
+            price_tl = get_fund_price(tk)
+            if price_tl:
+                return price_tl / usd_try, True
+        except Exception:
+            pass
+        return 0.0, False
+
+    # Adım 1: yfinance
+    yf_price = None
+    try:
+        h = yf.Ticker(tk).history(period="2d")
+        if not h.empty:
+            lp = float(h["Close"].iloc[-1])
+            yf_price = lp / usd_try if cur == "TRY" else lp
+    except Exception:
+        pass
+
+    # Adım 2: web search ile çapraz kontrol
+    ws_price = _fetch_price_web_search(tk)
+
+    if yf_price is None and ws_price is None:
+        return 0.0, False
+    if yf_price is None:
+        return ws_price, True
+    if ws_price is None:
+        return yf_price, True
+
+    # İkisi de başarılı — %3'ten fazla fark varsa web search kazanır
     fark_pct = abs(yf_price - ws_price) / ws_price * 100
     if fark_pct > 3.0:
         logger.warning(
-            "%s: Fiyat uyumsuzluğu! yfinance=$%.4f | web=$%.4f | fark=%%%.1f → web search kullanılıyor",
+            "%s: Fiyat uyumsuzluğu! yfinance=$%.4f | web=$%.4f | fark=%%%.1f → web kullanılıyor",
             tk, yf_price, ws_price, fark_pct
         )
         return ws_price, True
-    else:
-        logger.info("%s: Fiyat doğrulandı: $%.4f (fark: %%%.2f)", tk, yf_price, fark_pct)
-        return yf_price, True
+
+    return yf_price, True
 
 
 def _fetch_price_web_search(tk: str) -> float | None:
@@ -344,8 +431,8 @@ def _fetch_price_web_search(tk: str) -> float | None:
             ac   = p.get("asset_class", "us_equity") or "us_equity"
             cost_usd = shr * avg
 
-            live_price_usd, price_ok = _fetch_price_with_fallback(
-                tk, ac, cur, gold_usd, usd_try
+            live_price_usd, price_ok = _fetch_price_fast(
+                tk, ac, cur, gold_usd, usd_try, avg_cost_usd=avg
             )
             if not price_ok:
                 live_price_usd = avg  # son çare fallback
@@ -619,8 +706,8 @@ def _build_portfolio_context(usd_try: float) -> str:
             ac       = p.get("asset_class", "us_equity") or "us_equity"
             cost_usd = shr * avg
 
-            live_price_usd, price_ok = _fetch_price_with_fallback(
-                tk, ac, cur, gold_usd, usd_try
+            live_price_usd, price_ok = _fetch_price_fast(
+                tk, ac, cur, gold_usd, usd_try, avg_cost_usd=avg
             )
             if not price_ok:
                 live_price_usd = avg  # son çare fallback
